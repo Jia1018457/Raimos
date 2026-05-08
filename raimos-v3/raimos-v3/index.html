@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Raimos</title>
+<link rel="manifest" href="manifest.json">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Raimos">
+<meta name="theme-color" content="#ff8fab">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<!-- NAV -->
+<div id="nav-tabs">
+  <div class="nav-logo">R</div>
+  <button class="nav-tab active" data-page="chat-page" onclick="switchPage('chat-page')" title="聊天">💬</button>
+  <button class="nav-tab" data-page="contacts-page" onclick="switchPage('contacts-page')" title="AI联系人">👥</button>
+  <button class="nav-tab" data-page="moments-page" onclick="switchPage('moments-page')" title="朋友圈">🌸</button>
+  <button class="nav-tab" data-page="memory-page" onclick="switchPage('memory-page')" title="记忆库">🧠</button>
+  <button class="nav-tab" data-page="settings-page" onclick="switchPage('settings-page')" title="设置">⚙️</button>
+  <div class="nav-spacer"></div>
+  <button class="nav-tab" onclick="toggleTheme()" id="theme-btn" title="切换主题">🌙</button>
+</div>
+
+<!-- SIDEBAR -->
+<div id="sidebar">
+  <div id="sidebar-header">
+    <div class="app-title">✦ Raimos</div>
+    <button id="btn-new-chat" title="新建对话">＋</button>
+  </div>
+  <div id="sidebar-search"><input placeholder="🔍 搜索对话…" oninput="filterChats(this.value)"></div>
+  <div id="chat-list"></div>
+  <div id="sidebar-footer">
+    <button class="sidebar-btn" onclick="openStickersModal()">🎭 表情包管理</button>
+    <button class="sidebar-btn" onclick="openKwAnimModal()">✨ 关键词动画</button>
+    <button class="sidebar-btn" onclick="openIEModal()">📦 导入 / 导出</button>
+  </div>
+</div>
+
+<!-- PAGES -->
+<div id="pages">
+
+<!-- ── CHAT PAGE ── -->
+<div class="page active" id="chat-page">
+  <div id="chat-header">
+    <div class="hdr-avatar" id="hdr-avatar" onclick="openAvatarModal()">🐱</div>
+    <div class="hdr-info">
+      <div class="hdr-name" id="hdr-name" onclick="renameChat()">选择或新建对话</div>
+      <div class="hdr-status"><div class="status-pulse"></div><span class="hdr-status-emoji" id="hdr-status-emoji"></span><span id="hdr-status-text">在线</span></div>
+    </div>
+    <button class="hbtn" id="btn-online" onclick="toggleOnline()" title="联网搜索">🌐</button>
+    <button class="hbtn" id="btn-imggen" onclick="toggleImgGen()" title="图片生成">🎨</button>
+    <button class="hbtn" onclick="openCtxMenu(event)" title="更多">⋯</button>
+    <button class="hbtn" onclick="openBgModal()" title="背景">🖼️</button>
+  </div>
+
+  <div id="chat-area">
+    <div id="welcome">
+      <div class="w-icon" id="welcome-icon">🐻</div>
+      <div class="w-title" id="welcome-title">你好呀！</div>
+      <div class="w-sub" id="welcome-sub">点左上角 ＋ 新建对话，或先去⚙️设置里填 OpenRouter API Key 哦～</div>
+    </div>
+  </div>
+
+  <button class="scroll-fab" id="fab-top" onclick="scrollTo_(true)">↑</button>
+  <button class="scroll-fab" id="fab-bottom" onclick="scrollTo_(false)">↓</button>
+
+  <div id="input-wrap">
+    <div id="rec-bar">
+      <div class="rec-dot"></div><span id="rec-timer">0:00</span>
+      <div class="rec-wave" id="rec-wave"></div>
+      <button style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:16px;" onclick="cancelRec()">✕</button>
+    </div>
+    <div id="edit-bar">✏️ <span id="edit-bar-txt"></span><button class="bar-close" onclick="cancelEdit()">✕</button></div>
+    <div id="reply-bar">↩️ <span id="reply-bar-txt"></span><button class="bar-close" onclick="cancelReply()">✕</button></div>
+    <div id="img-preview-row"></div>
+    <div id="input-row">
+      <button class="ibtn ibtn-g" onclick="toggleEmoji()">😊</button>
+      <textarea id="msg-input" placeholder="发消息…" rows="1" onkeydown="onKey(event)" oninput="autoH(this)"></textarea>
+      <button class="ibtn ibtn-g" onclick="triggerFile()" title="发文件/图片">📎</button>
+      <button class="ibtn ibtn-g" id="btn-voice" onmousedown="startRec()" ontouchstart="startRec(event)" onmouseup="stopRec()" ontouchend="stopRec()">🎤</button>
+      <button class="ibtn" id="btn-send" onclick="sendMsg()">➤</button>
+    </div>
+    <div id="input-hints">
+      <span id="hint-online" style="display:none">🌐 联网</span>
+      <span id="hint-imggen" style="display:none">🎨 生图</span>
+      <span style="flex:1"></span>
+      <span id="hint-model" style="font-size:10px;color:var(--text3)"></span>
+    </div>
+  </div>
+</div>
+
+<!-- ── CONTACTS PAGE ── -->
+<div class="page" id="contacts-page">
+  <div class="page-header">
+    <h2>👥 AI 助手</h2>
+    <button class="btn-p" onclick="openContactModal()">＋ 新建助手</button>
+  </div>
+  <div style="flex:1;overflow-y:auto;padding:10px 12px;" id="contacts-list"></div>
+</div>
+
+<!-- ── MOMENTS PAGE ── -->
+<div class="page" id="moments-page">
+  <div class="page-header">
+    <h2>🌸 朋友圈</h2>
+    <div style="display:flex;gap:6px;">
+      <button class="btn-s" onclick="exportMoments()">📤 导出</button>
+      <button class="btn-s" onclick="archiveMoments()">📁 归档清空</button>
+    </div>
+  </div>
+  <!-- Compose -->
+  <div id="compose-moment">
+    <textarea id="compose-text" placeholder="分享一下今天的心情…" rows="2" oninput="autoH(this)"></textarea>
+    <div id="compose-img-previews" class="compose-img-previews"></div>
+    <div class="compose-tools">
+      <button class="compose-btn" onclick="composePicLocal()">🖼️ 本地图片</button>
+      <button class="compose-btn" onclick="openImgSearchModal('compose')">🔍 搜索图片</button>
+      <button class="compose-btn" onclick="composeGenImg()">🎨 生成图片</button>
+      <button class="compose-btn" onclick="toggleComposeEmoji()">😊 表情</button>
+      <button class="compose-post-btn" onclick="postMoment()">发布 →</button>
+    </div>
+    <div id="compose-emoji" style="display:none;margin-top:6px;background:var(--hover);border-radius:10px;padding:8px;">
+      <div id="compose-emoji-grid" style="display:flex;flex-wrap:wrap;gap:3px;max-height:100px;overflow-y:auto;"></div>
+    </div>
+  </div>
+  <div class="moments-feed" id="moments-feed"></div>
+</div>
+
+<!-- ── MEMORY PAGE ── -->
+<div class="page" id="memory-page">
+  <div class="page-header">
+    <h2>🧠 记忆库</h2>
+    <button class="btn-p" onclick="openAddMemModal()">＋ 添加</button>
+  </div>
+  <div id="memory-stats" style="padding:7px 14px;font-size:11.5px;color:var(--text3);flex-shrink:0;"></div>
+  <div style="flex:1;overflow-y:auto;padding:8px 12px;" id="memory-list"></div>
+</div>
+
+<!-- ── SETTINGS PAGE ── -->
+<div class="page" id="settings-page">
+  <div class="s-wrap" id="settings-wrap"></div>
+</div>
+
+</div><!-- #pages -->
+
+<!-- EMOJI PICKER -->
+<div id="emoji-picker">
+  <div class="ep-tabs" id="ep-tabs"></div>
+  <div id="ep-content"></div>
+</div>
+
+<!-- ══ MODALS ══ -->
+
+<!-- Contact -->
+<div class="overlay" id="contact-modal">
+  <div class="modal wide">
+    <h2 id="contact-modal-h">✨ 新建 AI 助手 <button class="mclose" onclick="closeModal('contact-modal')">✕</button></h2>
+    <div class="mrow"><label>名字</label><input type="text" id="cm-name" placeholder="助手名称"/></div>
+    <div class="mrow"><label>头像</label>
+      <div style="display:flex;gap:5px;flex-wrap:wrap;flex:1">
+        <span id="cm-av-preview" style="font-size:26px;margin-right:4px">🐱</span>
+        <input type="hidden" id="cm-av" value="🐱"/>
+        <button class="btn-s" onclick="openInlineAvatarPicker('cm')">选择头像</button>
+        <button class="btn-s" onclick="$i('cm-av-file').click()">上传图片</button>
+        <input type="file" id="cm-av-file" accept="image/*" style="display:none" onchange="uploadCmAv(this)"/>
+      </div>
+    </div>
+    <div id="cm-av-picker" style="display:none;flex-wrap:wrap;gap:4px;margin-bottom:8px;padding:8px;background:var(--hover);border-radius:10px;"></div>
+    <div class="mrow"><label>描述</label><input type="text" id="cm-desc" placeholder="简短描述"/></div>
+    <div class="mrow"><label>模型</label>
+      <div style="flex:1"><input class="model-search-inp" id="cm-model-search" placeholder="搜索模型…" oninput="filterModels('cm')"/>
+        <div class="model-list" id="cm-model-list"></div>
+        <input type="hidden" id="cm-model" value="openai/gpt-4o"/>
+      </div>
+    </div>
+    <div class="mrow"><label>系统提示词</label><textarea id="cm-system" placeholder="你是…"></textarea></div>
+    <div class="mrow"><label>Temperature</label><input type="range" id="cm-temp" min="0" max="2" step="0.05" value="0.85" oninput="$i('cm-temp-v').textContent=this.value"/><span class="rval" id="cm-temp-v">0.85</span></div>
+    <div class="mrow" style="border-top:1px dashed var(--border);padding-top:10px;margin-top:4px">
+      <label>AI 状态频率</label>
+      <select id="cm-status-freq">
+        <option value="0">不自动更新状态</option>
+        <option value="60">每小时</option>
+        <option value="180">每3小时</option>
+        <option value="360">每6小时</option>
+        <option value="720">每12小时</option>
+        <option value="1440">每天</option>
+      </select>
+    </div>
+    <div class="mrow"><label>初始状态</label><input type="text" id="cm-status" placeholder="😊 很开心"/></div>
+    <div class="mbtns">
+      <button class="btn-s" onclick="closeModal('contact-modal')">取消</button>
+      <button class="btn-p" onclick="saveContact()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add Memory -->
+<div class="overlay" id="add-mem-modal">
+  <div class="modal">
+    <h2>🧠 添加记忆 <button class="mclose" onclick="closeModal('add-mem-modal')">✕</button></h2>
+    <div class="mrow"><label>内容</label><input type="text" id="amm-text" placeholder="例：我乳糖不耐受"/></div>
+    <div class="mrow"><label>分类</label>
+      <select id="amm-cat">
+        <option value="健康">🏥 健康/饮食</option>
+        <option value="个人">👤 个人信息</option>
+        <option value="习惯">🔄 习惯偏好</option>
+        <option value="事件">📅 重要事件</option>
+        <option value="其他">💡 其他</option>
+      </select>
+    </div>
+    <div class="mbtns">
+      <button class="btn-s" onclick="closeModal('add-mem-modal')">取消</button>
+      <button class="btn-p" onclick="addMemManual()">添加</button>
+    </div>
+  </div>
+</div>
+
+<!-- Rename -->
+<div class="overlay" id="rename-modal">
+  <div class="modal">
+    <h2>✏️ 重命名 <button class="mclose" onclick="closeModal('rename-modal')">✕</button></h2>
+    <div class="mrow"><label>名称</label><input type="text" id="rename-inp"/></div>
+    <div class="mbtns">
+      <button class="btn-s" onclick="closeModal('rename-modal')">取消</button>
+      <button class="btn-p" onclick="doRename()">确定</button>
+    </div>
+  </div>
+</div>
+
+<!-- Stickers -->
+<div class="overlay" id="sticker-modal">
+  <div class="modal">
+    <h2>🎭 表情包 <button class="mclose" onclick="closeModal('sticker-modal')">✕</button></h2>
+    <div style="display:flex;gap:6px;margin-bottom:9px;flex-wrap:wrap">
+      <button class="btn-p" onclick="$i('sticker-file').click()">➕ 添加图片</button>
+      <button class="btn-s" onclick="addTextSticker()">✏️ 文字表情</button>
+      <input type="file" id="sticker-file" accept="image/*" multiple style="display:none" onchange="addStickerImgs(this)"/>
+    </div>
+    <div id="sticker-lib" style="display:grid;grid-template-columns:repeat(4,1fr);gap:7px;max-height:260px;overflow-y:auto;"></div>
+  </div>
+</div>
+
+<!-- BG -->
+<div class="overlay" id="bg-modal">
+  <div class="modal">
+    <h2>🖼️ 聊天背景 <button class="mclose" onclick="closeModal('bg-modal')">✕</button></h2>
+    <div style="margin-bottom:10px"><div style="font-size:11px;font-weight:700;color:var(--accent);margin-bottom:6px">预设颜色</div><div class="bg-grid" id="bg-grid"></div></div>
+    <div><div style="font-size:11px;font-weight:700;color:var(--accent);margin-bottom:6px">自定义图片</div>
+      <div style="display:flex;gap:7px">
+        <button class="btn-s" onclick="$i('bg-file').click()">📁 选择图片</button>
+        <button class="btn-s" onclick="clearBgImg()">清除图片</button>
+        <input type="file" id="bg-file" accept="image/*" style="display:none" onchange="setBgImg(this)"/>
+      </div>
+    </div>
+    <div class="mbtns"><button class="btn-p" onclick="closeModal('bg-modal')">确定</button></div>
+  </div>
+</div>
+
+<!-- Avatar -->
+<div class="overlay" id="avatar-modal">
+  <div class="modal">
+    <h2>🐾 AI 头像 <button class="mclose" onclick="closeModal('avatar-modal')">✕</button></h2>
+    <div id="avatar-grid" style="display:grid;grid-template-columns:repeat(8,1fr);gap:4px;margin-bottom:9px;"></div>
+    <button class="btn-s" onclick="$i('avatar-file').click()">📷 上传图片</button>
+    <input type="file" id="avatar-file" accept="image/*" style="display:none" onchange="uploadAvatar(this)"/>
+    <div class="mbtns"><button class="btn-p" onclick="closeModal('avatar-modal')">确定</button></div>
+  </div>
+</div>
+
+<!-- Welcome Editor -->
+<div class="overlay" id="welcome-modal">
+  <div class="modal">
+    <h2>🎨 自定义欢迎页 <button class="mclose" onclick="closeModal('welcome-modal')">✕</button></h2>
+    <div class="mrow"><label>图标 (Emoji)</label><input type="text" id="wm-icon" placeholder="🐻" maxlength="4"/></div>
+    <div class="mrow"><label>标题</label><input type="text" id="wm-title" placeholder="你好呀！"/></div>
+    <div class="mrow"><label>副标题</label><textarea id="wm-sub" placeholder="点左上角…" rows="2"></textarea></div>
+    <div class="mbtns">
+      <button class="btn-s" onclick="closeModal('welcome-modal')">取消</button>
+      <button class="btn-p" onclick="saveWelcome()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- IE -->
+<div class="overlay" id="ie-modal">
+  <div class="modal">
+    <h2>📦 导入 / 导出 <button class="mclose" onclick="closeModal('ie-modal')">✕</button></h2>
+    <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:10px">
+      <button class="btn-p" onclick="exportData('json')">📤 导出 JSON</button>
+      <button class="btn-p" onclick="exportData('txt')">📄 导出 TXT</button>
+      <button class="btn-s" onclick="$i('import-file').click()">📥 导入</button>
+    </div>
+    <button class="btn-danger" onclick="clearAll()">🗑️ 清除全部数据</button>
+    <input type="file" id="import-file" accept=".json" style="display:none" onchange="importData(this)">
+  </div>
+</div>
+
+<!-- KW Anim -->
+<div class="overlay" id="kwanim-modal">
+  <div class="modal wide">
+    <h2>✨ 关键词动画 <button class="mclose" onclick="closeModal('kwanim-modal')">✕</button></h2>
+    <div style="display:flex;align-items:center;gap:9px;margin-bottom:13px;padding:9px 12px;background:var(--hover);border-radius:11px;">
+      <span style="flex:1;font-size:13px;font-weight:700">🎬 启用关键词动画</span>
+      <label class="toggle"><input type="checkbox" id="kw-master" onchange="S.kwAnimEnabled=this.checked;saveSetting('kwAnimEnabled',this.checked)"><span class="tslider"></span></label>
+    </div>
+    <div id="kw-list" style="max-height:220px;overflow-y:auto;margin-bottom:11px;"></div>
+    <div style="background:var(--bg2);border:1.5px solid var(--border);border-radius:13px;padding:12px;">
+      <div style="font-size:11px;font-weight:800;color:var(--accent);margin-bottom:9px;text-transform:uppercase;letter-spacing:.06em">➕ 添加</div>
+      <div class="mrow"><label>关键词</label><input type="text" id="kw-word" placeholder="抱抱、生日快乐…"/></div>
+      <div class="mrow" style="align-items:flex-start">
+        <label style="margin-top:5px">动画类型</label>
+        <div style="flex:1">
+          <div class="anim-type-grid" id="anim-type-grid"></div>
+          <div id="kw-gif-zone" onclick="$i('kw-gif-file').click()" ondragover="event.preventDefault()" ondrop="dropGif(event)">
+            <div id="kw-gif-preview">📁 点击上传 GIF / 图片<br><small>支持 GIF、PNG、JPG</small></div>
+          </div>
+          <input type="file" id="kw-gif-file" accept="image/*" style="display:none" onchange="handleGifUpload(this)"/>
+        </div>
+      </div>
+      <div class="mrow"><label>触发方</label>
+        <select id="kw-trigger">
+          <option value="both">我发 + AI发 都触发</option>
+          <option value="user">只有我发触发</option>
+          <option value="ai">只有AI发触发</option>
+        </select>
+      </div>
+      <div class="mrow"><label>动画时长</label><input type="range" id="kw-dur" min="1" max="8" step=".5" value="3" oninput="$i('kw-dur-v').textContent=this.value+'s'" style="flex:1;accent-color:var(--accent)"/><span class="rval" id="kw-dur-v">3s</span></div>
+      <div style="display:flex;gap:7px;margin-top:7px">
+        <button class="btn-s" style="flex:1" onclick="previewKwAnim(-1)">👀 预览</button>
+        <button class="btn-p" style="flex:1" onclick="addKwAnim()">➕ 添加</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Image Search -->
+<div class="overlay" id="img-search-modal">
+  <div class="modal wide">
+    <h2>🔍 搜索图片 <button class="mclose" onclick="closeModal('img-search-modal')">✕</button></h2>
+    <div style="display:flex;gap:7px;margin-bottom:9px">
+      <input type="text" id="img-search-inp" placeholder="输入关键词搜索…" style="flex:1;background:var(--input-bg);border:1.5px solid var(--border);border-radius:8px;padding:7px 10px;font-size:13px;color:var(--text);outline:none;font-family:inherit;" onkeydown="if(event.key==='Enter')doImgSearch()"/>
+      <button class="btn-p" onclick="doImgSearch()">搜索</button>
+    </div>
+    <div id="img-search-results" class="img-search-results"></div>
+    <div class="mbtns">
+      <button class="btn-s" onclick="closeModal('img-search-modal')">取消</button>
+      <button class="btn-p" onclick="confirmImgSearch()">插入选中</button>
+    </div>
+  </div>
+</div>
+
+<!-- User Status -->
+<div class="overlay" id="status-modal">
+  <div class="modal">
+    <h2>💬 更改状态 <button class="mclose" onclick="closeModal('status-modal')">✕</button></h2>
+    <div style="display:flex;flex-wrap:wrap;gap:7px;margin-bottom:10px">
+      ${['😊 开心','😟 有点难过','🌧 今天下雨','🌸 春天来了','😴 好困哦','🎮 在玩游戏','📚 在学习','☕ 喝咖啡中','🎵 听歌中','🌙 晚安'].map(s=>`<button onclick="setMyStatus('${s}')" style="background:var(--hover);border:1.5px solid var(--border);border-radius:9px;padding:5px 10px;font-size:12px;cursor:pointer;font-family:inherit;transition:background .15s" onmouseover="this.style.background='var(--accent3)'" onmouseout="this.style.background='var(--hover)'">${s}</button>`).join('')}
+    </div>
+    <div class="mrow"><label>自定义</label><input type="text" id="custom-status-inp" placeholder="emoji + 文字…"/></div>
+    <div class="mbtns">
+      <button class="btn-s" onclick="closeModal('status-modal')">取消</button>
+      <button class="btn-p" onclick="setMyStatus($i('custom-status-inp').value)">设置</button>
+    </div>
+  </div>
+</div>
+
+<!-- Ctx Menu -->
+<div id="ctx-menu">
+  <div class="ctx-item" onclick="clearCtx()">🧹 清空上下文</div>
+  <div class="ctx-item" onclick="compressCtx()">🗜️ 压缩上下文</div>
+  <div class="ctx-item" onclick="renameChat()">✏️ 重命名</div>
+  <div class="ctx-item" onclick="archiveChat()">📁 归档</div>
+  <div class="ctx-item" onclick="openWelcomeModal()">🎨 自定义欢迎页</div>
+  <div class="ctx-item" onclick="openStatusModal()">💬 更改我的状态</div>
+  <div class="ctx-item danger" onclick="deleteCurrentChat()">🗑️ 删除对话</div>
+</div>
+
+<!-- Anim Overlay -->
+<div id="anim-overlay">
+  <div id="anim-backdrop"></div>
+  <canvas id="anim-canvas"></canvas>
+  <div id="anim-gif-wrap"></div>
+</div>
+
+<!-- Lightbox -->
+<div id="lightbox" onclick="this.classList.remove('show')">
+  <button id="lb-close">✕</button>
+  <img id="lb-img" src="" alt="">
+</div>
+
+<div id="toast"></div>
+<div id="ptost"><span id="ptost-txt">嗨！</span><button class="ptclose" onclick="$i('ptost').classList.remove('show')">✕</button></div>
+
+<input type="file" id="file-upload" accept="image/*,application/pdf,.txt,.md,.doc,.docx" multiple style="display:none" onchange="handleFiles(this)"/>
+<input type="file" id="compose-pic-file" accept="image/*" multiple style="display:none" onchange="handleComposePic(this)"/>
+
+<script src="js/db.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

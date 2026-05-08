@@ -416,3 +416,86 @@ body{font-family:'Nunito','Noto Sans SC',sans-serif;background:var(--bg);color:v
 .ctx-item:hover{background:var(--hover);}
 .ctx-item.danger{color:#e74c3c;}
 .ctx-item.danger:hover{background:#ffe0e8;}
+
+/* ══════════════════════════════════════════
+   MOBILE RESPONSIVE (≤768px)
+   手机端：隐藏sidebar，nav竖排变横排底部
+════════════════════════════════════════════ */
+@media (max-width: 768px) {
+  body { flex-direction: column; height: 100dvh; }
+
+  /* Nav 移到底部，横向排列 */
+  #nav-tabs {
+    width: 100%; min-width: unset;
+    height: 56px; min-height: 56px;
+    flex-direction: row;
+    justify-content: space-around;
+    padding: 0 8px;
+    border-right: none;
+    border-top: 1.5px solid var(--border);
+    order: 3;
+  }
+  .nav-logo { display: none; }
+  .nav-spacer { display: none; }
+  #theme-btn { display: flex; }
+
+  /* Sidebar 默认隐藏，作为抽屉 */
+  #sidebar {
+    position: fixed;
+    left: -280px;
+    top: 0; bottom: 56px;
+    width: 280px;
+    z-index: 500;
+    transition: left .3s cubic-bezier(.4,0,.2,1);
+    box-shadow: 4px 0 24px rgba(0,0,0,.15);
+  }
+  #sidebar.open { left: 0; }
+
+  /* Sidebar 打开时背景遮罩 */
+  #sidebar-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.35);
+    z-index: 499;
+  }
+  #sidebar-overlay.show { display: block; }
+
+  /* Pages 占满剩余空间 */
+  #pages {
+    flex: 1;
+    min-height: 0;
+    order: 2;
+    overflow: hidden;
+  }
+
+  /* 聊天气泡宽度放宽 */
+  .bw { max-width: 88%; }
+
+  /* emoji picker 位置调整 */
+  #emoji-picker {
+    left: 4px !important;
+    right: 4px !important;
+    bottom: 100% !important;
+    width: auto !important;
+  }
+
+  /* modal 占全宽 */
+  .modal { width: 94vw; max-width: 94vw; max-height: 85vh; overflow-y: auto; }
+  .modal.wide { width: 94vw; }
+
+  /* 输入框字号防止iOS自动缩放 */
+  input, textarea, select { font-size: 16px !important; }
+
+  /* 朋友圈compose稍微收窄 */
+  #compose-moment { padding: 10px; }
+
+  /* 联系人卡片竖排 */
+  .contact-card { flex-wrap: wrap; }
+}
+
+/* 手机端侧边栏开关按钮 */
+@media (max-width: 768px) {
+  #btn-new-chat { font-size: 20px; width: 34px; height: 34px; }
+  #sidebar-header .app-title { font-size: 15px; }
+}

@@ -1295,3 +1295,40 @@ $i('btn-new-chat').addEventListener('click', newChat);
 window.addEventListener('DOMContentLoaded', init);
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => {});
+
+// ══════════════════════════════
+//  MOBILE SIDEBAR
+// ══════════════════════════════
+function openSidebar() {
+  document.getElementById('sidebar').classList.add('open');
+  document.getElementById('sidebar-overlay').classList.add('show');
+}
+function closeSidebar() {
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('sidebar-overlay').classList.remove('show');
+}
+function isMobile() { return window.innerWidth <= 768; }
+
+// 手机端：点击聊天项后自动关闭侧边栏
+const _origOpenChat = typeof openChat === 'function' ? openChat : null;
+
+// 手机端显示/隐藏汉堡按钮
+function applyMobileUI() {
+  const mobile = isMobile();
+  const ham = document.getElementById('btn-hamburger');
+  const closeBtn = document.getElementById('btn-sidebar-close');
+  if (ham) ham.style.display = mobile ? 'flex' : 'none';
+  if (closeBtn) closeBtn.style.display = mobile ? 'flex' : 'none';
+}
+window.addEventListener('resize', applyMobileUI);
+document.addEventListener('DOMContentLoaded', applyMobileUI);
+// 也在init之后执行一次
+const _origInit = window.init;
+window.addEventListener('load', () => { applyMobileUI(); });
+
+// 手机上点对话后关闭侧边栏
+document.addEventListener('click', e => {
+  if (isMobile() && e.target.closest('.chat-item')) {
+    setTimeout(closeSidebar, 100);
+  }
+});

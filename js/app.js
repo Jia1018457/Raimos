@@ -202,6 +202,8 @@ function openContactModal(editId) {
   $i('cm-model').value = c?.model || 'openai/gpt-4o';
   $i('cm-status-freq').value = c?.statusFreq || 0;
   $i('cm-status').value = c?.status || '';
+  $i('cm-apikey').value = c?.apiKey || '';
+  $i('cm-apiurl').value = c?.apiUrl || '';
   $i('cm-av-picker').style.display = 'none';
   renderModelList('cm', c?.model || 'openai/gpt-4o');
   $i('contact-modal').classList.add('show');
@@ -229,7 +231,7 @@ async function uploadCmAv(input) {
 async function saveContact() {
   const name = $i('cm-name').value.trim(); if (!name) { toast('请输入名称'); return; }
   const id = S.editingContactId || uid();
-  const contact = { id, name, avatar: $i('cm-av').value, desc: $i('cm-desc').value.trim(), model: $i('cm-model').value, system: $i('cm-system').value, temp: parseFloat($i('cm-temp').value), statusFreq: parseInt($i('cm-status-freq').value) || 0, status: $i('cm-status').value || '😊 在线', updatedAt: Date.now() };
+  const contact = { id, name, avatar: $i('cm-av').value, desc: $i('cm-desc').value.trim(), apiKey: $i('cm-apikey').value.trim(), apiUrl: $i('cm-apiurl').value.trim(), model: $i('cm-model').value, system: $i('cm-system').value, temp: parseFloat($i('cm-temp').value), statusFreq: parseInt($i('cm-status-freq').value) || 0, status: $i('cm-status').value || '😊 在线', updatedAt: Date.now() };
   await dbPut('contacts', contact);
   S._contacts[id] = contact;
   initStatusTimers();
@@ -571,7 +573,9 @@ async function callAI(chatId) {
   const chat = S._chats[chatId];
   const contact = S.currentContact ? S._contacts[S.currentContact] : null;
   const s = S.settings;
-  if (!s.apiKey) { toast('请先在设置里填写 OpenRouter API Key！'); return; }
+  const useKey = contact?.apiKey || s.apiKey;
+const useUrl = contact?.apiUrl || 'https://openrouter.ai/api/v1/chat/completions';
+if (!useKey) { toast('请先填写 API Key！'); return; }
   S.isStreaming = true; showTyping();
   const t0 = Date.now();
   try {
@@ -579,7 +583,9 @@ async function callAI(chatId) {
     const msgs = await buildMsgs(chat, contact, mems);
     const model = (contact?.model || 'openai/gpt-4o') + (S.onlineSearch && !contact?.model?.includes(':online') && !contact?.model?.includes('perplexity') ? ':online' : '');
     const body = { model, messages: msgs, temperature: contact?.temp ?? parseFloat(s.temp), stream: s.stream, max_tokens: 4096 };
-    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    const res = await fetch(useUrl, {
+  method: 'POST',
+  headers: { 'Authorization': `Bearer ${useKey}`,
       method: 'POST',
       headers: { 'Authorization': `Bearer ${s.apiKey}`, 'Content-Type': 'application/json', 'HTTP-Referer': 'https://raimos.app', 'X-Title': 'Raimos' },
       body: JSON.stringify(body),
@@ -1403,6 +1409,19 @@ async function doLogout() {
   toast('已退出登录');
   closeModal('auth-modal');
   updateAuthUI(null);
+}
+
+async function resetPassword() {
+  const email = $i('auth-email').value.trim();
+  if (!email) { $i('auth-error').textContent='请先填写邮箱'; $i('auth-error').style.display='block'; return; }
+  try {
+    await window._fbLib.sendPasswordResetEmail(window._fbAuth, email);
+    toast('✅ 重置邮件已发送，请检查邮箱');
+    closeModal('auth-modal');
+  } catch(e) {
+    $i('auth-error').textContent='发送失败：' + e.message;
+    $i('auth-error').style.display='block';
+  }
 }
 
 function updateAuthUI(user) {

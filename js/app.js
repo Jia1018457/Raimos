@@ -26,7 +26,8 @@ let S = {
   // runtime caches
   _contacts: {}, _chats: {}, _memories: [], _stickers: [],
   settings: {
-    apiKey:'', tavilyKey:'', unsplashKey:'',
+    apiKey:'', apiUrl:'', tavilyKey:'', unsplashKey:'',
+    model:'openai/gpt-4o', systemPrompt:'',
     ttsMode:'browser', browserVoice:'', ttsUrl:'', ttsKey:'', ttsVoice:'cove',
     voiceReplyMode:'text', autoTts:false,
     stream:true, showToken:false, showThink:true,
@@ -34,6 +35,7 @@ let S = {
     proactive:false, proMax:3, proStart:8, proEnd:22,
     imgGenModel:'openai/dall-e-3',
     aiName:'小可', userName:'我', aiAvatar:'🐱', userAvatar:'😊',
+    showUserAvatar:true, showAiAvatar:true,
     userBubble:'#ff8fab', aiBubble:'#ffffff',
     theme:'light', chatBg:'#fdf6f0', chatBgImg:'', bgOpacity:1, fontSize:14,
     welcomeIcon:'🐻', welcomeTitle:'你好呀！', welcomeSub:'点左上角 ＋ 新建对话，或先去⚙️设置里填 OpenRouter API Key 哦～',
@@ -109,6 +111,7 @@ async function init() {
   buildAnimTypeGrid();
   buildComposeEmojiGrid();
   updateStorageInfo();
+  updateNavUserAv();
 }
 
 // ══════════════════════════════
@@ -196,10 +199,13 @@ function openContactModal(editId) {
   $i('cm-av').value = c?.avatar || '🐱';
   $i('cm-av-preview').textContent = c?.avatar?.startsWith('data:') ? '' : (c?.avatar || '🐱');
   $i('cm-desc').value = c?.desc || '';
-  $i('cm-system').value = c?.system || '你是一个可爱温柔的AI助手。';
-  $i('cm-temp').value = c?.temp ?? 0.85;
-  $i('cm-temp-v').textContent = c?.temp ?? 0.85;
-  $i('cm-model').value = c?.model || 'openai/gpt-4o';
+  $i('cm-system').value = c?.system || '';
+  const hasTempOverride = c !== null && c?.temp !== null && c?.temp !== undefined;
+  $i('cm-use-global-temp').checked = !hasTempOverride;
+  $i('cm-temp-row').style.display = hasTempOverride ? 'flex' : 'none';
+  $i('cm-temp').value = hasTempOverride ? c.temp : (S.settings.temp || 0.85);
+  $i('cm-temp-v').textContent = hasTempOverride ? c.temp : (S.settings.temp || 0.85);
+  $i('cm-model').value = c?.model || '';
   $i('cm-status-freq').value = c?.statusFreq || 0;
   $i('cm-status').value = c?.status || '';
   $i('cm-apikey').value = c?.apiKey || '';
@@ -231,7 +237,7 @@ async function uploadCmAv(input) {
 async function saveContact() {
   const name = $i('cm-name').value.trim(); if (!name) { toast('请输入名称'); return; }
   const id = S.editingContactId || uid();
-  const contact = { id, name, avatar: $i('cm-av').value, desc: $i('cm-desc').value.trim(), apiKey: $i('cm-apikey').value.trim(), apiUrl: $i('cm-apiurl').value.trim(), model: $i('cm-model').value, system: $i('cm-system').value, temp: parseFloat($i('cm-temp').value), statusFreq: parseInt($i('cm-status-freq').value) || 0, status: $i('cm-status').value || '😊 在线', updatedAt: Date.now() };
+  const contact = { id, name, avatar: $i('cm-av').value, desc: $i('cm-desc').value.trim(), apiKey: $i('cm-apikey').value.trim(), apiUrl: $i('cm-apiurl').value.trim(), model: $i('cm-model').value.trim(), system: $i('cm-system').value.trim(), temp: $i('cm-use-global-temp').checked ? null : parseFloat($i('cm-temp').value), statusFreq: parseInt($i('cm-status-freq').value) || 0, status: $i('cm-status').value || '😊 在线', updatedAt: Date.now() };
   await dbPut('contacts', contact);
   S._contacts[id] = contact;
   initStatusTimers();
@@ -240,6 +246,10 @@ async function saveContact() {
 async function delContact(id) {
   if (!confirm('删除这个助手？')) return;
   await dbDel('contacts', id); delete S._contacts[id]; renderContacts();
+}
+function toggleContactTemp() {
+  const useGlobal = $i('cm-use-global-temp').checked;
+  $i('cm-temp-row').style.display = useGlobal ? 'none' : 'flex';
 }
 async function startChatWith(contactId) {
   const c = S._contacts[contactId]; if (!c) return;
@@ -400,7 +410,7 @@ function renderChatList(filter = '') {
         </div>
         <div class="ci-time">${fmtTime(chat.updatedAt||chat.createdAt)}</div>
         <button class="chat-item-menu" onclick="event.stopPropagation();S.currentChat='${chat.id}';openCtxMenu(event)">⋮</button>`;
-      div.addEventListener('click', e => { if (e.target.classList.contains('chat-item-menu')) return; S.currentChat = chat.id; S.currentContact = chat.contactId || null; openChat(chat.id); });
+      div.addEventListener('click', e => { if (e.target.classList.contains('chat-item-menu')) return; S.currentChat = chat.id; S.currentContact = chat.contactId || null; switchPage('chat-page'); openChat(chat.id); });
       list.appendChild(div);
       dbGetAll('messages', 'chatId', chat.id).then(msgs => {
         const last = msgs[msgs.length - 1];
@@ -465,6 +475,8 @@ async function renderMsgs() {
       if (isUser) av.textContent = userAv;
       else if (aiAv?.startsWith('data:')) av.innerHTML = `<img src="${aiAv}">`;
       else av.textContent = aiAv || '🐱';
+      if (isUser && S.settings.showUserAvatar === false) av.style.display = 'none';
+      if (!isUser && S.settings.showAiAvatar === false) av.style.display = 'none';
       const sn = document.createElement('span'); sn.className = 'msg-sender';
       sn.textContent = isUser ? (S.settings.userName || '我') : (contact?.name || S.settings.aiName || 'AI');
       if (isUser) { gh.appendChild(sn); gh.appendChild(av); } else { gh.appendChild(av); gh.appendChild(sn); }
@@ -574,14 +586,15 @@ async function callAI(chatId) {
   const contact = S.currentContact ? S._contacts[S.currentContact] : null;
   const s = S.settings;
   const useKey = contact?.apiKey || s.apiKey;
-const useUrl = contact?.apiUrl || 'https://openrouter.ai/api/v1/chat/completions';
-if (!useKey) { toast('请先填写 API Key！'); return; }
+  const useUrl = contact?.apiUrl || s.apiUrl || 'https://openrouter.ai/api/v1/chat/completions';
+  if (!useKey) { toast('请先填写 API Key！'); return; }
 S.isStreaming = true; showTyping();
 const t0 = Date.now();
 try {
     const mems = await getRelevantMems(chatId);
     const msgs = await buildMsgs(chat, contact, mems);
-    const model = (contact?.model || 'openai/gpt-4o') + (S.onlineSearch && !contact?.model?.includes(':online') && !contact?.model?.includes('perplexity') ? ':online' : '');
+    const baseModel = contact?.model || s.model || 'openai/gpt-4o';
+    const model = baseModel + (S.onlineSearch && !baseModel.includes(':online') && !baseModel.includes('perplexity') ? ':online' : '');
     const body = { model, messages: msgs, temperature: contact?.temp ?? parseFloat(s.temp), stream: s.stream, max_tokens: 4096 };
     const res = await fetch(useUrl, {
       method: 'POST',
@@ -1110,6 +1123,67 @@ const AI_COLORS=['#ffffff','#f8f9fa','#e3fafc','#fff3bf','#d3f9d8','#e7f5ff','#f
 function renderColorPickers(wrapU,wrapA){wrapU.innerHTML='';wrapA.innerHTML='';USER_COLORS.forEach(c=>{const s=document.createElement('div');s.className='cswatch'+(S.settings.userBubble===c?' sel':'');s.style.background=c;s.onclick=()=>{S.settings.userBubble=c;applyBubble();saveSetting('userBubble',c);renderColorPickers(wrapU,wrapA);};wrapU.appendChild(s);});const u2=document.createElement('div');u2.className='cswatch cust';u2.innerHTML=`<input type="color" value="${S.settings.userBubble}" oninput="S.settings.userBubble=this.value;applyBubble();saveSetting('userBubble',this.value)">`;wrapU.appendChild(u2);AI_COLORS.forEach(c=>{const s=document.createElement('div');s.className='cswatch'+(S.settings.aiBubble===c?' sel':'');s.style.background=c;s.style.border='1.5px solid #ddd';s.onclick=()=>{S.settings.aiBubble=c;applyBubble();saveSetting('aiBubble',c);renderColorPickers(wrapU,wrapA);};wrapA.appendChild(s);});const a2=document.createElement('div');a2.className='cswatch cust';a2.innerHTML=`<input type="color" value="${S.settings.aiBubble}" oninput="S.settings.aiBubble=this.value;applyBubble();saveSetting('aiBubble',this.value)">`;wrapA.appendChild(a2);}
 
 function openAvatarModal(){buildAvatarGrid();$i('avatar-modal').classList.add('show');}
+
+function updateNavUserAv() {
+  const btn = $i('nav-user-av'); if (!btn) return;
+  const av = S.settings.userAvatar || '😊';
+  if (av.startsWith('data:')) btn.innerHTML = `<img src="${av}" style="width:28px;height:28px;border-radius:50%;object-fit:cover">`;
+  else btn.textContent = av;
+}
+function openUserModal() {
+  const s = S.settings;
+  const av = s.userAvatar || '😊';
+  const prev = $i('um-av-preview');
+  if (av.startsWith('data:')) prev.innerHTML = `<img src="${av}" style="width:44px;height:44px;border-radius:50%;object-fit:cover">`;
+  else prev.textContent = av;
+  $i('um-av-val').value = av;
+  $i('um-username').value = s.userName || '我';
+  $i('um-show-user-av').checked = s.showUserAvatar !== false;
+  $i('um-show-ai-av').checked = s.showAiAvatar !== false;
+  const info = $i('um-auth-info');
+  const logoutBtn = $i('um-logout-btn');
+  if (window._fbUser) { info.textContent = '已登录：' + window._fbUser.email; logoutBtn.style.display = ''; }
+  else { info.textContent = '未登录'; logoutBtn.style.display = 'none'; }
+  $i('user-modal').classList.add('show');
+}
+async function saveUserProfile() {
+  const s = S.settings;
+  s.userAvatar = $i('um-av-val').value || '😊';
+  s.userName = $i('um-username').value.trim() || '我';
+  s.showUserAvatar = $i('um-show-user-av').checked;
+  s.showAiAvatar = $i('um-show-ai-av').checked;
+  await saveSetting('userAvatar', s.userAvatar);
+  await saveSetting('userName', s.userName);
+  await saveSetting('showUserAvatar', s.showUserAvatar);
+  await saveSetting('showAiAvatar', s.showAiAvatar);
+  updateNavUserAv();
+  if (S.currentChat) await renderMsgs();
+  closeModal('user-modal'); toast('✅ 已保存');
+}
+async function uploadUserAv(input) {
+  const file = input.files[0]; if (!file) return;
+  const compressed = await compressImg(file, 200);
+  $i('um-av-val').value = compressed;
+  const prev = $i('um-av-preview');
+  prev.innerHTML = `<img src="${compressed}" style="width:44px;height:44px;border-radius:50%;object-fit:cover">`;
+  input.value = '';
+}
+function openInlineUserAvPicker() {
+  const picker = $i('user-av-picker');
+  picker.innerHTML = '';
+  picker.style.display = picker.style.display === 'none' ? 'flex' : 'none';
+  const emojis = ['😊','😎','🥰','🤩','😈','👻','🐱','🐶','🐻','🐼','🦊','🤖','🌸','⭐','🌙','🎀'];
+  emojis.forEach(e => {
+    const b = document.createElement('button');
+    b.textContent = e; b.style.cssText = 'font-size:22px;padding:4px;border:1.5px solid var(--border);border-radius:8px;background:none;cursor:pointer;';
+    b.onclick = () => {
+      $i('um-av-val').value = e;
+      const prev = $i('um-av-preview'); prev.innerHTML = ''; prev.textContent = e;
+      picker.style.display = 'none';
+    };
+    picker.appendChild(b);
+  });
+}
 function buildAvatarGrid(){const g=$i('avatar-grid');g.innerHTML='';['🐱','🐶','🐻','🐼','🦊','🐰','🐯','🦁','🐸','🤖','🦄','🌸','⭐','🌙','🎀','🎵'].forEach(e=>{const b=document.createElement('button');b.textContent=e;b.style.cssText='font-size:24px;padding:5px;border:2px solid var(--border);border-radius:9px;background:none;cursor:pointer';b.onclick=()=>{S.settings.aiAvatar=e;const h=$i('hdr-avatar');h.textContent=e;saveSetting('aiAvatar',e);};g.appendChild(b);});}
 function uploadAvatar(input){const file=input.files[0];if(!file)return;const fr=new FileReader();fr.onload=e=>{S.settings.aiAvatar=e.target.result;const h=$i('hdr-avatar');h.innerHTML=`<img src="${e.target.result}">`;saveSetting('aiAvatar',e.target.result);};fr.readAsDataURL(file);}
 
@@ -1120,8 +1194,11 @@ function buildSettingsUI() {
   const wrap = $i('settings-wrap'); if (!wrap) return;
   const s = S.settings;
   wrap.innerHTML = `
-    <div class="s-section"><h3>🔑 API 配置</h3>
-      <div class="s-row"><label>OpenRouter Key</label><input type="password" id="s-key" value="${s.apiKey||''}" placeholder="sk-or-…"/></div>
+    <div class="s-section"><h3>🔑 API 配置（全局默认）</h3>
+      <div class="s-row"><label>API Key</label><input type="password" id="s-key" value="${s.apiKey||''}" placeholder="sk-or-… 助手未填时使用此Key"/></div>
+      <div class="s-row"><label>API 地址</label><input type="text" id="s-apiurl" value="${s.apiUrl||''}" placeholder="留空用 OpenRouter，助手未填时使用"/></div>
+      <div class="s-row"><label>默认模型</label><input type="text" id="s-model" value="${s.model||'openai/gpt-4o'}" placeholder="openai/gpt-4o"/></div>
+      <div class="s-row"><label>默认系统提示词</label><textarea id="s-systemprompt" placeholder="助手未设提示词时使用…" style="min-height:56px">${s.systemPrompt||''}</textarea></div>
       <div class="s-row"><label>Tavily Key (搜索)</label><input type="password" id="s-tavily" value="${s.tavilyKey||''}" placeholder="可选，联网搜索"/></div>
       <div class="s-row"><label>Unsplash Key (图片)</label><input type="password" id="s-unsplash" value="${s.unsplashKey||''}" placeholder="可选，朋友圈搜图"/></div>
     </div>
@@ -1160,6 +1237,8 @@ function buildSettingsUI() {
       <div class="s-row"><label>用户气泡色</label><div class="color-row" id="cr-user"></div></div>
       <div class="s-row"><label>AI 气泡色</label><div class="color-row" id="cr-ai"></div></div>
       <div class="s-row"><label>我的名称</label><input type="text" id="s-username" value="${s.userName||'我'}"/></div>
+      <div class="s-row"><label>显示我的头像</label><label class="toggle"><input type="checkbox" id="s-show-user-av" ${s.showUserAvatar!==false?'checked':''}><span class="tslider"></span></label></div>
+      <div class="s-row"><label>显示 AI 头像</label><label class="toggle"><input type="checkbox" id="s-show-ai-av" ${s.showAiAvatar!==false?'checked':''}><span class="tslider"></span></label></div>
     </div>
     <div class="s-section"><h3>🐾 主动消息</h3>
       <div class="s-row"><label>启用</label><label class="toggle"><input type="checkbox" id="s-proactive" ${s.proactive?'checked':''}><span class="tslider"></span></label></div>
@@ -1198,7 +1277,7 @@ async function saveAllSettings(){
   const s=S.settings;
   const get=(id,def='')=>{const el=$i(id);return el?el.value:def;};
   const getB=(id)=>{const el=$i(id);return el?el.checked:false;};
-  s.apiKey=get('s-key');s.tavilyKey=get('s-tavily');s.unsplashKey=get('s-unsplash');
+  s.apiKey=get('s-key');s.apiUrl=get('s-apiurl');s.model=get('s-model','openai/gpt-4o');s.systemPrompt=get('s-systemprompt');s.tavilyKey=get('s-tavily');s.unsplashKey=get('s-unsplash');
   s.ttsMode=get('s-tts-mode','browser');s.browserVoice=get('s-bvoice');
   s.ttsUrl=get('s-tts-url');s.ttsKey=get('s-tts-key');s.ttsVoice=get('s-tts-voice','cove');
   s.voiceReplyMode=get('s-voice-reply','text');s.autoTts=getB('s-auto-tts');
@@ -1210,6 +1289,7 @@ async function saveAllSettings(){
   s.fontSize=parseInt(get('s-fontsize','14'));s.bgOpacity=parseFloat(get('s-bgopa','1'));
   s.imgGenModel=get('s-imggen-model','openai/dall-e-3');
   s.userName=get('s-username','我');
+  s.showUserAvatar=getB('s-show-user-av'); s.showAiAvatar=getB('s-show-ai-av');
   document.documentElement.style.setProperty('--font-size',s.fontSize+'px');
   applyBubble();scheduleProactive();await saveSettings_();toast('✅ 设置已保存');
 }

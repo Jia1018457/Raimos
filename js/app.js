@@ -33,8 +33,10 @@ let S = {
     stream:true, showToken:false, showThink:true,
     temp:0.85, ctx:20, imgSize:800, sumThresh:40,
     proactive:false, proMax:3, proStart:8, proEnd:22,
-    momentsEnabled:false, autoPost:false, postFreq:24, autoComment:false, commentFreq:6,
+    momentsEnabled:false, autoPost:false, postFreqMin:12, postFreqMax:36,
+    autoComment:false, commentFreqMins:360,
     replyMomentComments:false, replyDelay:120, autoLike:false, likeProb:60,
+    maxComments:1,
     postImages:false, imageFreq:50, imageSources:'stickers',
     imgGenModel:'openai/dall-e-3',
     aiName:'小可', userName:'我', aiAvatar:'🐱', userAvatar:'😊',
@@ -245,12 +247,14 @@ function openContactModal(editId) {
   if (c?.xProStart !== null && c?.xProStart !== undefined) { const el=$i('cm-x-pro-start'); if(el)el.value=c.xProStart??8; }
   if (c?.xProEnd !== null && c?.xProEnd !== undefined) { const el=$i('cm-x-pro-end'); if(el)el.value=c.xProEnd??22; }
   // Moments section
-  setCmSection('moments', c, ['xMomentsEnabled','xAutoPost','xPostFreq','xAutoComment','xCommentFreq','xReplyMomentComments','xReplyDelay','xAutoLike','xLikeProb','xPostImages','xImageFreq','xImageSources']);
+  setCmSection('moments', c, ['xMomentsEnabled','xAutoPost','xPostFreqMin','xPostFreqMax','xAutoComment','xCommentFreqMins','xReplyMomentComments','xReplyDelay','xAutoLike','xLikeProb','xMaxComments','xPostImages','xImageFreq','xImageSources']);
   if (c?.xMomentsEnabled !== null && c?.xMomentsEnabled !== undefined) { const el=$i('cm-x-moments-enabled'); if(el)el.checked=!!c.xMomentsEnabled; }
   if (c?.xAutoPost !== null && c?.xAutoPost !== undefined) { const el=$i('cm-x-auto-post'); if(el)el.checked=!!c.xAutoPost; }
-  if (c?.xPostFreq !== null && c?.xPostFreq !== undefined) { const el=$i('cm-x-post-freq'); if(el)el.value=c.xPostFreq||24; }
+  if (c?.xPostFreqMin !== null && c?.xPostFreqMin !== undefined) { const el=$i('cm-x-post-freq-min'); if(el)el.value=c.xPostFreqMin||12; }
+  if (c?.xPostFreqMax !== null && c?.xPostFreqMax !== undefined) { const el=$i('cm-x-post-freq-max'); if(el)el.value=c.xPostFreqMax||36; }
   if (c?.xAutoComment !== null && c?.xAutoComment !== undefined) { const el=$i('cm-x-auto-comment'); if(el)el.checked=!!c.xAutoComment; }
-  if (c?.xCommentFreq !== null && c?.xCommentFreq !== undefined) { const el=$i('cm-x-comment-freq'); if(el)el.value=c.xCommentFreq||6; }
+  if (c?.xCommentFreqMins !== null && c?.xCommentFreqMins !== undefined) { const el=$i('cm-x-comment-freq'); if(el)el.value=c.xCommentFreqMins||360; }
+  if (c?.xMaxComments !== null && c?.xMaxComments !== undefined) { const el=$i('cm-x-max-comments'); if(el)el.value=c.xMaxComments||1; }
   if (c?.xReplyMomentComments !== null && c?.xReplyMomentComments !== undefined) { const el=$i('cm-x-reply-comments'); if(el)el.checked=!!c.xReplyMomentComments; }
   if (c?.xReplyDelay !== null && c?.xReplyDelay !== undefined) { const el=$i('cm-x-reply-delay'); if(el)el.value=c.xReplyDelay||120; }
   if (c?.xAutoLike !== null && c?.xAutoLike !== undefined) { const el=$i('cm-x-auto-like'); if(el)el.checked=!!c.xAutoLike; }
@@ -335,9 +339,11 @@ async function saveContact() {
     // Moments section
     xMomentsEnabled: getCmSection('moments') ? getB2('cm-x-moments-enabled') : null,
     xAutoPost: getCmSection('moments') ? getB2('cm-x-auto-post') : null,
-    xPostFreq: getCmSection('moments') ? parseInt(getV('cm-x-post-freq','24')) : null,
+    xPostFreqMin: getCmSection('moments') ? parseInt(getV('cm-x-post-freq-min','12')) : null,
+    xPostFreqMax: getCmSection('moments') ? parseInt(getV('cm-x-post-freq-max','36')) : null,
     xAutoComment: getCmSection('moments') ? getB2('cm-x-auto-comment') : null,
-    xCommentFreq: getCmSection('moments') ? parseInt(getV('cm-x-comment-freq','6')) : null,
+    xCommentFreqMins: getCmSection('moments') ? parseInt(getV('cm-x-comment-freq','360')) : null,
+    xMaxComments: getCmSection('moments') ? parseInt(getV('cm-x-max-comments','1')) : null,
     xReplyMomentComments: getCmSection('moments') ? getB2('cm-x-reply-comments') : null,
     xReplyDelay: getCmSection('moments') ? parseInt(getV('cm-x-reply-delay','120')) : null,
     xAutoLike: getCmSection('moments') ? getB2('cm-x-auto-like') : null,
@@ -1069,8 +1075,20 @@ async function submitComment(momentId) {
   if(m){const card=await makeMomentCard(m);const old=$i('mc-'+momentId);if(old)old.replaceWith(card);}
   const cl2=$i('clist-'+momentId),ri2=$i('ri-'+momentId);
   if(cl2){cl2.style.display='flex';cl2.style.flexDirection='column';}if(ri2)ri2.style.display='flex';
-  // Trigger AI auto-reply if this is an AI's post
-  if (m?.contactId) {
+  // Case 1: replying to an AI's comment on any post — trigger that AI to reply back
+  if (rt?.commentId) {
+    const allComments2 = await dbGetAll('comments');
+    const original = allComments2.find(x => x.id === rt.commentId);
+    if (original) {
+      const aiContact = Object.values(S._contacts).find(ct => ct.name === original.author);
+      if (aiContact && cs(aiContact?.xReplyMomentComments, S.settings.replyMomentComments)) {
+        const delayMs = (cs(aiContact?.xReplyDelay, S.settings.replyDelay) || 120) * 1000 * (0.4 + Math.random()*0.8);
+        setTimeout(() => aiReplyComment(momentId, c, aiContact.id), delayMs);
+      }
+    }
+  }
+  // Case 2: commenting on an AI's own post (not a reply) — trigger AI reply
+  if (!rt && m?.contactId) {
     const contact = S._contacts[m.contactId];
     if (contact && cs(contact?.xReplyMomentComments, S.settings.replyMomentComments)) {
       const delayMs = (cs(contact?.xReplyDelay, S.settings.replyDelay) || 120) * 1000 * (0.4 + Math.random()*0.8);
@@ -1175,8 +1193,9 @@ function initMomentTimers() {
 }
 function scheduleMomentPost(contactId) {
   const c = S._contacts[contactId]; if (!c) return;
-  const freqHrs = cs(c?.xPostFreq, S.settings.postFreq) || 24;
-  const delay = freqHrs * 3600 * 1000 * (0.8 + Math.random()*0.4);
+  const minHrs = cs(c?.xPostFreqMin, S.settings.postFreqMin) || 12;
+  const maxHrs = Math.max(minHrs + 1, cs(c?.xPostFreqMax, S.settings.postFreqMax) || 36);
+  const delay = (minHrs + Math.random() * (maxHrs - minHrs)) * 3600 * 1000;
   if (!S._momentTimers[contactId]) S._momentTimers[contactId] = {};
   S._momentTimers[contactId].post = setTimeout(() => triggerMomentPost(contactId), delay);
 }
@@ -1186,8 +1205,8 @@ async function triggerMomentPost(contactId) {
 }
 function scheduleMomentComment(contactId) {
   const c = S._contacts[contactId]; if (!c) return;
-  const freqHrs = cs(c?.xCommentFreq, S.settings.commentFreq) || 6;
-  const delay = freqHrs * 3600 * 1000 * (0.5 + Math.random()*1);
+  const freqMins = cs(c?.xCommentFreqMins, S.settings.commentFreqMins) || 360;
+  const delay = freqMins * 60 * 1000 * (0.5 + Math.random()*1);
   if (!S._momentTimers[contactId]) S._momentTimers[contactId] = {};
   S._momentTimers[contactId].comment = setTimeout(() => triggerMomentComment(contactId), delay);
 }
@@ -1222,17 +1241,28 @@ async function triggerMomentComment(contactId) {
 async function aiCommentMoment(momentId, contactId) {
   const m = await dbGet('moments',momentId); if(!m||!S.settings.apiKey)return;
   const contact = contactId ? S._contacts[contactId] : (S.currentContact?S._contacts[S.currentContact]:Object.values(S._contacts)[0]);
+  if (!contact) return;
   const aiName = contact?.name||S.settings.aiName||'AI';
+  const apiKey = contact?.apiKey||S.settings.apiKey;
+  const apiUrl = (contact?.apiUrl||S.settings.apiUrl||'https://openrouter.ai');
+  const maxC = cs(contact?.xMaxComments, S.settings.maxComments) || 1;
+  const count = Math.max(1, Math.ceil(Math.random() * maxC));
   toast('🤖 AI 评论中…');
+  const prevTexts = [];
   try {
-    const res = await fetch((contact?.apiUrl||S.settings.apiUrl||'https://openrouter.ai')+'/api/v1/chat/completions',{method:'POST',headers:{'Authorization':`Bearer ${contact?.apiKey||S.settings.apiKey}`,'Content-Type':'application/json'},body:JSON.stringify({model:contact?.model||'openai/gpt-4o-mini',max_tokens:80,stream:false,messages:[{role:'system',content:`你是${aiName}，${contact?.system||S.settings.systemPrompt||'可爱温柔的AI'}，用1-2句话自然地评论朋友圈，像真实朋友一样，不要过于正式。`},{role:'user',content:`朋友圈内容: ${m.text||'[图片]'}`}]})});
-    const d=await res.json(); const comment=d.choices?.[0]?.message?.content||'';
-    if(comment){
-      const c={id:uid(),momentId,author:aiName,text:comment,replyTo:null,ts:Date.now()};
-      await dbPut('comments',c);
-      const m2=await dbGet('moments',momentId);
-      if(m2){const card=await makeMomentCard(m2);const old=$i('mc-'+momentId);if(old)old.replaceWith(card);}
-      const cl2=$i('clist-'+momentId);if(cl2){cl2.style.display='flex';cl2.style.flexDirection='column';}
+    for (let i = 0; i < count; i++) {
+      if (i > 0) await new Promise(r => setTimeout(r, 1500 + Math.random()*3000));
+      const prevCtx = prevTexts.length ? `\n你刚才说了：${prevTexts.join('；')}。再补充一句不同的话，自然衔接但不重复。` : '';
+      const res = await fetch(apiUrl+'/api/v1/chat/completions',{method:'POST',headers:{'Authorization':`Bearer ${apiKey}`,'Content-Type':'application/json'},body:JSON.stringify({model:contact?.model||'openai/gpt-4o-mini',max_tokens:80,stream:false,messages:[{role:'system',content:`你是${aiName}，${cs(contact?.system,S.settings.systemPrompt)||'可爱温柔的AI'}，用1句话自然地评论朋友圈，像真实朋友一样。${prevCtx}`},{role:'user',content:`朋友圈内容: ${m.text||'[图片]'}`}]})});
+      const d=await res.json(); const comment=d.choices?.[0]?.message?.content?.trim()||'';
+      if(comment){
+        prevTexts.push(comment);
+        const c={id:uid(),momentId,author:aiName,text:comment,replyTo:null,ts:Date.now()};
+        await dbPut('comments',c);
+        const m2=await dbGet('moments',momentId);
+        if(m2){const card=await makeMomentCard(m2);const old=$i('mc-'+momentId);if(old)old.replaceWith(card);}
+        const cl2=$i('clist-'+momentId);if(cl2){cl2.style.display='flex';cl2.style.flexDirection='column';}
+      }
     }
   } catch(e){toast('AI评论失败');}
 }
@@ -1622,13 +1652,19 @@ function buildSettingsUI() {
       <div style="font-size:11px;color:var(--text3);margin-bottom:8px">各助手可在扩展设置中单独覆盖</div>
       <div class="s-row"><label>启用朋友圈</label><label class="toggle"><input type="checkbox" id="s-moments-enabled" ${s.momentsEnabled?'checked':''}><span class="tslider"></span></label></div>
       <div class="s-row"><label>AI 自动发圈</label><label class="toggle"><input type="checkbox" id="s-auto-post" ${s.autoPost?'checked':''}><span class="tslider"></span></label></div>
-      <div class="s-row"><label>发圈频率</label><input type="number" id="s-post-freq" value="${s.postFreq||24}" min="1" max="720" style="max-width:70px"/> 小时/次 <span style="font-size:11px;color:var(--text3)">（±40%随机浮动）</span></div>
+      <div class="s-row"><label>发圈时间范围</label>
+        <input type="number" id="s-post-freq-min" value="${s.postFreqMin||12}" min="1" max="720" style="max-width:60px"/> ~
+        <input type="number" id="s-post-freq-max" value="${s.postFreqMax||36}" min="1" max="720" style="max-width:60px"/>
+        <span style="font-size:11px;color:var(--text3)">小时（在此范围内随机）</span>
+      </div>
       <div class="s-row"><label>AI 自动评论</label><label class="toggle"><input type="checkbox" id="s-auto-comment" ${s.autoComment?'checked':''}><span class="tslider"></span></label></div>
-      <div class="s-row"><label>评论检查间隔</label><input type="number" id="s-comment-freq" value="${s.commentFreq||6}" min="1" max="168" style="max-width:70px"/> 小时 <span style="font-size:11px;color:var(--text3)">（只评论未评论过的新帖）</span></div>
+      <div class="s-row"><label>评论检查间隔</label><input type="number" id="s-comment-freq" value="${s.commentFreqMins||360}" min="1" max="10000" style="max-width:80px"/> 分钟 <span style="font-size:11px;color:var(--text3)">（只评论未评论过的新帖）</span></div>
+      <div class="s-row"><label>单帖最多评论句数</label><input type="number" id="s-max-comments" value="${s.maxComments||1}" min="1" max="5" style="max-width:60px"/> <span style="font-size:11px;color:var(--text3)">句（随机 1~N）</span></div>
       <div class="s-row"><label>自动回复评论</label><label class="toggle"><input type="checkbox" id="s-reply-comments" ${s.replyMomentComments?'checked':''}><span class="tslider"></span></label></div>
-      <div class="s-row"><label>回复延迟</label><input type="number" id="s-reply-delay" value="${s.replyDelay||120}" min="10" max="3600" style="max-width:80px"/> 秒 <span style="font-size:11px;color:var(--text3)">（±40%随机）</span></div>
+      <div class="s-row"><label>回复延迟</label><input type="number" id="s-reply-delay" value="${s.replyDelay||120}" min="10" max="3600" style="max-width:80px"/> 秒 <span style="font-size:11px;color:var(--text3)">（±40%随机，也回复自己评论的回复）</span></div>
       <div class="s-row"><label>AI 自动点赞</label><label class="toggle"><input type="checkbox" id="s-auto-like" ${s.autoLike?'checked':''}><span class="tslider"></span></label></div>
       <div class="s-row"><label>点赞概率</label><input type="range" id="s-like-prob" min="0" max="100" step="10" value="${s.likeProb||60}" oninput="$i('s-like-prob-v').textContent=this.value+'%'"><span class="rval" id="s-like-prob-v">${s.likeProb||60}%</span></div>
+      <div style="font-size:11px;color:var(--text3);margin:4px 0 8px;padding:6px 8px;background:var(--hover);border-radius:8px">💡 图片来源说明：<b>联网搜索</b>需在上方填 Unsplash Key；<b>生成图片</b>使用助手的 API Key（即上方 API Key）</div>
       <div class="s-row"><label>发圈带图片</label><label class="toggle"><input type="checkbox" id="s-post-images" ${s.postImages?'checked':''}><span class="tslider"></span></label></div>
       <div class="s-row"><label>带图概率</label><input type="range" id="s-image-freq" min="0" max="100" step="10" value="${s.imageFreq||50}" oninput="$i('s-image-freq-v').textContent=this.value+'%'"><span class="rval" id="s-image-freq-v">${s.imageFreq||50}%</span></div>
       <div class="s-row"><label>图片来源</label><div style="display:flex;gap:10px;flex-wrap:wrap;font-size:12px">
@@ -1678,8 +1714,10 @@ async function saveAllSettings(){
   s.imgSize=parseInt(get('s-imgsize','800'));s.sumThresh=parseInt(get('s-sumthresh','40'));
   s.proactive=getB('s-proactive');s.proMax=parseInt(get('s-pro-max','3'));
   s.proStart=parseInt(get('s-pro-start','8'));s.proEnd=parseInt(get('s-pro-end','22'));
-  s.momentsEnabled=getB('s-moments-enabled');s.autoPost=getB('s-auto-post');s.postFreq=parseInt(get('s-post-freq','24'));
-  s.autoComment=getB('s-auto-comment');s.commentFreq=parseInt(get('s-comment-freq','6'));
+  s.momentsEnabled=getB('s-moments-enabled');s.autoPost=getB('s-auto-post');
+  s.postFreqMin=parseInt(get('s-post-freq-min','12'));s.postFreqMax=parseInt(get('s-post-freq-max','36'));
+  s.autoComment=getB('s-auto-comment');s.commentFreqMins=parseInt(get('s-comment-freq','360'));
+  s.maxComments=parseInt(get('s-max-comments','1'));
   s.replyMomentComments=getB('s-reply-comments');s.replyDelay=parseInt(get('s-reply-delay','120'));
   s.autoLike=getB('s-auto-like');s.likeProb=parseInt(get('s-like-prob','60'));
   s.postImages=getB('s-post-images');s.imageFreq=parseInt(get('s-image-freq','50'));

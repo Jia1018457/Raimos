@@ -314,9 +314,10 @@
       <div id="cm-moments-body" style="display:none;padding:6px 0 10px">
         <div class="mrow"><label>启用朋友圈</label><label class="toggle"><input type="checkbox" id="cm-x-moments-enabled"><span class="tslider"></span></label></div>
         <div class="mrow"><label>AI 自动发圈</label><label class="toggle"><input type="checkbox" id="cm-x-auto-post"><span class="tslider"></span></label></div>
-        <div class="mrow"><label>发圈间隔</label><input type="number" id="cm-x-post-freq" value="24" min="1" max="720" style="max-width:70px"/> 小时</div>
+        <div class="mrow"><label>发圈时间范围</label><input type="number" id="cm-x-post-freq-min" value="12" min="1" max="720" style="max-width:55px"/>~<input type="number" id="cm-x-post-freq-max" value="36" min="1" max="720" style="max-width:55px"/> 小时随机</div>
         <div class="mrow"><label>AI 自动评论</label><label class="toggle"><input type="checkbox" id="cm-x-auto-comment"><span class="tslider"></span></label></div>
-        <div class="mrow"><label>评论间隔</label><input type="number" id="cm-x-comment-freq" value="6" min="1" max="168" style="max-width:70px"/> 小时</div>
+        <div class="mrow"><label>评论检查间隔</label><input type="number" id="cm-x-comment-freq" value="360" min="1" max="10000" style="max-width:70px"/> 分钟</div>
+        <div class="mrow"><label>单帖最多评论句数</label><input type="number" id="cm-x-max-comments" value="1" min="1" max="5" style="max-width:55px"/> 句</div>
         <div class="mrow"><label>自动回复评论</label><label class="toggle"><input type="checkbox" id="cm-x-reply-comments"><span class="tslider"></span></label></div>
         <div class="mrow"><label>回复延迟</label><input type="number" id="cm-x-reply-delay" value="120" min="10" max="3600" style="max-width:80px"/> 秒</div>
         <div class="mrow"><label>自动点赞</label><label class="toggle"><input type="checkbox" id="cm-x-auto-like"><span class="tslider"></span></label></div>

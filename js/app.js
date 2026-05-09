@@ -575,8 +575,6 @@ async function callAI(chatId) {
   const s = S.settings;
   const useKey = contact?.apiKey || s.apiKey;
 const useUrl = contact?.apiUrl || 'https://openrouter.ai/api/v1/chat/completions';
-const useKey = contact?.apiKey || s.apiKey;
-const useUrl = contact?.apiUrl || 'https://openrouter.ai/api/v1/chat/completions';
 if (!useKey) { toast('请先填写 API Key！'); return; }
 S.isStreaming = true; showTyping();
 const t0 = Date.now();

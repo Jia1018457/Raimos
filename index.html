@@ -84,7 +84,8 @@
     <div id="reply-bar">↩️ <span id="reply-bar-txt"></span><button class="bar-close" onclick="cancelReply()">✕</button></div>
     <div id="img-preview-row"></div>
     <div id="input-row">
-      <button class="ibtn ibtn-g" id="btn-emoji" onclick="toggleEmoji()">😊</button>
+      <!-- ★ 修复：用 id="btn-emoji" 让 outsideClick 能正确识别 -->
+      <button class="ibtn ibtn-g" id="btn-emoji" onclick="toggleEmoji()" type="button">😊</button>
       <textarea id="msg-input" placeholder="发消息…" rows="1" onkeydown="onKey(event)" oninput="autoH(this)"></textarea>
       <button class="ibtn ibtn-g" onclick="triggerFile()" title="发文件/图片">📎</button>
       <button class="ibtn ibtn-g" id="btn-voice" onmousedown="startRec()" ontouchstart="startRec(event)" onmouseup="stopRec()" ontouchend="stopRec()">🎤</button>
@@ -117,7 +118,6 @@
       <button class="btn-s" onclick="archiveMoments()">📁 归档清空</button>
     </div>
   </div>
-  <!-- Compose -->
   <div id="compose-moment">
     <textarea id="compose-text" placeholder="分享一下今天的心情…" rows="2" oninput="autoH(this)"></textarea>
     <div id="compose-img-previews" class="compose-img-previews"></div>
@@ -147,6 +147,14 @@
 
 <!-- ── SETTINGS PAGE ── -->
 <div class="page" id="settings-page">
+  <div class="page-header" style="justify-content:space-between;align-items:center;">
+    <h2>⚙️ 设置</h2>
+    <!-- ★ 登录状态栏 -->
+    <div id="auth-status-bar" style="display:flex;align-items:center;gap:7px;font-size:12px;color:var(--text3);">
+      <span id="auth-status-txt">未登录</span>
+      <button class="btn-s" id="auth-action-btn" onclick="openAuthModal()">登录 / 注册</button>
+    </div>
+  </div>
   <div class="s-wrap" id="settings-wrap"></div>
 </div>
 
@@ -159,6 +167,27 @@
 </div>
 
 <!-- ══ MODALS ══ -->
+
+<!-- ★ Auth Modal -->
+<div class="overlay" id="auth-modal">
+  <div class="modal">
+    <h2 id="auth-modal-title">🔐 登录 / 注册 <button class="mclose" onclick="closeModal('auth-modal')">✕</button></h2>
+    <div style="display:flex;gap:0;margin-bottom:14px;border-radius:9px;overflow:hidden;border:1.5px solid var(--border);">
+      <button id="auth-tab-login" onclick="switchAuthTab('login')" style="flex:1;padding:8px;border:none;cursor:pointer;font-family:inherit;font-size:13px;font-weight:700;background:var(--accent);color:#fff;">登录</button>
+      <button id="auth-tab-register" onclick="switchAuthTab('register')" style="flex:1;padding:8px;border:none;cursor:pointer;font-family:inherit;font-size:13px;font-weight:600;background:var(--hover);color:var(--text2);">注册</button>
+    </div>
+    <div class="mrow"><label>邮箱</label><input type="email" id="auth-email" placeholder="your@email.com"/></div>
+    <div class="mrow"><label>密码</label><input type="password" id="auth-password" placeholder="至少6位"/></div>
+    <div id="auth-error" style="color:#e74c3c;font-size:12px;margin-bottom:6px;display:none;"></div>
+    <div class="mbtns">
+      <button class="btn-s" onclick="closeModal('auth-modal')">取消</button>
+      <button class="btn-p" id="auth-submit-btn" onclick="doAuth()">登录</button>
+    </div>
+    <div style="margin-top:10px;text-align:center;">
+      <button id="auth-logout-btn" onclick="doLogout()" style="display:none;background:none;border:none;color:var(--accent);cursor:pointer;font-size:13px;font-family:inherit;">退出登录</button>
+    </div>
+  </div>
+</div>
 
 <!-- Contact -->
 <div class="overlay" id="contact-modal">
@@ -363,7 +392,7 @@
   <div class="modal">
     <h2>💬 更改状态 <button class="mclose" onclick="closeModal('status-modal')">✕</button></h2>
     <div style="display:flex;flex-wrap:wrap;gap:7px;margin-bottom:10px">
-      ${['😊 开心','😟 有点难过','🌧 今天下雨','🌸 春天来了','😴 好困哦','🎮 在玩游戏','📚 在学习','☕ 喝咖啡中','🎵 听歌中','🌙 晚安'].map(s=>`<button onclick="setMyStatus('${s}')" style="background:var(--hover);border:1.5px solid var(--border);border-radius:9px;padding:5px 10px;font-size:12px;cursor:pointer;font-family:inherit;transition:background .15s" onmouseover="this.style.background='var(--accent3)'" onmouseout="this.style.background='var(--hover)'">${s}</button>`).join('')}
+      ${['😊 开心','😟 有点难过','🌧 今天下雨','🌸 春天来了','😴 好困哦','🎮 在玩游戏','📚 在学习','☕ 喝咖啡中','🎵 听歌中','🌙 晚安'].map(s=>`<button onclick="setMyStatus('${s}')" style="background:var(--hover);border:1.5px solid var(--border);border-radius:9px;padding:5px 10px;font-size:12px;cursor:pointer;font-family:inherit;">${s}</button>`).join('')}
     </div>
     <div class="mrow"><label>自定义</label><input type="text" id="custom-status-inp" placeholder="emoji + 文字…"/></div>
     <div class="mbtns">
@@ -402,6 +431,40 @@
 
 <input type="file" id="file-upload" accept="image/*,application/pdf,.txt,.md,.doc,.docx" multiple style="display:none" onchange="handleFiles(this)"/>
 <input type="file" id="compose-pic-file" accept="image/*" multiple style="display:none" onchange="handleComposePic(this)"/>
+
+<!-- ★ Firebase SDK -->
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/11.8.1/firebase-app.js";
+  import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged }
+    from "https://www.gstatic.com/firebasejs/11.8.1/firebase-auth.js";
+  import { getFirestore, doc, setDoc, getDoc, collection, getDocs, deleteDoc }
+    from "https://www.gstatic.com/firebasejs/11.8.1/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyAvxI3Tot257b8En6XzaFxzYAa8o8B0giI",
+    authDomain: "raimos-c410b.firebaseapp.com",
+    projectId: "raimos-c410b",
+    storageBucket: "raimos-c410b.firebasestorage.app",
+    messagingSenderId: "962157015939",
+    appId: "1:962157015939:web:7c01700ad41cfa144d7cb6",
+    measurementId: "G-YSRHQQR7NY"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+  const db = getFirestore(app);
+
+  // ── 挂载到 window 供 app.js 调用 ──
+  window._fbAuth = auth;
+  window._fbDb   = db;
+  window._fbLib  = { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, doc, setDoc, getDoc, collection, getDocs, deleteDoc };
+
+  // 监听登录状态
+  onAuthStateChanged(auth, user => {
+    window._fbUser = user || null;
+    if (typeof updateAuthUI === 'function') updateAuthUI(user);
+  });
+</script>
 
 <script src="js/db.js"></script>
 <script src="js/app.js"></script>

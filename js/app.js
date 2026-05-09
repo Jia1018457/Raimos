@@ -34,7 +34,8 @@ let S = {
     temp:0.85, ctx:20, imgSize:800, sumThresh:40,
     proactive:false, proMax:3, proStart:8, proEnd:22,
     momentsEnabled:false, autoPost:false, postFreq:24, autoComment:false, commentFreq:6,
-    replyMomentComments:false, postImages:false, imageFreq:50, imageSources:'stickers',
+    replyMomentComments:false, replyDelay:120, autoLike:false, likeProb:60,
+    postImages:false, imageFreq:50, imageSources:'stickers',
     imgGenModel:'openai/dall-e-3',
     aiName:'小可', userName:'我', aiAvatar:'🐱', userAvatar:'😊',
     showUserAvatar:true, showAiAvatar:true,
@@ -244,13 +245,16 @@ function openContactModal(editId) {
   if (c?.xProStart !== null && c?.xProStart !== undefined) { const el=$i('cm-x-pro-start'); if(el)el.value=c.xProStart??8; }
   if (c?.xProEnd !== null && c?.xProEnd !== undefined) { const el=$i('cm-x-pro-end'); if(el)el.value=c.xProEnd??22; }
   // Moments section
-  setCmSection('moments', c, ['xMomentsEnabled','xAutoPost','xPostFreq','xAutoComment','xCommentFreq','xReplyMomentComments','xPostImages','xImageFreq','xImageSources']);
+  setCmSection('moments', c, ['xMomentsEnabled','xAutoPost','xPostFreq','xAutoComment','xCommentFreq','xReplyMomentComments','xReplyDelay','xAutoLike','xLikeProb','xPostImages','xImageFreq','xImageSources']);
   if (c?.xMomentsEnabled !== null && c?.xMomentsEnabled !== undefined) { const el=$i('cm-x-moments-enabled'); if(el)el.checked=!!c.xMomentsEnabled; }
   if (c?.xAutoPost !== null && c?.xAutoPost !== undefined) { const el=$i('cm-x-auto-post'); if(el)el.checked=!!c.xAutoPost; }
   if (c?.xPostFreq !== null && c?.xPostFreq !== undefined) { const el=$i('cm-x-post-freq'); if(el)el.value=c.xPostFreq||24; }
   if (c?.xAutoComment !== null && c?.xAutoComment !== undefined) { const el=$i('cm-x-auto-comment'); if(el)el.checked=!!c.xAutoComment; }
   if (c?.xCommentFreq !== null && c?.xCommentFreq !== undefined) { const el=$i('cm-x-comment-freq'); if(el)el.value=c.xCommentFreq||6; }
   if (c?.xReplyMomentComments !== null && c?.xReplyMomentComments !== undefined) { const el=$i('cm-x-reply-comments'); if(el)el.checked=!!c.xReplyMomentComments; }
+  if (c?.xReplyDelay !== null && c?.xReplyDelay !== undefined) { const el=$i('cm-x-reply-delay'); if(el)el.value=c.xReplyDelay||120; }
+  if (c?.xAutoLike !== null && c?.xAutoLike !== undefined) { const el=$i('cm-x-auto-like'); if(el)el.checked=!!c.xAutoLike; }
+  if (c?.xLikeProb !== null && c?.xLikeProb !== undefined) { const el=$i('cm-x-like-prob'); if(el){ el.value=c.xLikeProb||60; const v=$i('cm-x-like-prob-v'); if(v)v.textContent=(c.xLikeProb||60)+'%'; } }
   if (c?.xPostImages !== null && c?.xPostImages !== undefined) { const el=$i('cm-x-post-images'); if(el)el.checked=!!c.xPostImages; }
   if (c?.xImageFreq !== null && c?.xImageFreq !== undefined) { const el=$i('cm-x-image-freq'); if(el)el.value=c.xImageFreq||50; }
   if (c?.xImageSources !== null && c?.xImageSources !== undefined) {
@@ -335,6 +339,9 @@ async function saveContact() {
     xAutoComment: getCmSection('moments') ? getB2('cm-x-auto-comment') : null,
     xCommentFreq: getCmSection('moments') ? parseInt(getV('cm-x-comment-freq','6')) : null,
     xReplyMomentComments: getCmSection('moments') ? getB2('cm-x-reply-comments') : null,
+    xReplyDelay: getCmSection('moments') ? parseInt(getV('cm-x-reply-delay','120')) : null,
+    xAutoLike: getCmSection('moments') ? getB2('cm-x-auto-like') : null,
+    xLikeProb: getCmSection('moments') ? parseInt(getV('cm-x-like-prob','60')) : null,
     xPostImages: getCmSection('moments') ? getB2('cm-x-post-images') : null,
     xImageFreq: getCmSection('moments') ? parseInt(getV('cm-x-image-freq','50')) : null,
     xImageSources: getCmSection('moments') ? ['stickers','search','generate'].filter(s=>$i(`cm-x-imgsrc-${s}`)?.checked).join(',') : null,
@@ -1062,6 +1069,14 @@ async function submitComment(momentId) {
   if(m){const card=await makeMomentCard(m);const old=$i('mc-'+momentId);if(old)old.replaceWith(card);}
   const cl2=$i('clist-'+momentId),ri2=$i('ri-'+momentId);
   if(cl2){cl2.style.display='flex';cl2.style.flexDirection='column';}if(ri2)ri2.style.display='flex';
+  // Trigger AI auto-reply if this is an AI's post
+  if (m?.contactId) {
+    const contact = S._contacts[m.contactId];
+    if (contact && cs(contact?.xReplyMomentComments, S.settings.replyMomentComments)) {
+      const delayMs = (cs(contact?.xReplyDelay, S.settings.replyDelay) || 120) * 1000 * (0.4 + Math.random()*0.8);
+      setTimeout(() => aiReplyComment(momentId, c, m.contactId), delayMs);
+    }
+  }
 }
 async function delComment(momentId, commentId) {
   await dbDel('comments',commentId);
@@ -1080,30 +1095,65 @@ async function doAiPost() {
   closeModal('ai-post-modal');
   await aiPostMoment(contactId);
 }
+async function fetchUnsplashImage(query) {
+  const key = S.settings.unsplashKey; if (!key) return null;
+  try {
+    const res = await fetch(`https://api.unsplash.com/photos/random?query=${encodeURIComponent(query.slice(0,40))}&orientation=squarish&client_id=${key}`);
+    const d = await res.json();
+    return d?.urls?.small || d?.urls?.regular || null;
+  } catch(e) { return null; }
+}
+async function generateMomentImage(prompt, contact) {
+  const model = cs(contact?.xImgGenModel, S.settings.imgGenModel) || 'openai/dall-e-3';
+  const apiKey = contact?.apiKey || S.settings.apiKey;
+  const apiUrl = (contact?.apiUrl || S.settings.apiUrl || 'https://openrouter.ai');
+  try {
+    const res = await fetch(apiUrl + '/api/v1/images/generations', {
+      method:'POST', headers:{'Authorization':`Bearer ${apiKey}`,'Content-Type':'application/json'},
+      body: JSON.stringify({ model, prompt: `朋友圈配图：${prompt.slice(0,60)}，自然真实温馨风格`, n:1, size:'1024x1024' })
+    });
+    const d = await res.json(); return d.data?.[0]?.url || null;
+  } catch(e) { return null; }
+}
 async function aiPostMoment(contactId) {
   const contact = contactId ? S._contacts[contactId] : Object.values(S._contacts)[0];
   if (!contact || !S.settings.apiKey) { toast('需要配置助手和 API Key'); return; }
   const aiName = contact.name || S.settings.aiName || 'AI';
   const aiAvatar = contact.avatar || S.settings.aiAvatar || '🤖';
+  const apiKey = contact.apiKey || S.settings.apiKey;
+  const apiUrl = (contact.apiUrl || S.settings.apiUrl || 'https://openrouter.ai');
   toast('🌸 AI 正在发朋友圈…');
   try {
     const useImages = cs(contact?.xPostImages, S.settings.postImages);
     const imageFreq = cs(contact?.xImageFreq, S.settings.imageFreq) || 50;
     const imageSources = (cs(contact?.xImageSources, S.settings.imageSources) || 'stickers').split(',').filter(Boolean);
     // Generate text
-    const res = await fetch((contact.apiUrl||S.settings.apiUrl||'https://openrouter.ai') + '/api/v1/chat/completions', {
-      method:'POST', headers:{'Authorization':`Bearer ${contact.apiKey||S.settings.apiKey}`,'Content-Type':'application/json'},
+    const res = await fetch(apiUrl + '/api/v1/chat/completions', {
+      method:'POST', headers:{'Authorization':`Bearer ${apiKey}`,'Content-Type':'application/json'},
       body: JSON.stringify({ model: contact.model||S.settings.model||'openai/gpt-4o-mini', max_tokens:120, stream:false,
-        messages:[{role:'system',content:`你是${aiName}，${contact.system||S.settings.systemPrompt||'可爱温柔的AI'}。写一条自然、真实的朋友圈动态，50字以内，不要用"AI"或"助手"自称，像真人朋友一样分享日常/心情/想法，可带emoji。`},{role:'user',content:'写一条今天的朋友圈动态。'}]
+        messages:[{role:'system',content:`你是${aiName}，${cs(contact.system, S.settings.systemPrompt)||'可爱温柔的AI'}。写一条自然、真实的朋友圈动态，50字以内，不要用"AI"或"助手"自称，像真人朋友一样分享日常/心情/想法，可带emoji。`},{role:'user',content:'写一条今天的朋友圈动态。'}]
       })
     });
     const d = await res.json(); const text = d.choices?.[0]?.message?.content?.trim();
     if (!text) { toast('AI 生成失败'); return; }
     let images = [];
-    if (useImages && Math.random()*100 < imageFreq) {
-      if (imageSources.includes('stickers') && S._stickers.length) {
-        const sk = S._stickers[Math.floor(Math.random()*S._stickers.length)];
-        if (sk?.dataUrl) images.push(sk.dataUrl);
+    if (useImages && Math.random()*100 < imageFreq && imageSources.length) {
+      // Shuffle sources and try each until one succeeds
+      const shuffled = [...imageSources].sort(() => Math.random()-0.5);
+      for (const src of shuffled) {
+        if (src === 'stickers' && S._stickers.length) {
+          const sk = S._stickers[Math.floor(Math.random()*S._stickers.length)];
+          if (sk?.dataUrl) { images.push(sk.dataUrl); break; }
+        }
+        if (src === 'search' && S.settings.unsplashKey) {
+          const imgUrl = await fetchUnsplashImage(text);
+          if (imgUrl) { images.push(imgUrl); break; }
+        }
+        if (src === 'generate' && apiKey) {
+          toast('🎨 生成配图中…');
+          const imgUrl = await generateMomentImage(text, contact);
+          if (imgUrl) { images.push(imgUrl); break; }
+        }
       }
     }
     const m = { id:uid(), author:aiName, avatar:aiAvatar, text, images, ts:Date.now(), likes:0, byAi:true, contactId:contact.id };
@@ -1143,20 +1193,29 @@ function scheduleMomentComment(contactId) {
 }
 async function triggerMomentComment(contactId) {
   const contact = S._contacts[contactId]; if (!contact || !S.settings.apiKey) return;
+  const myName = contact.name;
   const moments = await dbGetAll('moments');
-  const recent = moments.filter(m => m.author !== contact.name).sort((a,b)=>b.ts-a.ts).slice(0,5);
-  if (!recent.length) { scheduleMomentComment(contactId); return; }
-  const target = recent[Math.floor(Math.random()*recent.length)];
-  await aiCommentMoment(target.id, contactId);
-  // check if should also reply to comments on this contact's posts
-  const replyOn = cs(contact?.xReplyMomentComments, S.settings.replyMomentComments);
-  if (replyOn) {
-    const myPosts = moments.filter(m => m.contactId === contactId);
-    for (const post of myPosts.slice(0,3)) {
-      const comments = await dbGetAll('comments','momentId',post.id);
-      const unreplied = comments.filter(cm => cm.author !== contact.name && !cm._replied);
-      if (unreplied.length) { await aiReplyComment(post.id, unreplied[0], contactId); break; }
+  const allComments = await dbGetAll('comments');
+  // Only comment on posts from others that this AI has NOT yet commented on
+  const targets = moments.filter(m =>
+    m.author !== myName &&
+    !allComments.some(c => c.momentId === m.id && c.author === myName)
+  ).sort((a,b) => b.ts - a.ts);
+  if (targets.length) {
+    const target = targets[Math.floor(Math.random() * Math.min(3, targets.length))];
+    await aiCommentMoment(target.id, contactId);
+  }
+  // Auto-like uncommented posts
+  if (cs(contact?.xAutoLike, S.settings.autoLike)) {
+    const prob = cs(contact?.xLikeProb, S.settings.likeProb) || 60;
+    const tolike = moments.filter(m => m.author !== myName).slice(0,5);
+    let liked = false;
+    for (const m of tolike) {
+      if (Math.random()*100 < prob) {
+        const mo = await dbGet('moments', m.id); if (mo) { mo.likes=(mo.likes||0)+1; await dbPut('moments',mo); liked=true; }
+      }
     }
+    if (liked && $i('moments-page')?.classList.contains('active')) await renderMoments();
   }
   scheduleMomentComment(contactId);
 }
@@ -1276,10 +1335,51 @@ function confirmImgSearch() {
   closeModal('img-search-modal');
 }
 
-async function exportMoments() {
-  const moments=await dbGetAll('moments');const comments=await dbGetAll('comments');
-  const data=JSON.stringify({moments,comments},null,2);
-  dl('raimos-moments.json',data,'application/json'); toast('✅ 朋友圈已导出');
+function exportMoments() { $i('export-moments-modal').classList.add('show'); }
+async function doExportMoments(fmt) {
+  closeModal('export-moments-modal');
+  const moments=await dbGetAll('moments'); moments.sort((a,b)=>a.ts-b.ts);
+  const comments=await dbGetAll('comments');
+  if (fmt==='json') {
+    dl('raimos-moments.json',JSON.stringify({moments,comments},null,2),'application/json');
+  } else if (fmt==='txt') {
+    let txt='';
+    for (const m of moments) {
+      const cs2=comments.filter(c=>c.momentId===m.id).sort((a,b)=>a.ts-b.ts);
+      txt+=`【${m.author}】${fmtTimeFull(m.ts)}\n${m.text||'[图片]'}\n`;
+      if(m.images?.length)txt+=`[${m.images.length}张图片]\n`;
+      if(cs2.length){txt+=`  评论:\n`;cs2.forEach(c=>{txt+=`  ${c.author}${c.replyTo?` 回复${c.replyTo}`:''}：${c.text}\n`;});}
+      txt+='\n';
+    }
+    dl('raimos-moments.txt',txt,'text/plain');
+  } else if (fmt==='html') {
+    let cards='';
+    for (const m of moments) {
+      const cs2=comments.filter(c=>c.momentId===m.id).sort((a,b)=>a.ts-b.ts);
+      const av=m.avatar?.startsWith('data:')?`<img src="${m.avatar}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`:`<span style="font-size:24px">${m.avatar||'😊'}</span>`;
+      const imgs=m.images?.length?`<div style="display:flex;gap:6px;flex-wrap:wrap;margin:8px 0">${m.images.map(u=>`<img src="${u}" style="width:120px;height:120px;object-fit:cover;border-radius:8px">`).join('')}</div>`:'';
+      const cmts=cs2.map(c=>`<div style="padding:3px 0;font-size:13px"><b>${esc(c.author)}</b>${c.replyTo?` 回复 <b>${esc(c.replyTo)}</b>`:''}：${esc(c.text)}</div>`).join('');
+      cards+=`<div style="background:#fff;border-radius:14px;padding:14px 16px;margin-bottom:14px;box-shadow:0 2px 10px rgba(0,0,0,.08)">
+        <div style="display:flex;gap:10px;align-items:center;margin-bottom:8px">
+          <div style="width:40px;height:40px;border-radius:50%;overflow:hidden;display:flex;align-items:center;justify-content:center;background:#f5f5f5;flex-shrink:0">${av}</div>
+          <div><div style="font-weight:700;font-size:14px">${esc(m.author)}</div><div style="font-size:11px;color:#999">${fmtTimeFull(m.ts)}  ❤️ ${m.likes||0}</div></div>
+        </div>
+        <div style="font-size:14px;line-height:1.6;white-space:pre-wrap">${esc(m.text||'')}</div>
+        ${imgs}
+        ${cs2.length?`<div style="margin-top:8px;padding:8px;background:#f5f5f5;border-radius:8px">${cmts}</div>`:''}
+      </div>`;
+    }
+    const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Raimos 朋友圈</title><style>body{font-family:-apple-system,sans-serif;background:#fdf6f0;padding:20px;max-width:500px;margin:0 auto}</style></head><body><h2 style="text-align:center;color:#e91e63">🌸 朋友圈回忆</h2>${cards}</body></html>`;
+    dl('raimos-moments.html',html,'text/html');
+  } else if (fmt==='csv') {
+    let csv='时间,作者,内容,图片数,点赞,评论数\n';
+    for (const m of moments) {
+      const cc=comments.filter(c=>c.momentId===m.id).length;
+      csv+=`"${fmtTimeFull(m.ts)}","${m.author}","${(m.text||'').replace(/"/g,'""')}",${m.images?.length||0},${m.likes||0},${cc}\n`;
+    }
+    dl('raimos-moments.csv',csv,'text/csv');
+  }
+  toast('✅ 导出完成');
 }
 async function archiveMoments() {
   if(!confirm('归档并清空全部朋友圈？（已导出的内容不会丢失）'))return;
@@ -1522,10 +1622,13 @@ function buildSettingsUI() {
       <div style="font-size:11px;color:var(--text3);margin-bottom:8px">各助手可在扩展设置中单独覆盖</div>
       <div class="s-row"><label>启用朋友圈</label><label class="toggle"><input type="checkbox" id="s-moments-enabled" ${s.momentsEnabled?'checked':''}><span class="tslider"></span></label></div>
       <div class="s-row"><label>AI 自动发圈</label><label class="toggle"><input type="checkbox" id="s-auto-post" ${s.autoPost?'checked':''}><span class="tslider"></span></label></div>
-      <div class="s-row"><label>发圈间隔</label><input type="number" id="s-post-freq" value="${s.postFreq||24}" min="1" max="720" style="max-width:70px"/> 小时</div>
+      <div class="s-row"><label>发圈频率</label><input type="number" id="s-post-freq" value="${s.postFreq||24}" min="1" max="720" style="max-width:70px"/> 小时/次 <span style="font-size:11px;color:var(--text3)">（±40%随机浮动）</span></div>
       <div class="s-row"><label>AI 自动评论</label><label class="toggle"><input type="checkbox" id="s-auto-comment" ${s.autoComment?'checked':''}><span class="tslider"></span></label></div>
-      <div class="s-row"><label>评论间隔</label><input type="number" id="s-comment-freq" value="${s.commentFreq||6}" min="1" max="168" style="max-width:70px"/> 小时</div>
+      <div class="s-row"><label>评论检查间隔</label><input type="number" id="s-comment-freq" value="${s.commentFreq||6}" min="1" max="168" style="max-width:70px"/> 小时 <span style="font-size:11px;color:var(--text3)">（只评论未评论过的新帖）</span></div>
       <div class="s-row"><label>自动回复评论</label><label class="toggle"><input type="checkbox" id="s-reply-comments" ${s.replyMomentComments?'checked':''}><span class="tslider"></span></label></div>
+      <div class="s-row"><label>回复延迟</label><input type="number" id="s-reply-delay" value="${s.replyDelay||120}" min="10" max="3600" style="max-width:80px"/> 秒 <span style="font-size:11px;color:var(--text3)">（±40%随机）</span></div>
+      <div class="s-row"><label>AI 自动点赞</label><label class="toggle"><input type="checkbox" id="s-auto-like" ${s.autoLike?'checked':''}><span class="tslider"></span></label></div>
+      <div class="s-row"><label>点赞概率</label><input type="range" id="s-like-prob" min="0" max="100" step="10" value="${s.likeProb||60}" oninput="$i('s-like-prob-v').textContent=this.value+'%'"><span class="rval" id="s-like-prob-v">${s.likeProb||60}%</span></div>
       <div class="s-row"><label>发圈带图片</label><label class="toggle"><input type="checkbox" id="s-post-images" ${s.postImages?'checked':''}><span class="tslider"></span></label></div>
       <div class="s-row"><label>带图概率</label><input type="range" id="s-image-freq" min="0" max="100" step="10" value="${s.imageFreq||50}" oninput="$i('s-image-freq-v').textContent=this.value+'%'"><span class="rval" id="s-image-freq-v">${s.imageFreq||50}%</span></div>
       <div class="s-row"><label>图片来源</label><div style="display:flex;gap:10px;flex-wrap:wrap;font-size:12px">
@@ -1577,7 +1680,9 @@ async function saveAllSettings(){
   s.proStart=parseInt(get('s-pro-start','8'));s.proEnd=parseInt(get('s-pro-end','22'));
   s.momentsEnabled=getB('s-moments-enabled');s.autoPost=getB('s-auto-post');s.postFreq=parseInt(get('s-post-freq','24'));
   s.autoComment=getB('s-auto-comment');s.commentFreq=parseInt(get('s-comment-freq','6'));
-  s.replyMomentComments=getB('s-reply-comments');s.postImages=getB('s-post-images');s.imageFreq=parseInt(get('s-image-freq','50'));
+  s.replyMomentComments=getB('s-reply-comments');s.replyDelay=parseInt(get('s-reply-delay','120'));
+  s.autoLike=getB('s-auto-like');s.likeProb=parseInt(get('s-like-prob','60'));
+  s.postImages=getB('s-post-images');s.imageFreq=parseInt(get('s-image-freq','50'));
   s.imageSources=['stickers','search','generate'].filter(x=>getB(`s-imgsrc-${x}`)).join(',');
   s.fontSize=parseInt(get('s-fontsize','14'));s.bgOpacity=parseFloat(get('s-bgopa','1'));
   s.imgGenModel=get('s-imggen-model','openai/dall-e-3');

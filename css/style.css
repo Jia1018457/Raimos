@@ -417,6 +417,22 @@ body{font-family:'Nunito','Noto Sans SC',sans-serif;background:var(--bg);color:v
 .ctx-item.danger{color:#e74c3c;}
 .ctx-item.danger:hover{background:#ffe0e8;}
 
+/* NEW CHAT MODAL - assistant picker */
+.ncm-item{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:11px;cursor:pointer;border:1.5px solid var(--border);background:var(--bg3);transition:all .15s;}
+.ncm-item:hover{border-color:var(--accent);background:var(--hover);}
+.ncm-av{width:40px;height:40px;border-radius:50%;background:var(--hover);display:flex;align-items:center;justify-content:center;font-size:22px;overflow:hidden;flex-shrink:0;}
+.ncm-av img{width:100%;height:100%;object-fit:cover;}
+.ncm-info{display:flex;flex-direction:column;gap:2px;min-width:0;}
+.ncm-name{font-size:13px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.ncm-desc{font-size:11px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+
+/* CONTACT MODAL - extended sections */
+.cm-sect-hdr{font-size:12px;font-weight:700;color:var(--text2);padding:7px 0 4px;display:flex;align-items:center;justify-content:space-between;border-top:1px solid var(--border);margin-top:4px;}
+.cm-inherit-lbl{font-size:11px;font-weight:600;color:var(--accent);cursor:pointer;display:flex;align-items:center;gap:4px;white-space:nowrap;}
+.cm-inherit-lbl input[type=checkbox]{accent-color:var(--accent);}
+.cm-ext>summary{font-size:12px;font-weight:700;color:var(--accent);cursor:pointer;user-select:none;list-style:none;display:flex;align-items:center;gap:6px;}
+.cm-ext>summary::-webkit-details-marker{display:none;}
+
 /* ══════════════════════════════════════════
    MOBILE RESPONSIVE (≤768px)
    手机端：隐藏sidebar，nav竖排变横排底部

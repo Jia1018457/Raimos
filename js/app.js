@@ -147,6 +147,7 @@ async function saveSettings_() {
 }
 
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 5); }
+function cs(cv, gv) { return (cv === null || cv === undefined) ? gv : cv; }
 
 // ══════════════════════════════
 //  PAGE SWITCHING
@@ -212,6 +213,23 @@ function openContactModal(editId) {
   $i('cm-apiurl').value = c?.apiUrl || '';
   $i('cm-av-picker').style.display = 'none';
   renderModelList('cm', c?.model || 'openai/gpt-4o');
+  // Extended sections — null stored = inherit global (checkbox checked by default)
+  setCmSection('voice', c, ['xTtsMode','xBrowserVoice','xTtsUrl','xTtsKey','xTtsVoice','xAutoTts','xVoiceReplyMode']);
+  if (c?.xTtsMode !== null && c?.xTtsMode !== undefined) { const el=$i('cm-x-tts-mode'); if(el)el.value=c.xTtsMode||'browser'; }
+  if (c?.xAutoTts !== null && c?.xAutoTts !== undefined) { const el=$i('cm-x-auto-tts'); if(el)el.checked=!!c.xAutoTts; }
+  if (c?.xVoiceReplyMode !== null && c?.xVoiceReplyMode !== undefined) { const el=$i('cm-x-voice-reply'); if(el)el.value=c.xVoiceReplyMode||'text'; }
+  if (c?.xBrowserVoice !== null && c?.xBrowserVoice !== undefined) { const el=$i('cm-x-bvoice'); if(el)el.value=c.xBrowserVoice||''; }
+  setCmSection('params', c, ['xStream','xShowToken','xShowThink','xCtx','xSumThresh']);
+  if (c?.xStream !== null && c?.xStream !== undefined) { const el=$i('cm-x-stream'); if(el)el.checked=c.xStream!==false; }
+  if (c?.xShowToken !== null && c?.xShowToken !== undefined) { const el=$i('cm-x-show-token'); if(el)el.checked=!!c.xShowToken; }
+  if (c?.xShowThink !== null && c?.xShowThink !== undefined) { const el=$i('cm-x-show-think'); if(el)el.checked=c.xShowThink!==false; }
+  if (c?.xCtx !== null && c?.xCtx !== undefined) { const el=$i('cm-x-ctx'); if(el)el.value=c.xCtx||20; }
+  if (c?.xSumThresh !== null && c?.xSumThresh !== undefined) { const el=$i('cm-x-sumthresh'); if(el)el.value=c.xSumThresh||40; }
+  setCmSection('appear', c, ['xAiBubble','xChatBg']);
+  if (c?.xAiBubble !== null && c?.xAiBubble !== undefined) { const el=$i('cm-x-ai-bubble'); if(el)el.value=c.xAiBubble||'#ffffff'; }
+  if (c?.xChatBg !== null && c?.xChatBg !== undefined) { const el=$i('cm-x-chat-bg'); if(el)el.value=c.xChatBg||'#fdf6f0'; }
+  setCmSection('imggen', c, ['xImgGenModel']);
+  if (c?.xImgGenModel !== null && c?.xImgGenModel !== undefined) { const el=$i('cm-x-imggen'); if(el)el.value=c.xImgGenModel||S.settings.imgGenModel; }
   $i('contact-modal').classList.add('show');
 }
 function editContact(id) { openContactModal(id); }
@@ -234,10 +252,50 @@ async function uploadCmAv(input) {
   $i('cm-av-preview').innerHTML = `<img src="${compressed}" style="width:28px;height:28px;border-radius:50%;object-fit:cover">`;
   input.value = '';
 }
+function setCmSection(name, c, fields) {
+  const hasCustom = c !== null && fields.some(f => c?.[f] !== null && c?.[f] !== undefined);
+  const cb = $i(`cm-${name}-inherit`); const body = $i(`cm-${name}-body`);
+  if (cb) cb.checked = !hasCustom;  // checked = inherit global
+  if (body) body.style.display = hasCustom ? '' : 'none';
+}
+function toggleCmSection(name) {
+  const inherit = $i(`cm-${name}-inherit`)?.checked;
+  const body = $i(`cm-${name}-body`);
+  if (body) body.style.display = inherit ? 'none' : '';
+}
+function getCmSection(name) { return !$i(`cm-${name}-inherit`)?.checked; }
+function getV(id,def=''){const el=$i(id);return el?el.value:def;}
+function getB2(id,def=false){const el=$i(id);return el?el.checked:def;}
 async function saveContact() {
   const name = $i('cm-name').value.trim(); if (!name) { toast('请输入名称'); return; }
   const id = S.editingContactId || uid();
-  const contact = { id, name, avatar: $i('cm-av').value, desc: $i('cm-desc').value.trim(), apiKey: $i('cm-apikey').value.trim(), apiUrl: $i('cm-apiurl').value.trim(), model: $i('cm-model').value.trim(), system: $i('cm-system').value.trim(), temp: $i('cm-use-global-temp').checked ? null : parseFloat($i('cm-temp').value), statusFreq: parseInt($i('cm-status-freq').value) || 0, status: $i('cm-status').value || '😊 在线', updatedAt: Date.now() };
+  const contact = {
+    id, name, avatar: $i('cm-av').value, desc: $i('cm-desc').value.trim(),
+    apiKey: $i('cm-apikey').value.trim(), apiUrl: $i('cm-apiurl').value.trim(),
+    model: $i('cm-model').value.trim(), system: $i('cm-system').value.trim(),
+    temp: $i('cm-use-global-temp').checked ? null : parseFloat($i('cm-temp').value),
+    statusFreq: parseInt($i('cm-status-freq').value) || 0,
+    status: $i('cm-status').value || '😊 在线', updatedAt: Date.now(),
+    // Voice section
+    xTtsMode: getCmSection('voice') ? getV('cm-x-tts-mode','browser') : null,
+    xBrowserVoice: getCmSection('voice') ? getV('cm-x-bvoice') : null,
+    xTtsUrl: getCmSection('voice') ? getV('cm-x-tts-url') : null,
+    xTtsKey: getCmSection('voice') ? getV('cm-x-tts-key') : null,
+    xTtsVoice: getCmSection('voice') ? getV('cm-x-tts-voice') : null,
+    xAutoTts: getCmSection('voice') ? getB2('cm-x-auto-tts') : null,
+    xVoiceReplyMode: getCmSection('voice') ? getV('cm-x-voice-reply','text') : null,
+    // Params section
+    xStream: getCmSection('params') ? getB2('cm-x-stream',true) : null,
+    xShowToken: getCmSection('params') ? getB2('cm-x-show-token') : null,
+    xShowThink: getCmSection('params') ? getB2('cm-x-show-think',true) : null,
+    xCtx: getCmSection('params') ? parseInt(getV('cm-x-ctx','20')) : null,
+    xSumThresh: getCmSection('params') ? parseInt(getV('cm-x-sumthresh','40')) : null,
+    // Appearance section
+    xAiBubble: getCmSection('appear') ? getV('cm-x-ai-bubble','#ffffff') : null,
+    xChatBg: getCmSection('appear') ? getV('cm-x-chat-bg','#fdf6f0') : null,
+    // Image gen section
+    xImgGenModel: getCmSection('imggen') ? getV('cm-x-imggen') : null,
+  };
   await dbPut('contacts', contact);
   S._contacts[id] = contact;
   initStatusTimers();
@@ -299,14 +357,29 @@ async function setMyStatus(s) {
 //  CHAT MANAGEMENT
 // ══════════════════════════════
 async function newChat() {
-  const contactIds = Object.keys(S._contacts);
-  const cid = contactIds[0] || null;
+  const contacts = Object.values(S._contacts);
+  if (!contacts.length) { switchPage('contacts-page'); toast('👆 先添加一个 AI 助手吧！'); return; }
+  openNewChatModal();
+}
+function openNewChatModal() {
+  const list = $i('ncm-list'); list.innerHTML = '';
+  Object.values(S._contacts).forEach(c => {
+    const div = document.createElement('div'); div.className = 'ncm-item';
+    const av = c.avatar?.startsWith('data:') ? `<img src="${c.avatar}">` : `<span>${c.avatar||'🤖'}</span>`;
+    div.innerHTML = `<div class="ncm-av">${av}</div><div class="ncm-info"><div class="ncm-name">${esc(c.name)}</div><div class="ncm-desc">${esc(c.model||S.settings.model||'gpt-4o')}</div></div>`;
+    div.onclick = () => { closeModal('new-chat-modal'); createChatWith(c.id); };
+    list.appendChild(div);
+  });
+  $i('new-chat-modal').classList.add('show');
+}
+async function createChatWith(contactId) {
+  const c = contactId ? S._contacts[contactId] : null;
   const chatId = uid();
-  const chat = { id: chatId, name: '新对话', contactId: cid, summary: null, archived: false, createdAt: Date.now(), updatedAt: Date.now() };
+  const chat = { id: chatId, name: c ? `与${c.name}的对话` : '新对话', contactId: contactId||null, summary: null, archived: false, createdAt: Date.now(), updatedAt: Date.now() };
   await dbPut('chats', chat); S._chats[chatId] = chat;
-  S.currentChat = chatId; S.currentContact = cid;
-  await saveSetting('currentChat', chatId); await saveSetting('currentContact', cid);
-  renderChatList(); openChat(chatId);
+  S.currentChat = chatId; S.currentContact = contactId||null;
+  await saveSetting('currentChat', chatId); await saveSetting('currentContact', contactId||null);
+  switchPage('chat-page'); renderChatList(); await openChat(chatId);
 }
 
 async function openChat(id) {
@@ -320,8 +393,13 @@ async function openChat(id) {
   const hdrAv = $i('hdr-avatar');
   if (av?.startsWith('data:')) hdrAv.innerHTML = `<img src="${av}">`;
   else hdrAv.textContent = av || '🐱';
-  $i('hint-model').textContent = contact?.model || '';
+  $i('hint-model').textContent = contact?.model || s.model || '';
   updateHeaderStatus();
+  // Apply contact-specific appearance overrides
+  const effAiBubble = cs(contact?.xAiBubble, s.aiBubble) || '#ffffff';
+  const effChatBg = cs(contact?.xChatBg, s.chatBg) || '#fdf6f0';
+  document.documentElement.style.setProperty('--ai-bubble', effAiBubble);
+  const ca2 = $i('chat-area'); if (ca2) ca2.style.background = effChatBg;
   await renderMsgs(); highlightChat(); scrollTo_(false, true);
 }
 
@@ -490,7 +568,8 @@ function appendBubble(groupEl, msg) {
   const bw = document.createElement('div'); bw.className = 'bw';
   const bubble = makeBubble(msg); bw.appendChild(bubble);
   const bt = document.createElement('div'); bt.className = 'bub-time'; bt.textContent = fmtTimeFull(msg.ts);
-  if (S.settings.showToken && msg.usage) {
+  const contact_ = S.currentContact ? S._contacts[S.currentContact] : null;
+  if (cs(contact_?.xShowToken, S.settings.showToken) && msg.usage) {
     const ti = document.createElement('div'); ti.className = 'token-row';
     ti.innerHTML = `⚡ ${msg.usage.total} tokens · ${msg.elapsed||'?'}s ▼`;
     const td = document.createElement('div'); td.className = 'token-detail';
@@ -521,7 +600,7 @@ function makeBubble(msg) {
   } else {
     let html = '';
     if (msg.replyTo) html += `<div class="reply-quote">${esc((msg.replyTo||'').slice(0,60))}</div>`;
-    if (msg.thinking && S.settings.showThink) html += `<details class="thinking-block"><summary>思考过程</summary><div style="margin-top:5px;white-space:pre-wrap">${esc(msg.thinking)}</div></details>`;
+    if (msg.thinking && cs(contact_?.xShowThink, S.settings.showThink)) html += `<details class="thinking-block"><summary>思考过程</summary><div style="margin-top:5px;white-space:pre-wrap">${esc(msg.thinking)}</div></details>`;
     html += fmtText(msg.content || '');
     b.innerHTML = html;
   }
@@ -595,7 +674,8 @@ try {
     const msgs = await buildMsgs(chat, contact, mems);
     const baseModel = contact?.model || s.model || 'openai/gpt-4o';
     const model = baseModel + (S.onlineSearch && !baseModel.includes(':online') && !baseModel.includes('perplexity') ? ':online' : '');
-    const body = { model, messages: msgs, temperature: contact?.temp ?? parseFloat(s.temp), stream: s.stream, max_tokens: 4096 };
+    const useStream = cs(contact?.xStream, s.stream);
+    const body = { model, messages: msgs, temperature: contact?.temp ?? parseFloat(s.temp), stream: useStream, max_tokens: 4096 };
     const res = await fetch(useUrl, {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${useKey}`, 'Content-Type': 'application/json', 'HTTP-Referer': 'https://raimos.app', 'X-Title': 'Raimos' },
@@ -604,12 +684,12 @@ try {
     if (!res.ok) { const e = await res.json().catch(() => ({error:{message:'Error'}})); throw new Error(e.error?.message || res.statusText); }
     removeTyping();
     let content = '', thinking = '', usage = null, streamTmpId = null;
-    if (s.stream) { const r = await handleStream(res, chatId); content = r.content; thinking = r.thinking; usage = r.usage; streamTmpId = r.tmpId; }
+    if (useStream) { const r = await handleStream(res, chatId); content = r.content; thinking = r.thinking; usage = r.usage; streamTmpId = r.tmpId; }
     else { const d = await res.json(); content = d.choices?.[0]?.message?.content || ''; thinking = d.choices?.[0]?.message?.reasoning || ''; usage = d.usage; }
     const { text: cleanText, stickers: stkList } = parseStickerTags(content);
     const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
     const usageObj = usage ? {prompt:usage.prompt_tokens||0,completion:usage.completion_tokens||0,total:usage.total_tokens||0} : null;
-    if (s.stream && streamTmpId) {
+    if (useStream && streamTmpId) {
       const tmpRow = await dbGet('messages', streamTmpId);
       if (tmpRow) { tmpRow.content = cleanText; tmpRow.thinking = thinking||null; tmpRow.elapsed = elapsed; tmpRow.usage = usageObj; await dbPut('messages', tmpRow); }
     } else {
@@ -617,7 +697,7 @@ try {
     }
     for (const sk of stkList) await addMsg(chatId, { role:'ai', type:'sticker', content:sk.content, url:sk.url, isImg:sk.isImg });
     await renderMsgs(); scrollTo_(false);
-    if (s.autoTts && cleanText) speakText(cleanText);
+    if (cs(contact?.xAutoTts, s.autoTts) && cleanText) speakText(cleanText);
     checkKwAnims(cleanText, 'ai');
     autoMemCheck(chatId);
   } catch(e) {
@@ -674,7 +754,7 @@ async function buildMsgs(chat, contact, mems) {
   if (chat.summary) msgs.push({ role:'system', content:`[历史摘要] ${chat.summary}` });
   const allMsgs = await dbGetAll('messages', 'chatId', chat.id);
   allMsgs.sort((a,b) => a.ts - b.ts);
-  const recent = allMsgs.slice(-parseInt(S.settings.ctx)||20);
+  const recent = allMsgs.slice(-parseInt(cs(contact?.xCtx, S.settings.ctx))||20);
   for (const m of recent) {
     if (m.type === 'image' && m.imageData) msgs.push({ role: m.role==='user'?'user':'assistant', content: [{type:'image_url',image_url:{url:m.imageData}},{type:'text',text:'（图片）'}] });
     else if (m.type === 'voice' && m.transcript) msgs.push({ role: m.role==='user'?'user':'assistant', content:`[语音] ${m.transcript}` });
@@ -702,7 +782,7 @@ async function generateImage(prompt) {
   try {
     const res = await fetch('https://openrouter.ai/api/v1/images/generations', {
       method:'POST', headers:{'Authorization':`Bearer ${S.settings.apiKey}`,'Content-Type':'application/json'},
-      body:JSON.stringify({ model:S.settings.imgGenModel||'openai/dall-e-3', prompt, n:1, size:'1024x1024' }),
+      body:JSON.stringify({ model:cs((S.currentContact?S._contacts[S.currentContact]:null)?.xImgGenModel, S.settings.imgGenModel)||'openai/dall-e-3', prompt, n:1, size:'1024x1024' }),
     });
     const d = await res.json(); const url = d.data?.[0]?.url;
     if (url) { await addMsg(S.currentChat,{role:'ai',type:'img_gen',url,content:'[生成图片]'}); await renderMsgs(); scrollTo_(false); }
@@ -774,7 +854,8 @@ async function autoMemCheck(chatId) {
 //  CONTEXT SUMMARY
 // ══════════════════════════════
 async function checkSummary(chatId) {
-  const chat = S._chats[chatId]; const th = parseInt(S.settings.sumThresh)||40;
+  const chat = S._chats[chatId]; const contact = chat.contactId ? S._contacts[chat.contactId] : null;
+  const th = parseInt(cs(contact?.xSumThresh, S.settings.sumThresh))||40;
   const msgs = await dbGetAll('messages','chatId',chatId);
   if (msgs.length < th) return;
   if (chat._lastSumLen && msgs.length - chat._lastSumLen < th) return;
@@ -782,9 +863,10 @@ async function checkSummary(chatId) {
 }
 async function doSummary(chatId, force) {
   const chat = S._chats[chatId]; if (!S.settings.apiKey) return;
+  const cSumThresh = parseInt(cs((chat.contactId?S._contacts[chat.contactId]:null)?.xSumThresh, S.settings.sumThresh))||40;
   const msgs = await dbGetAll('messages','chatId',chatId);
   msgs.sort((a,b)=>a.ts-b.ts);
-  const toSum = force ? msgs : msgs.slice(0, -Math.floor((parseInt(S.settings.sumThresh)||40)/3));
+  const toSum = force ? msgs : msgs.slice(0, -Math.floor(cSumThresh/3));
   if (toSum.length < 5) return;
   const hist = toSum.map(m=>`${m.role==='user'?'用户':'AI'}: ${m.content||'[媒体]'}`).join('\n');
   try {
@@ -793,7 +875,7 @@ async function doSummary(chatId, force) {
     if (sumText) {
       chat.summary = (chat.summary?chat.summary+'\n':'')+sumText;
       if (force) { for (const m of msgs) await dbDel('messages',m.id); }
-      else { const keep=msgs.slice(-Math.floor((parseInt(S.settings.sumThresh)||40)/3)); const toDelete=msgs.slice(0,-keep.length); for(const m of toDelete) await dbDel('messages',m.id); }
+      else { const keep=msgs.slice(-Math.floor(cSumThresh/3)); const toDelete=msgs.slice(0,-keep.length); for(const m of toDelete) await dbDel('messages',m.id); }
       chat._lastSumLen = (await dbGetAll('messages','chatId',chatId)).length;
       await dbPut('chats',chat); await renderMsgs();
     }
@@ -1039,8 +1121,18 @@ async function playVoice(id){const msgs=await dbGetAll('messages','chatId',S.cur
 
 let curSpeech=null;
 async function speakMsg(id){const msgs=await dbGetAll('messages','chatId',S.currentChat);const msg=msgs.find(m=>m.id===id);if(msg?.content)speakText(msg.content);}
-function speakText(text){const s=S.settings;if(curSpeech){speechSynthesis.cancel();curSpeech=null;return;}if(s.ttsMode==='custom'&&s.ttsUrl){callCustomTTS(text);return;}const u=new SpeechSynthesisUtterance(text);if(s.browserVoice){const v=speechSynthesis.getVoices().find(v=>v.name===s.browserVoice);if(v)u.voice=v;}u.rate=1.05;curSpeech=u;u.onend=()=>curSpeech=null;speechSynthesis.speak(u);}
-async function callCustomTTS(text){const s=S.settings;try{const res=await fetch(s.ttsUrl,{method:'POST',headers:{'Content-Type':'application/json',...(s.ttsKey?{'Authorization':`Bearer ${s.ttsKey}`}:{})},body:JSON.stringify({model:'tts-1',input:text,voice:s.ttsVoice||'cove'})});new Audio(URL.createObjectURL(await res.blob())).play();}catch(e){}}
+function speakText(text){
+  const s=S.settings; const ct=S.currentContact?S._contacts[S.currentContact]:null;
+  const ttsMode=cs(ct?.xTtsMode,s.ttsMode); const ttsUrl=cs(ct?.xTtsUrl,s.ttsUrl);
+  const ttsKey=cs(ct?.xTtsKey,s.ttsKey); const ttsVoice=cs(ct?.xTtsVoice,s.ttsVoice);
+  const browserVoice=cs(ct?.xBrowserVoice,s.browserVoice);
+  if(curSpeech){speechSynthesis.cancel();curSpeech=null;return;}
+  if(ttsMode==='custom'&&ttsUrl){callCustomTTS(text,ttsUrl,ttsKey,ttsVoice);return;}
+  const u=new SpeechSynthesisUtterance(text);
+  if(browserVoice){const v=speechSynthesis.getVoices().find(v=>v.name===browserVoice);if(v)u.voice=v;}
+  u.rate=1.05;curSpeech=u;u.onend=()=>curSpeech=null;speechSynthesis.speak(u);
+}
+async function callCustomTTS(text,url,key,voice){url=url||S.settings.ttsUrl;key=key||S.settings.ttsKey;voice=voice||S.settings.ttsVoice||'cove';try{const res=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json',...(key?{'Authorization':`Bearer ${key}`}:{})},body:JSON.stringify({model:'tts-1',input:text,voice})});new Audio(URL.createObjectURL(await res.blob())).play();}catch(e){}}
 function initVoices(){const load=()=>{const vs=speechSynthesis.getVoices();const sel=$i('s-bvoice');if(!sel||!vs.length)return;sel.innerHTML='';vs.forEach(v=>{const o=document.createElement('option');o.value=v.name;o.textContent=`${v.name} (${v.lang})`;if(v.name===S.settings.browserVoice)o.selected=true;sel.appendChild(o);});if(!S.settings.browserVoice){const zh=vs.find(v=>v.lang.startsWith('zh'));if(zh){S.settings.browserVoice=zh.name;sel.value=zh.name;}}};speechSynthesis.onvoiceschanged=load;load();}
 
 // ══════════════════════════════

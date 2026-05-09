@@ -241,14 +241,14 @@ async function delContact(id) {
   if (!confirm('删除这个助手？')) return;
   await dbDel('contacts', id); delete S._contacts[id]; renderContacts();
 }
-function startChatWith(contactId) {
+async function startChatWith(contactId) {
   const c = S._contacts[contactId]; if (!c) return;
   const chatId = uid();
   const chat = { id: chatId, name: `与${c.name}的对话`, contactId, summary: null, archived: false, createdAt: Date.now(), updatedAt: Date.now() };
   dbPut('chats', chat); S._chats[chatId] = chat;
   S.currentChat = chatId; S.currentContact = contactId;
   saveSetting('currentChat', chatId); saveSetting('currentContact', contactId);
-  renderChatList(); openChat(chatId); switchPage('chat-page');
+  switchPage('chat-page'); renderChatList(); await openChat(chatId);
 }
 
 // ══════════════════════════════
@@ -590,13 +590,18 @@ try {
     });
     if (!res.ok) { const e = await res.json().catch(() => ({error:{message:'Error'}})); throw new Error(e.error?.message || res.statusText); }
     removeTyping();
-    let content = '', thinking = '', usage = null;
-    if (s.stream) { const r = await handleStream(res, chatId); content = r.content; thinking = r.thinking; usage = r.usage; }
+    let content = '', thinking = '', usage = null, streamTmpId = null;
+    if (s.stream) { const r = await handleStream(res, chatId); content = r.content; thinking = r.thinking; usage = r.usage; streamTmpId = r.tmpId; }
     else { const d = await res.json(); content = d.choices?.[0]?.message?.content || ''; thinking = d.choices?.[0]?.message?.reasoning || ''; usage = d.usage; }
     const { text: cleanText, stickers: stkList } = parseStickerTags(content);
     const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
-    const aiMsg = { role:'ai', type:'text', content:cleanText, thinking:thinking||null, elapsed, usage: usage ? {prompt:usage.prompt_tokens||0,completion:usage.completion_tokens||0,total:usage.total_tokens||0} : null };
-    await addMsg(chatId, aiMsg);
+    const usageObj = usage ? {prompt:usage.prompt_tokens||0,completion:usage.completion_tokens||0,total:usage.total_tokens||0} : null;
+    if (s.stream && streamTmpId) {
+      const tmpRow = await dbGet('messages', streamTmpId);
+      if (tmpRow) { tmpRow.content = cleanText; tmpRow.thinking = thinking||null; tmpRow.elapsed = elapsed; tmpRow.usage = usageObj; await dbPut('messages', tmpRow); }
+    } else {
+      await addMsg(chatId, { role:'ai', type:'text', content:cleanText, thinking:thinking||null, elapsed, usage: usageObj });
+    }
     for (const sk of stkList) await addMsg(chatId, { role:'ai', type:'sticker', content:sk.content, url:sk.url, isImg:sk.isImg });
     await renderMsgs(); scrollTo_(false);
     if (s.autoTts && cleanText) speakText(cleanText);
@@ -641,7 +646,7 @@ async function handleStream(res, chatId) {
   }
   const tmpRow = await dbGet('messages', tmpId);
   if (tmpRow) { tmpRow.content = content; tmpRow.thinking = thinking||null; await dbPut('messages', tmpRow); }
-  return { content, thinking, usage };
+  return { content, thinking, usage, tmpId };
 }
 
 async function buildMsgs(chat, contact, mems) {

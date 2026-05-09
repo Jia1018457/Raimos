@@ -248,7 +248,7 @@ function startChatWith(contactId) {
   dbPut('chats', chat); S._chats[chatId] = chat;
   S.currentChat = chatId; S.currentContact = contactId;
   saveSetting('currentChat', chatId); saveSetting('currentContact', contactId);
-  renderChatList(); openChat(chatId); switchPage('chat-page');
+  switchPage('chat-page'); renderChatList(); openChat(chatId);
 }
 
 // ══════════════════════════════
@@ -595,8 +595,10 @@ try {
     else { const d = await res.json(); content = d.choices?.[0]?.message?.content || ''; thinking = d.choices?.[0]?.message?.reasoning || ''; usage = d.usage; }
     const { text: cleanText, stickers: stkList } = parseStickerTags(content);
     const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
-    const aiMsg = { role:'ai', type:'text', content:cleanText, thinking:thinking||null, elapsed, usage: usage ? {prompt:usage.prompt_tokens||0,completion:usage.completion_tokens||0,total:usage.total_tokens||0} : null };
-    await addMsg(chatId, aiMsg);
+   if (!s.stream) {
+      const aiMsg = { role:'ai', type:'text', content:cleanText, thinking:thinking||null, elapsed, usage: usage ? {prompt:usage.prompt_tokens||0,completion:usage.completion_tokens||0,total:usage.total_tokens||0} : null };
+      await addMsg(chatId, aiMsg);
+    }
     for (const sk of stkList) await addMsg(chatId, { role:'ai', type:'sticker', content:sk.content, url:sk.url, isImg:sk.isImg });
     await renderMsgs(); scrollTo_(false);
     if (s.autoTts && cleanText) speakText(cleanText);

@@ -33,6 +33,8 @@ let S = {
     stream:true, showToken:false, showThink:true,
     temp:0.85, ctx:20, imgSize:800, sumThresh:40,
     proactive:false, proMax:3, proStart:8, proEnd:22,
+    momentsEnabled:false, autoPost:false, postFreq:24, autoComment:false, commentFreq:6,
+    replyMomentComments:false, postImages:false, imageFreq:50, imageSources:'stickers',
     imgGenModel:'openai/dall-e-3',
     aiName:'小可', userName:'我', aiAvatar:'🐱', userAvatar:'😊',
     showUserAvatar:true, showAiAvatar:true,
@@ -40,6 +42,7 @@ let S = {
     theme:'light', chatBg:'#fdf6f0', chatBgImg:'', bgOpacity:1, fontSize:14,
     welcomeIcon:'🐻', welcomeTitle:'你好呀！', welcomeSub:'点左上角 ＋ 新建对话，或先去⚙️设置里填 OpenRouter API Key 哦～',
   },
+  _momentTimers: {},
   _imgSearchTarget: 'compose',
   _imgSearchSelected: [],
   _composePics: [],
@@ -99,6 +102,7 @@ async function init() {
   initScrollObs();
   initProactive();
   initStatusTimers();
+  initMomentTimers();
   updateWelcome();
   if (S.currentChat && S._chats[S.currentChat]) openChat(S.currentChat);
   document.addEventListener('click', outsideClick);
@@ -200,7 +204,10 @@ function openContactModal(editId) {
   $i('cm-av').value = c?.avatar || '🐱';
   $i('cm-av-preview').textContent = c?.avatar?.startsWith('data:') ? '' : (c?.avatar || '🐱');
   $i('cm-desc').value = c?.desc || '';
-  $i('cm-system').value = c?.system || '';
+  const hasSysCustom = c !== null && c?.system !== null && c?.system !== undefined;
+  const sysCb = $i('cm-system-inherit');
+  if (sysCb) { sysCb.checked = !hasSysCustom; $i('cm-system-row').style.display = hasSysCustom ? '' : 'none'; }
+  $i('cm-system').value = hasSysCustom ? (c?.system||'') : '';
   const hasTempOverride = c !== null && c?.temp !== null && c?.temp !== undefined;
   $i('cm-use-global-temp').checked = !hasTempOverride;
   $i('cm-temp-row').style.display = hasTempOverride ? 'flex' : 'none';
@@ -230,6 +237,26 @@ function openContactModal(editId) {
   if (c?.xChatBg !== null && c?.xChatBg !== undefined) { const el=$i('cm-x-chat-bg'); if(el)el.value=c.xChatBg||'#fdf6f0'; }
   setCmSection('imggen', c, ['xImgGenModel']);
   if (c?.xImgGenModel !== null && c?.xImgGenModel !== undefined) { const el=$i('cm-x-imggen'); if(el)el.value=c.xImgGenModel||S.settings.imgGenModel; }
+  // Proactive section
+  setCmSection('proactive', c, ['xProactive','xProMax','xProStart','xProEnd']);
+  if (c?.xProactive !== null && c?.xProactive !== undefined) { const el=$i('cm-x-proactive'); if(el)el.checked=!!c.xProactive; }
+  if (c?.xProMax !== null && c?.xProMax !== undefined) { const el=$i('cm-x-pro-max'); if(el)el.value=c.xProMax||3; }
+  if (c?.xProStart !== null && c?.xProStart !== undefined) { const el=$i('cm-x-pro-start'); if(el)el.value=c.xProStart??8; }
+  if (c?.xProEnd !== null && c?.xProEnd !== undefined) { const el=$i('cm-x-pro-end'); if(el)el.value=c.xProEnd??22; }
+  // Moments section
+  setCmSection('moments', c, ['xMomentsEnabled','xAutoPost','xPostFreq','xAutoComment','xCommentFreq','xReplyMomentComments','xPostImages','xImageFreq','xImageSources']);
+  if (c?.xMomentsEnabled !== null && c?.xMomentsEnabled !== undefined) { const el=$i('cm-x-moments-enabled'); if(el)el.checked=!!c.xMomentsEnabled; }
+  if (c?.xAutoPost !== null && c?.xAutoPost !== undefined) { const el=$i('cm-x-auto-post'); if(el)el.checked=!!c.xAutoPost; }
+  if (c?.xPostFreq !== null && c?.xPostFreq !== undefined) { const el=$i('cm-x-post-freq'); if(el)el.value=c.xPostFreq||24; }
+  if (c?.xAutoComment !== null && c?.xAutoComment !== undefined) { const el=$i('cm-x-auto-comment'); if(el)el.checked=!!c.xAutoComment; }
+  if (c?.xCommentFreq !== null && c?.xCommentFreq !== undefined) { const el=$i('cm-x-comment-freq'); if(el)el.value=c.xCommentFreq||6; }
+  if (c?.xReplyMomentComments !== null && c?.xReplyMomentComments !== undefined) { const el=$i('cm-x-reply-comments'); if(el)el.checked=!!c.xReplyMomentComments; }
+  if (c?.xPostImages !== null && c?.xPostImages !== undefined) { const el=$i('cm-x-post-images'); if(el)el.checked=!!c.xPostImages; }
+  if (c?.xImageFreq !== null && c?.xImageFreq !== undefined) { const el=$i('cm-x-image-freq'); if(el)el.value=c.xImageFreq||50; }
+  if (c?.xImageSources !== null && c?.xImageSources !== undefined) {
+    const srcs = (c.xImageSources||'').split(',');
+    ['stickers','search','generate'].forEach(s => { const el=$i(`cm-x-imgsrc-${s}`); if(el)el.checked=srcs.includes(s); });
+  }
   $i('contact-modal').classList.add('show');
 }
 function editContact(id) { openContactModal(id); }
@@ -272,7 +299,8 @@ async function saveContact() {
   const contact = {
     id, name, avatar: $i('cm-av').value, desc: $i('cm-desc').value.trim(),
     apiKey: $i('cm-apikey').value.trim(), apiUrl: $i('cm-apiurl').value.trim(),
-    model: $i('cm-model').value.trim(), system: $i('cm-system').value.trim(),
+    model: $i('cm-model').value.trim(),
+    system: $i('cm-system-inherit')?.checked ? null : $i('cm-system').value.trim(),
     temp: $i('cm-use-global-temp').checked ? null : parseFloat($i('cm-temp').value),
     statusFreq: parseInt($i('cm-status-freq').value) || 0,
     status: $i('cm-status').value || '😊 在线', updatedAt: Date.now(),
@@ -295,15 +323,35 @@ async function saveContact() {
     xChatBg: getCmSection('appear') ? getV('cm-x-chat-bg','#fdf6f0') : null,
     // Image gen section
     xImgGenModel: getCmSection('imggen') ? getV('cm-x-imggen') : null,
+    // Proactive section
+    xProactive: getCmSection('proactive') ? getB2('cm-x-proactive') : null,
+    xProMax: getCmSection('proactive') ? parseInt(getV('cm-x-pro-max','3')) : null,
+    xProStart: getCmSection('proactive') ? parseInt(getV('cm-x-pro-start','8')) : null,
+    xProEnd: getCmSection('proactive') ? parseInt(getV('cm-x-pro-end','22')) : null,
+    // Moments section
+    xMomentsEnabled: getCmSection('moments') ? getB2('cm-x-moments-enabled') : null,
+    xAutoPost: getCmSection('moments') ? getB2('cm-x-auto-post') : null,
+    xPostFreq: getCmSection('moments') ? parseInt(getV('cm-x-post-freq','24')) : null,
+    xAutoComment: getCmSection('moments') ? getB2('cm-x-auto-comment') : null,
+    xCommentFreq: getCmSection('moments') ? parseInt(getV('cm-x-comment-freq','6')) : null,
+    xReplyMomentComments: getCmSection('moments') ? getB2('cm-x-reply-comments') : null,
+    xPostImages: getCmSection('moments') ? getB2('cm-x-post-images') : null,
+    xImageFreq: getCmSection('moments') ? parseInt(getV('cm-x-image-freq','50')) : null,
+    xImageSources: getCmSection('moments') ? ['stickers','search','generate'].filter(s=>$i(`cm-x-imgsrc-${s}`)?.checked).join(',') : null,
   };
   await dbPut('contacts', contact);
   S._contacts[id] = contact;
   initStatusTimers();
+  initMomentTimers();
   renderContacts(); closeModal('contact-modal'); toast('✅ 助手已保存');
 }
 async function delContact(id) {
   if (!confirm('删除这个助手？')) return;
   await dbDel('contacts', id); delete S._contacts[id]; renderContacts();
+}
+function toggleContactSystem() {
+  const inherit = $i('cm-system-inherit').checked;
+  $i('cm-system-row').style.display = inherit ? 'none' : '';
 }
 function toggleContactTemp() {
   const useGlobal = $i('cm-use-global-temp').checked;
@@ -670,7 +718,7 @@ async function callAI(chatId) {
 S.isStreaming = true; showTyping();
 const t0 = Date.now();
 try {
-    const mems = await getRelevantMems(chatId);
+    const mems = await getRelevantMems(chatId, contact?.id || null);
     const msgs = await buildMsgs(chat, contact, mems);
     const baseModel = contact?.model || s.model || 'openai/gpt-4o';
     const model = baseModel + (S.onlineSearch && !baseModel.includes(':online') && !baseModel.includes('perplexity') ? ':online' : '');
@@ -699,7 +747,7 @@ try {
     await renderMsgs(); scrollTo_(false);
     if (cs(contact?.xAutoTts, s.autoTts) && cleanText) speakText(cleanText);
     checkKwAnims(cleanText, 'ai');
-    autoMemCheck(chatId);
+    autoMemCheck(chatId, contact?.id || null);
   } catch(e) {
     removeTyping();
     await addMsg(chatId, { role:'ai', type:'text', content:`❌ 出错了：${e.message}` });
@@ -744,7 +792,7 @@ async function handleStream(res, chatId) {
 
 async function buildMsgs(chat, contact, mems) {
   const msgs = [];
-  let sys = contact?.system || S.settings.systemPrompt || '你是一个可爱温柔的AI助手。';
+  let sys = cs(contact?.system, S.settings.systemPrompt) || '你是一个可爱温柔的AI助手。';
   if (mems.length) sys += `\n\n[用户记忆]\n${mems.map(m=>`- ${m.text}`).join('\n')}`;
   if (S._stickers.length) {
     const slist = S._stickers.map(s => `${s.label||s.content||'表情'}`).join(', ');
@@ -794,43 +842,69 @@ async function generateImage(prompt) {
 // ══════════════════════════════
 //  MEMORY
 // ══════════════════════════════
-function renderMemories() {
-  const list = $i('memory-list'); list.innerHTML = '';
-  $i('memory-stats').textContent = `共 ${S._memories.length} 条记忆`;
+let _memFilter = null; // null = global (no contactId), 'all' = all, or contactId string
+function renderMemories(filter) {
+  if (filter !== undefined) _memFilter = filter;
+  const list = $i('memory-list'); if (!list) return;
+  // Build filter tabs
+  const tabBar = $i('memory-tabs');
+  if (tabBar) {
+    const contacts = Object.values(S._contacts);
+    tabBar.innerHTML = [
+      {id:'all', label:'全部'},
+      {id:null, label:'🌐 全局'},
+      ...contacts.map(c => ({id: c.id, label: c.avatar?.startsWith('data:')?`🤖 ${c.name}`:`${c.avatar||'🤖'} ${c.name}`}))
+    ].map(t => `<button class="mem-tab${_memFilter===t.id?' active':''}" onclick="renderMemories('${t.id === null ? '__null__' : t.id}')">${esc(t.label)}</button>`).join('');
+  }
+  const curFilter = _memFilter === '__null__' ? null : _memFilter;
+  const shown = curFilter === 'all' ? S._memories :
+                curFilter === null ? S._memories.filter(m => !m.contactId) :
+                S._memories.filter(m => !m.contactId || m.contactId === curFilter);
+  $i('memory-stats').textContent = `共 ${S._memories.length} 条记忆（显示 ${shown.length} 条）`;
   const catI = {健康:'🏥',个人:'👤',习惯:'🔄',事件:'📅',其他:'💡'};
-  if (!S._memories.length) { list.innerHTML = '<div style="text-align:center;padding:30px;color:var(--text3);font-size:13px">记忆库是空的<br>聊天时AI会自动记住重要信息</div>'; return; }
-  S._memories.forEach((m, i) => {
+  if (!shown.length) { list.innerHTML = '<div style="text-align:center;padding:30px;color:var(--text3);font-size:13px">这里还没有记忆<br>聊天时AI会自动记住重要信息</div>'; return; }
+  list.innerHTML = '';
+  shown.forEach(m => {
+    const i = S._memories.indexOf(m);
+    const ctName = m.contactId ? (S._contacts[m.contactId]?.name || '?') : '全局';
     const div = document.createElement('div'); div.className = 'memory-item';
     div.innerHTML = `<div class="mem-icon">${catI[m.cat]||'💡'}</div>
-      <div class="mem-body"><div class="mem-text">${esc(m.text)}</div><div class="mem-meta"><span class="mem-tag">${m.cat||'其他'}</span>${fmtDate(m.ts)}</div></div>
+      <div class="mem-body"><div class="mem-text">${esc(m.text)}</div><div class="mem-meta"><span class="mem-tag">${m.cat||'其他'}</span><span class="mem-tag" style="background:var(--hover)">${ctName}</span>${fmtDate(m.ts)}</div></div>
       <button class="mem-del" onclick="delMem(${i})">🗑️</button>`;
     list.appendChild(div);
   });
 }
-function openAddMemModal() { $i('amm-text').value=''; $i('add-mem-modal').classList.add('show'); }
+function openAddMemModal() {
+  $i('amm-text').value='';
+  const sel = $i('amm-contact');
+  if (sel) { sel.innerHTML = '<option value="">🌐 全局（所有助手）</option>' + Object.values(S._contacts).map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join(''); }
+  $i('add-mem-modal').classList.add('show');
+}
 async function addMemManual() {
   const text=$i('amm-text').value.trim(); if(!text){toast('请输入内容');return;}
-  const mem={id:uid(),text,cat:$i('amm-cat').value,ts:Date.now(),auto:false};
+  const contactId = $i('amm-contact')?.value || null;
+  const mem={id:uid(),text,cat:$i('amm-cat').value,ts:Date.now(),auto:false,contactId:contactId||null};
   await dbPut('memories',mem); S._memories.push(mem);
   renderMemories(); closeModal('add-mem-modal'); toast('✅ 记忆已添加');
 }
 async function delMem(i) { await dbDel('memories',S._memories[i].id); S._memories.splice(i,1); renderMemories(); }
 
-async function getRelevantMems(chatId) {
-  if (!S._memories.length) return [];
+async function getRelevantMems(chatId, contactId) {
+  const pool = S._memories.filter(m => !m.contactId || m.contactId === contactId);
+  if (!pool.length) return [];
   const msgs = await dbGetAll('messages','chatId',chatId);
   const lastText = msgs.slice(-3).map(m=>m.content||'').join(' ');
   if (!lastText.trim()) return [];
-  if (!S.settings.apiKey) return S._memories.slice(0,5);
+  if (!S.settings.apiKey) return pool.slice(0,5);
   try {
-    const res = await fetch('https://openrouter.ai/api/v1/chat/completions',{method:'POST',headers:{'Authorization':`Bearer ${S.settings.apiKey}`,'Content-Type':'application/json'},body:JSON.stringify({model:'openai/gpt-4o-mini',max_tokens:150,stream:false,messages:[{role:'system',content:'从记忆列表中找与当前对话相关的条目，返回JSON: {"relevant":[0,2]}，只返回JSON。'},{role:'user',content:`对话: ${lastText}\n记忆:\n${S._memories.map((m,i)=>`${i}: ${m.text}`).join('\n')}`}]})});
+    const res = await fetch('https://openrouter.ai/api/v1/chat/completions',{method:'POST',headers:{'Authorization':`Bearer ${S.settings.apiKey}`,'Content-Type':'application/json'},body:JSON.stringify({model:'openai/gpt-4o-mini',max_tokens:150,stream:false,messages:[{role:'system',content:'从记忆列表中找与当前对话相关的条目，返回JSON: {"relevant":[0,2]}，只返回JSON。'},{role:'user',content:`对话: ${lastText}\n记忆:\n${pool.map((m,i)=>`${i}: ${m.text}`).join('\n')}`}]})});
     const d = await res.json(); const raw = d.choices?.[0]?.message?.content||'{}';
     const j = JSON.parse(raw.replace(/```json|```/g,'').trim());
-    return (j.relevant||[]).map(i=>S._memories[i]).filter(Boolean);
-  } catch(e) { return S._memories.slice(0,3); }
+    return (j.relevant||[]).map(i=>pool[i]).filter(Boolean);
+  } catch(e) { return pool.slice(0,3); }
 }
 
-async function autoMemCheck(chatId) {
+async function autoMemCheck(chatId, contactId) {
   const msgs = await dbGetAll('messages','chatId',chatId);
   const lastText = msgs.slice(-4).map(m=>`${m.role==='user'?'用户':'AI'}: ${m.content||'[媒体]'}`).join('\n');
   if (!S.settings.apiKey) return;
@@ -840,7 +914,7 @@ async function autoMemCheck(chatId) {
     const j = JSON.parse(raw.replace(/```json|```/g,'').trim());
     if (j.shouldSave && j.text && (j.score||0)>=7 && S._memories.length<50) {
       if (!S._memories.some(m=>m.text===j.text)) {
-        const mem={id:uid(),text:j.text,cat:j.cat||'其他',ts:Date.now(),auto:true};
+        const mem={id:uid(),text:j.text,cat:j.cat||'其他',ts:Date.now(),auto:true,contactId:contactId||null};
         await dbPut('memories',mem); S._memories.push(mem);
         const notif=document.createElement('div'); notif.className='mem-notif';
         notif.innerHTML=`🧠 <strong>已记住：</strong>${esc(j.text)}`;
@@ -925,7 +999,7 @@ async function makeMomentCard(m) {
       <div class="moment-actions">
         <button class="m-act-btn" onclick="likeMoment('${m.id}')">❤️ ${m.likes||0}</button>
         <button class="m-act-btn" onclick="toggleComments('${m.id}')">💬 ${comments.length} 评论</button>
-        ${S.settings.apiKey?`<button class="m-act-btn" onclick="aiCommentMoment('${m.id}')">🤖 让AI评论</button>`:''}
+        ${S.settings.apiKey?`<button class="m-act-btn" onclick="aiCommentMoment('${m.id}',null)">🤖 让AI评论</button>`:''}
       </div>
       <div class="comments-list" id="clist-${m.id}" style="display:none">${commHTML}</div>
       <div class="reply-input-wrap" id="ri-${m.id}" style="display:none">
@@ -994,13 +1068,105 @@ async function delComment(momentId, commentId) {
   const m = await dbGet('moments',momentId);
   if(m){const card=await makeMomentCard(m);const old=$i('mc-'+momentId);if(old)old.replaceWith(card);}
 }
-async function aiCommentMoment(momentId) {
+function openAiPostModal() {
+  const sel = $i('apm-contact');
+  const contacts = Object.values(S._contacts);
+  if (!contacts.length) { toast('请先添加 AI 助手'); return; }
+  sel.innerHTML = contacts.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
+  $i('ai-post-modal').classList.add('show');
+}
+async function doAiPost() {
+  const contactId = $i('apm-contact')?.value;
+  closeModal('ai-post-modal');
+  await aiPostMoment(contactId);
+}
+async function aiPostMoment(contactId) {
+  const contact = contactId ? S._contacts[contactId] : Object.values(S._contacts)[0];
+  if (!contact || !S.settings.apiKey) { toast('需要配置助手和 API Key'); return; }
+  const aiName = contact.name || S.settings.aiName || 'AI';
+  const aiAvatar = contact.avatar || S.settings.aiAvatar || '🤖';
+  toast('🌸 AI 正在发朋友圈…');
+  try {
+    const useImages = cs(contact?.xPostImages, S.settings.postImages);
+    const imageFreq = cs(contact?.xImageFreq, S.settings.imageFreq) || 50;
+    const imageSources = (cs(contact?.xImageSources, S.settings.imageSources) || 'stickers').split(',').filter(Boolean);
+    // Generate text
+    const res = await fetch((contact.apiUrl||S.settings.apiUrl||'https://openrouter.ai') + '/api/v1/chat/completions', {
+      method:'POST', headers:{'Authorization':`Bearer ${contact.apiKey||S.settings.apiKey}`,'Content-Type':'application/json'},
+      body: JSON.stringify({ model: contact.model||S.settings.model||'openai/gpt-4o-mini', max_tokens:120, stream:false,
+        messages:[{role:'system',content:`你是${aiName}，${contact.system||S.settings.systemPrompt||'可爱温柔的AI'}。写一条自然、真实的朋友圈动态，50字以内，不要用"AI"或"助手"自称，像真人朋友一样分享日常/心情/想法，可带emoji。`},{role:'user',content:'写一条今天的朋友圈动态。'}]
+      })
+    });
+    const d = await res.json(); const text = d.choices?.[0]?.message?.content?.trim();
+    if (!text) { toast('AI 生成失败'); return; }
+    let images = [];
+    if (useImages && Math.random()*100 < imageFreq) {
+      if (imageSources.includes('stickers') && S._stickers.length) {
+        const sk = S._stickers[Math.floor(Math.random()*S._stickers.length)];
+        if (sk?.dataUrl) images.push(sk.dataUrl);
+      }
+    }
+    const m = { id:uid(), author:aiName, avatar:aiAvatar, text, images, ts:Date.now(), likes:0, byAi:true, contactId:contact.id };
+    await dbPut('moments', m);
+    await renderMoments(); toast(`✅ ${aiName} 发了朋友圈！`);
+  } catch(e) { toast('❌ AI 发朋友圈失败：'+e.message); }
+}
+
+// ── MOMENTS AUTO-SCHEDULING ──
+function initMomentTimers() {
+  Object.values(S._momentTimers).forEach(t => { clearTimeout(t.post); clearTimeout(t.comment); });
+  S._momentTimers = {};
+  Object.values(S._contacts).forEach(c => {
+    const momentsOn = cs(c?.xMomentsEnabled, S.settings.momentsEnabled);
+    if (!momentsOn) return;
+    if (cs(c?.xAutoPost, S.settings.autoPost)) scheduleMomentPost(c.id);
+    if (cs(c?.xAutoComment, S.settings.autoComment)) scheduleMomentComment(c.id);
+  });
+}
+function scheduleMomentPost(contactId) {
+  const c = S._contacts[contactId]; if (!c) return;
+  const freqHrs = cs(c?.xPostFreq, S.settings.postFreq) || 24;
+  const delay = freqHrs * 3600 * 1000 * (0.8 + Math.random()*0.4);
+  if (!S._momentTimers[contactId]) S._momentTimers[contactId] = {};
+  S._momentTimers[contactId].post = setTimeout(() => triggerMomentPost(contactId), delay);
+}
+async function triggerMomentPost(contactId) {
+  await aiPostMoment(contactId);
+  scheduleMomentPost(contactId);
+}
+function scheduleMomentComment(contactId) {
+  const c = S._contacts[contactId]; if (!c) return;
+  const freqHrs = cs(c?.xCommentFreq, S.settings.commentFreq) || 6;
+  const delay = freqHrs * 3600 * 1000 * (0.5 + Math.random()*1);
+  if (!S._momentTimers[contactId]) S._momentTimers[contactId] = {};
+  S._momentTimers[contactId].comment = setTimeout(() => triggerMomentComment(contactId), delay);
+}
+async function triggerMomentComment(contactId) {
+  const contact = S._contacts[contactId]; if (!contact || !S.settings.apiKey) return;
+  const moments = await dbGetAll('moments');
+  const recent = moments.filter(m => m.author !== contact.name).sort((a,b)=>b.ts-a.ts).slice(0,5);
+  if (!recent.length) { scheduleMomentComment(contactId); return; }
+  const target = recent[Math.floor(Math.random()*recent.length)];
+  await aiCommentMoment(target.id, contactId);
+  // check if should also reply to comments on this contact's posts
+  const replyOn = cs(contact?.xReplyMomentComments, S.settings.replyMomentComments);
+  if (replyOn) {
+    const myPosts = moments.filter(m => m.contactId === contactId);
+    for (const post of myPosts.slice(0,3)) {
+      const comments = await dbGetAll('comments','momentId',post.id);
+      const unreplied = comments.filter(cm => cm.author !== contact.name && !cm._replied);
+      if (unreplied.length) { await aiReplyComment(post.id, unreplied[0], contactId); break; }
+    }
+  }
+  scheduleMomentComment(contactId);
+}
+async function aiCommentMoment(momentId, contactId) {
   const m = await dbGet('moments',momentId); if(!m||!S.settings.apiKey)return;
-  const contact = S.currentContact?S._contacts[S.currentContact]:Object.values(S._contacts)[0];
+  const contact = contactId ? S._contacts[contactId] : (S.currentContact?S._contacts[S.currentContact]:Object.values(S._contacts)[0]);
   const aiName = contact?.name||S.settings.aiName||'AI';
   toast('🤖 AI 评论中…');
   try {
-    const res = await fetch('https://openrouter.ai/api/v1/chat/completions',{method:'POST',headers:{'Authorization':`Bearer ${S.settings.apiKey}`,'Content-Type':'application/json'},body:JSON.stringify({model:contact?.model||'openai/gpt-4o-mini',max_tokens:80,stream:false,messages:[{role:'system',content:`你是${aiName}，${contact?.system||'可爱温柔的AI'}，用1-2句话自然地评论朋友圈，像真实朋友一样，不要过于正式。`},{role:'user',content:`朋友圈内容: ${m.text||'[图片]'}`}]})});
+    const res = await fetch((contact?.apiUrl||S.settings.apiUrl||'https://openrouter.ai')+'/api/v1/chat/completions',{method:'POST',headers:{'Authorization':`Bearer ${contact?.apiKey||S.settings.apiKey}`,'Content-Type':'application/json'},body:JSON.stringify({model:contact?.model||'openai/gpt-4o-mini',max_tokens:80,stream:false,messages:[{role:'system',content:`你是${aiName}，${contact?.system||S.settings.systemPrompt||'可爱温柔的AI'}，用1-2句话自然地评论朋友圈，像真实朋友一样，不要过于正式。`},{role:'user',content:`朋友圈内容: ${m.text||'[图片]'}`}]})});
     const d=await res.json(); const comment=d.choices?.[0]?.message?.content||'';
     if(comment){
       const c={id:uid(),momentId,author:aiName,text:comment,replyTo:null,ts:Date.now()};
@@ -1010,6 +1176,21 @@ async function aiCommentMoment(momentId) {
       const cl2=$i('clist-'+momentId);if(cl2){cl2.style.display='flex';cl2.style.flexDirection='column';}
     }
   } catch(e){toast('AI评论失败');}
+}
+async function aiReplyComment(momentId, commentObj, contactId) {
+  const contact = contactId ? S._contacts[contactId] : null; if (!contact || !S.settings.apiKey) return;
+  const aiName = contact.name || 'AI';
+  try {
+    const res = await fetch((contact.apiUrl||S.settings.apiUrl||'https://openrouter.ai')+'/api/v1/chat/completions',{method:'POST',headers:{'Authorization':`Bearer ${contact.apiKey||S.settings.apiKey}`,'Content-Type':'application/json'},body:JSON.stringify({model:contact.model||'openai/gpt-4o-mini',max_tokens:60,stream:false,messages:[{role:'system',content:`你是${aiName}，简短自然地回复朋友圈评论，1句话。`},{role:'user',content:`朋友"${commentObj.author}"评论了你的朋友圈：${commentObj.text}`}]})});
+    const d=await res.json(); const reply=d.choices?.[0]?.message?.content||'';
+    if(reply){
+      const c={id:uid(),momentId,author:aiName,text:reply,replyTo:commentObj.author,ts:Date.now()};
+      await dbPut('comments',c);
+      commentObj._replied = true; await dbPut('comments', commentObj);
+      const m=await dbGet('moments',momentId);
+      if(m){const card=await makeMomentCard(m);const old=$i('mc-'+momentId);if(old)old.replaceWith(card);}
+    }
+  } catch(e){}
 }
 
 function composePicLocal() { $i('compose-pic-file').click(); }
@@ -1337,6 +1518,22 @@ function buildSettingsUI() {
       <div class="s-row"><label>每天最多</label><input type="number" id="s-pro-max" value="${s.proMax||3}" min="1" max="20" style="max-width:60px"/> 次</div>
       <div class="s-row"><label>活跃时段</label><input type="number" id="s-pro-start" value="${s.proStart??8}" min="0" max="23" style="max-width:55px"/><span style="color:var(--text3);font-size:11px">:00 ~</span><input type="number" id="s-pro-end" value="${s.proEnd??22}" min="0" max="23" style="max-width:55px"/><span style="color:var(--text3);font-size:11px">:00</span></div>
     </div>
+    <div class="s-section"><h3>🌸 朋友圈（全局默认）</h3>
+      <div style="font-size:11px;color:var(--text3);margin-bottom:8px">各助手可在扩展设置中单独覆盖</div>
+      <div class="s-row"><label>启用朋友圈</label><label class="toggle"><input type="checkbox" id="s-moments-enabled" ${s.momentsEnabled?'checked':''}><span class="tslider"></span></label></div>
+      <div class="s-row"><label>AI 自动发圈</label><label class="toggle"><input type="checkbox" id="s-auto-post" ${s.autoPost?'checked':''}><span class="tslider"></span></label></div>
+      <div class="s-row"><label>发圈间隔</label><input type="number" id="s-post-freq" value="${s.postFreq||24}" min="1" max="720" style="max-width:70px"/> 小时</div>
+      <div class="s-row"><label>AI 自动评论</label><label class="toggle"><input type="checkbox" id="s-auto-comment" ${s.autoComment?'checked':''}><span class="tslider"></span></label></div>
+      <div class="s-row"><label>评论间隔</label><input type="number" id="s-comment-freq" value="${s.commentFreq||6}" min="1" max="168" style="max-width:70px"/> 小时</div>
+      <div class="s-row"><label>自动回复评论</label><label class="toggle"><input type="checkbox" id="s-reply-comments" ${s.replyMomentComments?'checked':''}><span class="tslider"></span></label></div>
+      <div class="s-row"><label>发圈带图片</label><label class="toggle"><input type="checkbox" id="s-post-images" ${s.postImages?'checked':''}><span class="tslider"></span></label></div>
+      <div class="s-row"><label>带图概率</label><input type="range" id="s-image-freq" min="0" max="100" step="10" value="${s.imageFreq||50}" oninput="$i('s-image-freq-v').textContent=this.value+'%'"><span class="rval" id="s-image-freq-v">${s.imageFreq||50}%</span></div>
+      <div class="s-row"><label>图片来源</label><div style="display:flex;gap:10px;flex-wrap:wrap;font-size:12px">
+        <label><input type="checkbox" id="s-imgsrc-stickers" ${(s.imageSources||'').includes('stickers')?'checked':''}> 已存表情包</label>
+        <label><input type="checkbox" id="s-imgsrc-search" ${(s.imageSources||'').includes('search')?'checked':''}> 联网搜索</label>
+        <label><input type="checkbox" id="s-imgsrc-generate" ${(s.imageSources||'').includes('generate')?'checked':''}> 生成图片</label>
+      </div></div>
+    </div>
     <div class="s-section"><h3>🎲 图片生成</h3>
       <div class="s-row"><label>生图模型</label><select id="s-imggen-model"><option value="openai/dall-e-3">DALL-E 3</option><option value="stabilityai/stable-diffusion-xl-base-1.0">SDXL</option></select></div>
     </div>
@@ -1378,12 +1575,16 @@ async function saveAllSettings(){
   s.imgSize=parseInt(get('s-imgsize','800'));s.sumThresh=parseInt(get('s-sumthresh','40'));
   s.proactive=getB('s-proactive');s.proMax=parseInt(get('s-pro-max','3'));
   s.proStart=parseInt(get('s-pro-start','8'));s.proEnd=parseInt(get('s-pro-end','22'));
+  s.momentsEnabled=getB('s-moments-enabled');s.autoPost=getB('s-auto-post');s.postFreq=parseInt(get('s-post-freq','24'));
+  s.autoComment=getB('s-auto-comment');s.commentFreq=parseInt(get('s-comment-freq','6'));
+  s.replyMomentComments=getB('s-reply-comments');s.postImages=getB('s-post-images');s.imageFreq=parseInt(get('s-image-freq','50'));
+  s.imageSources=['stickers','search','generate'].filter(x=>getB(`s-imgsrc-${x}`)).join(',');
   s.fontSize=parseInt(get('s-fontsize','14'));s.bgOpacity=parseFloat(get('s-bgopa','1'));
   s.imgGenModel=get('s-imggen-model','openai/dall-e-3');
   s.userName=get('s-username','我');
   s.showUserAvatar=getB('s-show-user-av'); s.showAiAvatar=getB('s-show-ai-av');
   document.documentElement.style.setProperty('--font-size',s.fontSize+'px');
-  applyBubble();scheduleProactive();await saveSettings_();toast('✅ 设置已保存');
+  applyBubble();scheduleProactive();initMomentTimers();await saveSettings_();toast('✅ 设置已保存');
 }
 
 async function updateStorageInfo(){

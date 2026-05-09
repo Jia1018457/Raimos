@@ -114,7 +114,8 @@
 <div class="page" id="moments-page">
   <div class="page-header">
     <h2>🌸 朋友圈</h2>
-    <div style="display:flex;gap:6px;">
+    <div style="display:flex;gap:6px;flex-wrap:wrap;">
+      <button class="btn-p" onclick="openAiPostModal()" title="让AI发一条朋友圈">🤖 AI发圈</button>
       <button class="btn-s" onclick="exportMoments()">📤 导出</button>
       <button class="btn-s" onclick="archiveMoments()">📁 归档清空</button>
     </div>
@@ -142,7 +143,8 @@
     <h2>🧠 记忆库</h2>
     <button class="btn-p" onclick="openAddMemModal()">＋ 添加</button>
   </div>
-  <div id="memory-stats" style="padding:7px 14px;font-size:11.5px;color:var(--text3);flex-shrink:0;"></div>
+  <div id="memory-tabs" style="display:flex;gap:4px;padding:6px 12px;overflow-x:auto;flex-shrink:0;flex-wrap:nowrap;"></div>
+  <div id="memory-stats" style="padding:4px 14px;font-size:11.5px;color:var(--text3);flex-shrink:0;"></div>
   <div style="flex:1;overflow-y:auto;padding:8px 12px;" id="memory-list"></div>
 </div>
 
@@ -227,7 +229,12 @@
         <input type="hidden" id="cm-model" value=""/>
       </div>
     </div>
-    <div class="mrow"><label>系统提示词</label><textarea id="cm-system" placeholder="留空则继承全局默认提示词"></textarea></div>
+    <div class="mrow"><label>系统提示词</label>
+      <div style="flex:1">
+        <label style="font-size:12px;color:var(--text3);cursor:pointer;display:flex;align-items:center;gap:5px;margin-bottom:6px"><input type="checkbox" id="cm-system-inherit" onchange="toggleContactSystem()"> 继承全局设置</label>
+        <div id="cm-system-row"><textarea id="cm-system" placeholder="自定义提示词（留空=无提示词）"></textarea></div>
+      </div>
+    </div>
     <div class="mrow"><label>Temperature</label>
       <div style="flex:1">
         <label style="font-size:12px;color:var(--text3);cursor:pointer;display:flex;align-items:center;gap:5px;margin-bottom:6px"><input type="checkbox" id="cm-use-global-temp" onchange="toggleContactTemp()"> 继承全局设置</label>
@@ -286,6 +293,38 @@
       </div>
       <div id="cm-imggen-body" style="display:none;padding:6px 0 10px">
         <div class="mrow"><label>生图模型</label><select id="cm-x-imggen"><option value="openai/dall-e-3">DALL-E 3</option><option value="stabilityai/stable-diffusion-xl-base-1.0">SDXL</option></select></div>
+      </div>
+
+      <!-- 主动消息 -->
+      <div class="cm-sect-hdr">
+        🐾 主动消息
+        <label class="cm-inherit-lbl"><input type="checkbox" id="cm-proactive-inherit" onchange="toggleCmSection('proactive')"> 继承全局</label>
+      </div>
+      <div id="cm-proactive-body" style="display:none;padding:6px 0 10px">
+        <div class="mrow"><label>启用</label><label class="toggle"><input type="checkbox" id="cm-x-proactive"><span class="tslider"></span></label></div>
+        <div class="mrow"><label>每天最多</label><input type="number" id="cm-x-pro-max" value="3" min="1" max="20" style="max-width:60px"/> 次</div>
+        <div class="mrow"><label>活跃时段</label><input type="number" id="cm-x-pro-start" value="8" min="0" max="23" style="max-width:55px"/><span style="color:var(--text3);font-size:11px">:00 ~</span><input type="number" id="cm-x-pro-end" value="22" min="0" max="23" style="max-width:55px"/><span style="color:var(--text3);font-size:11px">:00</span></div>
+      </div>
+
+      <!-- 朋友圈 -->
+      <div class="cm-sect-hdr">
+        🌸 朋友圈
+        <label class="cm-inherit-lbl"><input type="checkbox" id="cm-moments-inherit" onchange="toggleCmSection('moments')"> 继承全局</label>
+      </div>
+      <div id="cm-moments-body" style="display:none;padding:6px 0 10px">
+        <div class="mrow"><label>启用朋友圈</label><label class="toggle"><input type="checkbox" id="cm-x-moments-enabled"><span class="tslider"></span></label></div>
+        <div class="mrow"><label>AI 自动发圈</label><label class="toggle"><input type="checkbox" id="cm-x-auto-post"><span class="tslider"></span></label></div>
+        <div class="mrow"><label>发圈间隔</label><input type="number" id="cm-x-post-freq" value="24" min="1" max="720" style="max-width:70px"/> 小时</div>
+        <div class="mrow"><label>AI 自动评论</label><label class="toggle"><input type="checkbox" id="cm-x-auto-comment"><span class="tslider"></span></label></div>
+        <div class="mrow"><label>评论间隔</label><input type="number" id="cm-x-comment-freq" value="6" min="1" max="168" style="max-width:70px"/> 小时</div>
+        <div class="mrow"><label>自动回复评论</label><label class="toggle"><input type="checkbox" id="cm-x-reply-comments"><span class="tslider"></span></label></div>
+        <div class="mrow"><label>发圈带图片</label><label class="toggle"><input type="checkbox" id="cm-x-post-images"><span class="tslider"></span></label></div>
+        <div class="mrow"><label>带图概率</label><input type="range" id="cm-x-image-freq" min="0" max="100" step="10" value="50" oninput="$i('cm-x-image-freq-v').textContent=this.value+'%'"><span class="rval" id="cm-x-image-freq-v">50%</span></div>
+        <div class="mrow"><label>图片来源</label><div style="display:flex;gap:8px;flex-wrap:wrap;font-size:12px">
+          <label><input type="checkbox" id="cm-x-imgsrc-stickers"> 已存表情包</label>
+          <label><input type="checkbox" id="cm-x-imgsrc-search"> 联网搜索</label>
+          <label><input type="checkbox" id="cm-x-imgsrc-generate"> 生成图片</label>
+        </div></div>
       </div>
 
       </div>
@@ -356,9 +395,29 @@
         <option value="其他">💡 其他</option>
       </select>
     </div>
+    <div class="mrow"><label>关联助手</label>
+      <select id="amm-contact">
+        <option value="">🌐 全局（所有助手）</option>
+      </select>
+    </div>
     <div class="mbtns">
       <button class="btn-s" onclick="closeModal('add-mem-modal')">取消</button>
       <button class="btn-p" onclick="addMemManual()">添加</button>
+    </div>
+  </div>
+</div>
+
+<!-- AI 发朋友圈 Modal -->
+<div class="overlay" id="ai-post-modal">
+  <div class="modal">
+    <h2>🤖 AI 发朋友圈 <button class="mclose" onclick="closeModal('ai-post-modal')">✕</button></h2>
+    <div class="mrow"><label>选择助手</label>
+      <select id="apm-contact" style="flex:1"></select>
+    </div>
+    <div style="font-size:12px;color:var(--text3);margin:8px 0">AI 将根据助手人设自动生成一条朋友圈内容并发布。</div>
+    <div class="mbtns">
+      <button class="btn-s" onclick="closeModal('ai-post-modal')">取消</button>
+      <button class="btn-p" onclick="doAiPost()">🌸 立即发圈</button>
     </div>
   </div>
 </div>

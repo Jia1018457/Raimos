@@ -575,19 +575,19 @@ async function callAI(chatId) {
   const s = S.settings;
   const useKey = contact?.apiKey || s.apiKey;
 const useUrl = contact?.apiUrl || 'https://openrouter.ai/api/v1/chat/completions';
+const useKey = contact?.apiKey || s.apiKey;
+const useUrl = contact?.apiUrl || 'https://openrouter.ai/api/v1/chat/completions';
 if (!useKey) { toast('请先填写 API Key！'); return; }
-  S.isStreaming = true; showTyping();
-  const t0 = Date.now();
-  try {
+S.isStreaming = true; showTyping();
+const t0 = Date.now();
+try {
     const mems = await getRelevantMems(chatId);
     const msgs = await buildMsgs(chat, contact, mems);
     const model = (contact?.model || 'openai/gpt-4o') + (S.onlineSearch && !contact?.model?.includes(':online') && !contact?.model?.includes('perplexity') ? ':online' : '');
     const body = { model, messages: msgs, temperature: contact?.temp ?? parseFloat(s.temp), stream: s.stream, max_tokens: 4096 };
     const res = await fetch(useUrl, {
-  method: 'POST',
-  headers: { 'Authorization': `Bearer ${useKey}`,
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${s.apiKey}`, 'Content-Type': 'application/json', 'HTTP-Referer': 'https://raimos.app', 'X-Title': 'Raimos' },
+      headers: { 'Authorization': `Bearer ${useKey}`, 'Content-Type': 'application/json', 'HTTP-Referer': 'https://raimos.app', 'X-Title': 'Raimos' },
       body: JSON.stringify(body),
     });
     if (!res.ok) { const e = await res.json().catch(() => ({error:{message:'Error'}})); throw new Error(e.error?.message || res.statusText); }

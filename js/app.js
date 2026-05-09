@@ -38,12 +38,12 @@ let S = {
     theme:'light', chatBg:'#fdf6f0', chatBgImg:'', bgOpacity:1, fontSize:14,
     welcomeIcon:'🐻', welcomeTitle:'你好呀！', welcomeSub:'点左上角 ＋ 新建对话，或先去⚙️设置里填 OpenRouter API Key 哦～',
   },
-  _imgSearchTarget: 'compose', // 'compose' | 'chat'
+  _imgSearchTarget: 'compose',
   _imgSearchSelected: [],
-  _composePics: [], // [{dataUrl, fileId?}]
+  _composePics: [],
   _newGifData: null, _newAnimType: 'gif',
   _animTimeout: null, _animRaf: null,
-  _statusTimers: {}, // contactId → intervalId
+  _statusTimers: {},
 };
 
 // ── MODELS ──
@@ -100,7 +100,6 @@ async function init() {
   updateWelcome();
   if (S.currentChat && S._chats[S.currentChat]) openChat(S.currentChat);
   document.addEventListener('click', outsideClick);
-  // rec wave bars
   const rw = $i('rec-wave');
   for (let i = 0; i < 14; i++) {
     const b = document.createElement('div'); b.className = 'rec-wbar';
@@ -116,7 +115,6 @@ async function init() {
 //  DATA LOAD / SAVE
 // ══════════════════════════════
 async function loadAllData() {
-  // Load all stores into runtime cache
   const contacts = await dbGetAll('contacts');
   contacts.forEach(c => S._contacts[c.id] = c);
   const chats = await dbGetAll('chats');
@@ -124,8 +122,6 @@ async function loadAllData() {
   S._memories = await dbGetAll('memories');
   S._stickers = await dbGetAll('stickers');
   S.kwAnims = await dbGetAll('kwAnims');
-
-  // Settings
   const savedSettings = await getAllSettings();
   Object.assign(S.settings, savedSettings);
   S.kwAnimEnabled = savedSettings.kwAnimEnabled !== false;
@@ -320,7 +316,6 @@ async function openChat(id) {
 async function deleteCurrentChat() {
   if (!S.currentChat) return; if (!confirm('删除此对话？')) return;
   await dbDel('chats', S.currentChat);
-  // delete messages
   const msgs = await dbGetAll('messages', 'chatId', S.currentChat);
   for (const m of msgs) await dbDel('messages', m.id);
   delete S._chats[S.currentChat]; S.currentChat = null;
@@ -405,7 +400,6 @@ function renderChatList(filter = '') {
         <button class="chat-item-menu" onclick="event.stopPropagation();S.currentChat='${chat.id}';openCtxMenu(event)">⋮</button>`;
       div.addEventListener('click', e => { if (e.target.classList.contains('chat-item-menu')) return; S.currentChat = chat.id; S.currentContact = chat.contactId || null; openChat(chat.id); });
       list.appendChild(div);
-      // Load last message preview async
       dbGetAll('messages', 'chatId', chat.id).then(msgs => {
         const last = msgs[msgs.length - 1];
         const p = $i('ci-prev-' + chat.id);
@@ -427,7 +421,6 @@ async function addMsg(chatId, msg) {
   await dbPut('messages', { ...msg, chatId });
   S._chats[chatId].updatedAt = Date.now();
   await dbPut('chats', S._chats[chatId]);
-  // Auto rename from first user message
   const msgs = await dbGetAll('messages', 'chatId', chatId);
   const userMsgs = msgs.filter(m => m.role === 'user');
   if (userMsgs.length === 1 && msg.role === 'user') {
@@ -518,7 +511,6 @@ function makeBubble(msg) {
     html += fmtText(msg.content || '');
     b.innerHTML = html;
   }
-  // Actions
   if (!['image','sticker'].includes(msg.type)) {
     const acts = document.createElement('div'); acts.className = 'bub-actions';
     acts.innerHTML = `
@@ -552,7 +544,6 @@ async function sendMsg() {
     const idx = msgs.findIndex(m => m.id === S.editingMsgId);
     if (idx !== -1) {
       msgs[idx].content = text; await dbPut('messages', { ...msgs[idx], chatId: S.currentChat });
-      // delete all after
       for (let i = idx+1; i < msgs.length; i++) await dbDel('messages', msgs[i].id);
     }
     cancelEdit(); await renderMsgs(); scrollTo_(false); await callAI(S.currentChat); return;
@@ -644,7 +635,6 @@ async function handleStream(res, chatId) {
       } catch(e) {}
     }
   }
-  // update in db
   const tmpRow = await dbGet('messages', tmpId);
   if (tmpRow) { tmpRow.content = content; tmpRow.thinking = thinking||null; await dbPut('messages', tmpRow); }
   return { content, thinking, usage };
@@ -874,7 +864,7 @@ function toggleComments(momentId) {
   ri.style.display = hidden?'flex':'none';
 }
 
-let _replyingTo = {}; // momentId → {commentId, author}
+let _replyingTo = {};
 function replyComment(momentId, commentId, author) {
   _replyingTo[momentId] = {commentId, author};
   const inp = $i('rinp-'+momentId);
@@ -892,7 +882,6 @@ async function submitComment(momentId) {
   inp.placeholder='写评论…';
   const m = await dbGet('moments',momentId);
   if(m){const card=await makeMomentCard(m);const old=$i('mc-'+momentId);if(old)old.replaceWith(card);}
-  // re-show comments
   const cl2=$i('clist-'+momentId),ri2=$i('ri-'+momentId);
   if(cl2){cl2.style.display='flex';cl2.style.flexDirection='column';}if(ri2)ri2.style.display='flex';
 }
@@ -919,7 +908,6 @@ async function aiCommentMoment(momentId) {
   } catch(e){toast('AI评论失败');}
 }
 
-// COMPOSE IMAGES
 function composePicLocal() { $i('compose-pic-file').click(); }
 async function handleComposePic(input) {
   for (const file of input.files) {
@@ -941,11 +929,11 @@ function removeComposePic(idx) {
   S._composePics.forEach((p,i)=>addComposePicPreview(p.dataUrl,i));
 }
 async function composeGenImg() {
-  const prompt=prompt('描述要生成的图片:'); if(!prompt)return;
+  const p=prompt('描述要生成的图片:'); if(!p)return;
   if(!S.settings.apiKey){toast('需要API Key');return;}
   toast('🎨 生成中…');
   try {
-    const res=await fetch('https://openrouter.ai/api/v1/images/generations',{method:'POST',headers:{'Authorization':`Bearer ${S.settings.apiKey}`,'Content-Type':'application/json'},body:JSON.stringify({model:S.settings.imgGenModel||'openai/dall-e-3',prompt,n:1,size:'1024x1024'})});
+    const res=await fetch('https://openrouter.ai/api/v1/images/generations',{method:'POST',headers:{'Authorization':`Bearer ${S.settings.apiKey}`,'Content-Type':'application/json'},body:JSON.stringify({model:S.settings.imgGenModel||'openai/dall-e-3',prompt:p,n:1,size:'1024x1024'})});
     const d=await res.json();const url=d.data?.[0]?.url;
     if(url){S._composePics.push({dataUrl:url});addComposePicPreview(url,S._composePics.length-1);}
     else throw new Error('生成失败');
@@ -961,7 +949,6 @@ function buildComposeEmojiGrid() {
   emojis.forEach(e=>{const b=document.createElement('button');b.textContent=e;b.style.cssText='font-size:22px;padding:3px;border:none;background:none;cursor:pointer;border-radius:6px;';b.onclick=()=>{const ta=$i('compose-text');ta.value+=e;};grid.appendChild(b);});
 }
 
-// IMAGE SEARCH (Unsplash)
 function openImgSearchModal(target) {
   S._imgSearchTarget = target; S._imgSearchSelected = [];
   $i('img-search-inp').value=''; $i('img-search-results').innerHTML='';
@@ -978,7 +965,6 @@ async function doImgSearch() {
       const d=await res.json();
       results=(d.results||[]).map(r=>({url:r.urls.small,full:r.urls.regular,thumb:r.urls.thumb}));
     } else {
-      // Fallback: use picsum with keyword colors
       results=Array(9).fill(0).map((_,i)=>({url:`https://picsum.photos/seed/${q}${i}/300/300`,full:`https://picsum.photos/seed/${q}${i}/800/600`,thumb:`https://picsum.photos/seed/${q}${i}/100/100`}));
       toast('未填Unsplash Key，显示随机图片占位');
     }
@@ -1005,7 +991,6 @@ function confirmImgSearch() {
   closeModal('img-search-modal');
 }
 
-// EXPORT / ARCHIVE MOMENTS
 async function exportMoments() {
   const moments=await dbGetAll('moments');const comments=await dbGetAll('comments');
   const data=JSON.stringify({moments,comments},null,2);
@@ -1053,7 +1038,13 @@ const EMOJIS={'😊常用':['😊','😂','🥰','😍','🤣','😭','😤','�
 function initEmoji(){const tabs=$i('ep-tabs');tabs.innerHTML='';let first=true;for(const[cat,emojis]of Object.entries(EMOJIS)){const b=document.createElement('button');b.className='ep-tab'+(first?' active':'');b.textContent=cat;b.onclick=()=>{document.querySelectorAll('.ep-tab').forEach(t=>t.classList.remove('active'));b.classList.add('active');renderEmojiGrid(emojis);};tabs.appendChild(b);if(first)renderEmojiGrid(emojis);first=false;}const st=document.createElement('button');st.className='ep-tab';st.textContent='🎭表情包';st.onclick=()=>{document.querySelectorAll('.ep-tab').forEach(t=>t.classList.remove('active'));st.classList.add('active');renderStickerPicker();};tabs.appendChild(st);}
 function renderEmojiGrid(emojis){const c=$i('ep-content');c.innerHTML='';const g=document.createElement('div');g.className='ep-grid';emojis.forEach(e=>{const b=document.createElement('button');b.className='ep-btn';b.textContent=e;b.onclick=()=>insertEmoji(e);g.appendChild(b);});c.appendChild(g);}
 function renderStickerPicker(){const c=$i('ep-content');c.innerHTML='';if(!S._stickers.length){c.innerHTML='<div style="text-align:center;padding:18px;color:var(--text3);font-size:12px">还没有表情包</div>';return;}const g=document.createElement('div');g.className='ep-sticker-grid';S._stickers.forEach(s=>{const d=document.createElement('div');d.className='ep-sticker';if(s.isImg)d.innerHTML=`<img src="${s.url}">`;else d.innerHTML=`<span>${s.content}</span>`;d.onclick=()=>sendSticker(s);g.appendChild(d);});c.appendChild(g);}
-function toggleEmoji(){$i('emoji-picker').classList.toggle('show');}
+
+// ★ 修复：toggleEmoji 不再直接 toggle，而是显式判断
+function toggleEmoji(){
+  const picker = $i('emoji-picker');
+  picker.classList.toggle('show');
+}
+
 function insertEmoji(e){const i=$i('msg-input');const s=i.selectionStart,end=i.selectionEnd;i.value=i.value.slice(0,s)+e+i.value.slice(end);i.selectionStart=i.selectionEnd=s+e.length;i.focus();}
 async function sendSticker(sk){const chat=S._chats[S.currentChat];if(!chat)return;await addMsg(S.currentChat,{role:'user',type:'sticker',content:sk.content||sk.label||'',url:sk.url,isImg:sk.isImg});await renderMsgs();scrollTo_(false);$i('emoji-picker').classList.remove('show');}
 function openStickersModal(){renderStickerLib();$i('sticker-modal').classList.add('show');}
@@ -1125,6 +1116,15 @@ function buildSettingsUI() {
       <div class="s-row"><label>Tavily Key (搜索)</label><input type="password" id="s-tavily" value="${s.tavilyKey||''}" placeholder="可选，联网搜索"/></div>
       <div class="s-row"><label>Unsplash Key (图片)</label><input type="password" id="s-unsplash" value="${s.unsplashKey||''}" placeholder="可选，朋友圈搜图"/></div>
     </div>
+    <div class="s-section"><h3>☁️ 云同步</h3>
+      <div style="padding:4px 0 10px;font-size:12px;color:var(--text3)">登录后可把助手、对话、记忆同步到云端，换设备也能用。</div>
+      <div style="display:flex;gap:7px;flex-wrap:wrap;">
+        <button class="btn-p" onclick="openAuthModal()">🔐 登录 / 注册</button>
+        <button class="btn-s" onclick="syncToCloud()">☁️ 上传同步</button>
+        <button class="btn-s" onclick="restoreFromCloud()">⬇️ 从云端恢复</button>
+      </div>
+      <div id="auth-info" style="margin-top:8px;font-size:12px;color:var(--text3)"></div>
+    </div>
     <div class="s-section"><h3>🗣️ 语音</h3>
       <div class="s-row"><label>TTS 模式</label><select id="s-tts-mode" onchange="onTtsModeChange()"><option value="browser">浏览器 TTS (免费)</option><option value="custom">自定义 TTS 接口</option></select></div>
       <div class="s-row" id="r-bvoice"><label>浏览器声音</label><select id="s-bvoice"></select></div>
@@ -1172,7 +1172,6 @@ function buildSettingsUI() {
       <div id="storage-bar-wrap" class="storage-bar-wrap"><div class="storage-bar" id="storage-bar" style="width:0%"></div></div>
     </div>
     <button class="btn-save" onclick="saveAllSettings()">💾 保存设置</button>`;
-  // Set select values
   setTimeout(() => {
     const tm = $i('s-tts-mode'); if(tm)tm.value=s.ttsMode||'browser';
     const vr = $i('s-voice-reply'); if(vr)vr.value=s.voiceReplyMode||'text';
@@ -1180,6 +1179,9 @@ function buildSettingsUI() {
     onTtsModeChange(); initVoices();
     renderColorPickers($i('cr-user'),$i('cr-ai'));
     updateStorageInfo();
+    // 更新登录状态显示
+    const ai = $i('auth-info');
+    if (ai) ai.textContent = window._fbUser ? ('已登录：' + window._fbUser.email) : '未登录';
   },0);
 }
 function onTtsModeChange(){const m=$i('s-tts-mode');if(!m)return;const v=m.value;const rb=$i('r-bvoice');const rc=$i('r-custom-tts');if(rb)rb.style.display=v==='browser'?'flex':'none';if(rc)rc.style.display=v==='custom'?'block':'none';}
@@ -1209,7 +1211,6 @@ async function updateStorageInfo(){
   if(est&&si){si.textContent=`存储: ${(est.usage/1024/1024).toFixed(1)} MB / ${(est.quota/1024/1024).toFixed(0)} MB (${est.pct}%)`;if(sb)sb.style.width=est.pct+'%';}
 }
 
-// MODEL LIST
 function renderModelList(prefix, selected){const list=$i(prefix+'-model-list');if(!list)return;list.innerHTML='';const q=$i(prefix+'-model-search')?.value?.toLowerCase()||'';MODELS.filter(m=>!q||m.name.toLowerCase().includes(q)||m.id.toLowerCase().includes(q)||m.desc.toLowerCase().includes(q)).forEach(m=>{const d=document.createElement('div');d.className='model-opt'+(m.id===selected?' sel':'');d.innerHTML=`<div class="model-opt-name">${esc(m.name)}</div><div class="model-opt-desc">${esc(m.desc)}</div>`;d.onclick=()=>{$i(prefix+'-model').value=m.id;document.querySelectorAll('.model-opt').forEach(o=>o.classList.remove('sel'));d.classList.add('sel');if(m.id==='custom'){const v=window.prompt('输入模型名:');if(v)$i(prefix+'-model').value=v;}};list.appendChild(d);});}
 function filterModels(prefix){renderModelList(prefix,$i(prefix+'-model').value);}
 
@@ -1286,7 +1287,16 @@ function onKey(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMsg();
 function autoH(el){el.style.height='auto';el.style.height=Math.min(el.scrollHeight,100)+'px';}
 function toast(msg,dur=2000){const t=$i('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),dur);}
 function closeModal(id){$i(id).classList.remove('show');}
-function outsideClick(e){if(!$i('emoji-picker').contains(e.target)&&e.target.id!=='btn-emoji'&&!e.target.closest('#btn-emoji'))$i('emoji-picker').classList.remove('show');if(!$i('ctx-menu').contains(e.target))closeCtxMenu();}
+
+// ★ 修复表情按钮：outsideClick 不干扰 btn-emoji 本身的点击
+function outsideClick(e) {
+  const emojiBtn = $i('btn-emoji');
+  const emojiPicker = $i('emoji-picker');
+  if (emojiBtn && (emojiBtn === e.target || emojiBtn.contains(e.target))) return;
+  if (emojiPicker && emojiPicker.contains(e.target)) return;
+  if (emojiPicker) emojiPicker.classList.remove('show');
+  if (!$i('ctx-menu').contains(e.target)) closeCtxMenu();
+}
 
 // ══════════════════════════════
 //  BOOT
@@ -1309,10 +1319,6 @@ function closeSidebar() {
 }
 function isMobile() { return window.innerWidth <= 768; }
 
-// 手机端：点击聊天项后自动关闭侧边栏
-const _origOpenChat = typeof openChat === 'function' ? openChat : null;
-
-// 手机端显示/隐藏汉堡按钮
 function applyMobileUI() {
   const mobile = isMobile();
   const ham = document.getElementById('btn-hamburger');
@@ -1322,13 +1328,154 @@ function applyMobileUI() {
 }
 window.addEventListener('resize', applyMobileUI);
 document.addEventListener('DOMContentLoaded', applyMobileUI);
-// 也在init之后执行一次
-const _origInit = window.init;
 window.addEventListener('load', () => { applyMobileUI(); });
 
-// 手机上点对话后关闭侧边栏
 document.addEventListener('click', e => {
   if (isMobile() && e.target.closest('.chat-item')) {
     setTimeout(closeSidebar, 100);
   }
 });
+
+// ══════════════════════════════
+//  FIREBASE AUTH & CLOUD SYNC
+// ══════════════════════════════
+let _authMode = 'login';
+
+function openAuthModal() {
+  switchAuthTab('login');
+  $i('auth-error').style.display = 'none';
+  $i('auth-email').value = '';
+  $i('auth-password').value = '';
+  if (window._fbUser) {
+    $i('auth-logout-btn').style.display = 'block';
+    $i('auth-submit-btn').style.display = 'none';
+  } else {
+    $i('auth-logout-btn').style.display = 'none';
+    $i('auth-submit-btn').style.display = 'block';
+  }
+  $i('auth-modal').classList.add('show');
+}
+
+function switchAuthTab(mode) {
+  _authMode = mode;
+  const isLogin = mode === 'login';
+  $i('auth-tab-login').style.background  = isLogin ? 'var(--accent)' : 'var(--hover)';
+  $i('auth-tab-login').style.color       = isLogin ? '#fff' : 'var(--text2)';
+  $i('auth-tab-register').style.background = !isLogin ? 'var(--accent)' : 'var(--hover)';
+  $i('auth-tab-register').style.color      = !isLogin ? '#fff' : 'var(--text2)';
+  $i('auth-submit-btn').textContent = isLogin ? '登录' : '注册';
+}
+
+async function doAuth() {
+  const email    = $i('auth-email').value.trim();
+  const password = $i('auth-password').value;
+  const errEl    = $i('auth-error');
+  errEl.style.display = 'none';
+  if (!email || !password) { errEl.textContent = '请填写邮箱和密码'; errEl.style.display='block'; return; }
+  const { createUserWithEmailAndPassword, signInWithEmailAndPassword } = window._fbLib;
+  const auth = window._fbAuth;
+  try {
+    if (_authMode === 'register') {
+      await createUserWithEmailAndPassword(auth, email, password);
+      toast('✅ 注册成功！');
+    } else {
+      await signInWithEmailAndPassword(auth, email, password);
+      toast('✅ 登录成功！');
+    }
+    closeModal('auth-modal');
+    updateAuthUI(window._fbUser);
+  } catch(e) {
+    const msgs = {
+      'auth/email-already-in-use': '该邮箱已注册',
+      'auth/invalid-email': '邮箱格式有误',
+      'auth/weak-password': '密码至少6位',
+      'auth/user-not-found': '账号不存在',
+      'auth/wrong-password': '密码错误',
+      'auth/invalid-credential': '邮箱或密码错误',
+    };
+    errEl.textContent = msgs[e.code] || e.message;
+    errEl.style.display = 'block';
+  }
+}
+
+async function doLogout() {
+  await window._fbLib.signOut(window._fbAuth);
+  toast('已退出登录');
+  closeModal('auth-modal');
+  updateAuthUI(null);
+}
+
+function updateAuthUI(user) {
+  const txt = $i('auth-status-txt');
+  const btn = $i('auth-action-btn');
+  const ai  = $i('auth-info');
+  if (txt) txt.textContent = user ? ('☁️ ' + user.email) : '未登录';
+  if (btn) {
+    btn.textContent = user ? '云同步' : '登录 / 注册';
+    btn.onclick = user ? () => syncToCloud() : () => openAuthModal();
+  }
+  if (ai) ai.textContent = user ? ('已登录：' + user.email) : '未登录';
+}
+
+async function syncToCloud() {
+  if (!window._fbUser) { toast('请先登录'); openAuthModal(); return; }
+  const uid = window._fbUser.uid;
+  const { doc, setDoc } = window._fbLib;
+  const fsDb = window._fbDb;
+  toast('☁️ 同步中…');
+  try {
+    const settingsData = {};
+    for (const [k,v] of Object.entries(S.settings)) settingsData[k] = v ?? null;
+    await setDoc(doc(fsDb, 'users', uid, 'meta', 'settings'), settingsData);
+
+    const contacts = await dbGetAll('contacts');
+    for (const c of contacts) {
+      const data = { ...c };
+      if (data.avatar && data.avatar.startsWith('data:')) data.avatar = '__local__';
+      await setDoc(doc(fsDb, 'users', uid, 'contacts', c.id), data);
+    }
+
+    const chats = await dbGetAll('chats');
+    for (const c of chats) {
+      await setDoc(doc(fsDb, 'users', uid, 'chats', c.id), c);
+    }
+
+    const memories = await dbGetAll('memories');
+    for (const m of memories) {
+      await setDoc(doc(fsDb, 'users', uid, 'memories', m.id), m);
+    }
+
+    toast(`✅ 同步完成！${contacts.length} 个助手，${chats.length} 个对话，${memories.length} 条记忆`);
+  } catch(e) {
+    toast('❌ 同步失败：' + e.message);
+    console.error(e);
+  }
+}
+
+async function restoreFromCloud() {
+  if (!window._fbUser) { toast('请先登录'); openAuthModal(); return; }
+  if (!confirm('从云端恢复数据？会覆盖本地同名数据。')) return;
+  const uid = window._fbUser.uid;
+  const { collection, getDocs } = window._fbLib;
+  const fsDb = window._fbDb;
+  toast('⬇️ 恢复中…');
+  try {
+    const contactsSnap = await getDocs(collection(fsDb, 'users', uid, 'contacts'));
+    for (const d of contactsSnap.docs) {
+      const data = d.data(); await dbPut('contacts', data); S._contacts[data.id] = data;
+    }
+    const chatsSnap = await getDocs(collection(fsDb, 'users', uid, 'chats'));
+    for (const d of chatsSnap.docs) {
+      const data = d.data(); await dbPut('chats', data); S._chats[data.id] = data;
+    }
+    const memsSnap = await getDocs(collection(fsDb, 'users', uid, 'memories'));
+    for (const d of memsSnap.docs) {
+      const data = d.data(); await dbPut('memories', data);
+      if (!S._memories.find(m => m.id === data.id)) S._memories.push(data);
+    }
+    renderChatList(); renderContacts(); renderMemories();
+    toast('✅ 恢复完成！');
+  } catch(e) {
+    toast('❌ 恢复失败：' + e.message);
+  }
+}

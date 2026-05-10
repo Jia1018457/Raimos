@@ -16,7 +16,7 @@
 
 <!-- NAV -->
 <div id="nav-tabs">
-  <div class="nav-logo">R</div>
+  <button class="nav-logo" type="button" onclick="openWelcomeFromLogo()" title="回到开屏页">R</button>
   <button class="nav-tab active" data-page="chat-page" onclick="switchPage('chat-page')" title="聊天">💬</button>
   <button class="nav-tab" data-page="contacts-page" onclick="switchPage('contacts-page')" title="AI联系人">👥</button>
   <button class="nav-tab" data-page="moments-page" onclick="switchPage('moments-page')" title="朋友圈">🌸</button>
@@ -87,7 +87,7 @@
     <div id="input-row">
       <!-- ★ 修复：用 id="btn-emoji" 让 outsideClick 能正确识别 -->
       <button class="ibtn ibtn-g" id="btn-emoji" onclick="toggleEmoji()" type="button">😊</button>
-      <textarea id="msg-input" placeholder="发消息…" rows="1" onkeydown="onKey(event)" oninput="autoH(this)"></textarea>
+      <textarea id="msg-input" placeholder="发消息…（Enter 换行，Ctrl/⌘+Enter 发送）" rows="1" onkeydown="onKey(event)" oninput="autoH(this)"></textarea>
       <button class="ibtn ibtn-g" onclick="triggerFile()" title="发文件/图片">📎</button>
       <button class="ibtn ibtn-g" id="btn-voice" onmousedown="startRec()" ontouchstart="startRec(event)" onmouseup="stopRec()" ontouchend="stopRec()">🎤</button>
       <button class="ibtn" id="btn-send" onclick="sendMsg()">➤</button>
@@ -533,7 +533,7 @@
     </div>
     <div id="kw-list" style="max-height:220px;overflow-y:auto;margin-bottom:11px;"></div>
     <div style="background:var(--bg2);border:1.5px solid var(--border);border-radius:13px;padding:12px;">
-      <div style="font-size:11px;font-weight:800;color:var(--accent);margin-bottom:9px;text-transform:uppercase;letter-spacing:.06em">➕ 添加</div>
+      <div id="kw-form-title" style="font-size:11px;font-weight:800;color:var(--accent);margin-bottom:9px;text-transform:uppercase;letter-spacing:.06em">➕ 添加</div>
       <div class="mrow"><label>关键词</label><input type="text" id="kw-word" placeholder="抱抱、生日快乐…"/></div>
       <div class="mrow" style="align-items:flex-start">
         <label style="margin-top:5px">动画类型</label>
@@ -553,9 +553,14 @@
         </select>
       </div>
       <div class="mrow"><label>动画时长</label><input type="range" id="kw-dur" min="1" max="8" step=".5" value="3" oninput="$i('kw-dur-v').textContent=this.value+'s'" style="flex:1;accent-color:var(--accent)"/><span class="rval" id="kw-dur-v">3s</span></div>
+      <div class="mrow"><label>Emoji 叠加</label><input type="text" id="kw-emoji" value="✨" maxlength="12" placeholder="✨ 💖 🌙"/></div>
+      <div class="mrow"><label>显示层</label><select id="kw-layer-mode"><option value="custom">只显示上传/内置动画</option><option value="emoji">只显示 Emoji</option><option value="both">上传/内置动画 + Emoji 叠加</option></select></div>
+      <div class="mrow"><label>氛围边框</label><select id="kw-mask" onchange="updateKwResizePreview()"><option value="none">无</option><option value="soft">柔和羽化</option><option value="blob">不规则云朵</option><option value="vignette">暗角融屏</option><option value="sparkle">发光氛围</option></select></div>
+      <div class="mrow"><label>预览尺寸</label><input type="number" id="kw-width" value="180" min="60" max="640" oninput="updateKwResizePreview()" style="max-width:80px"/><span style="font-size:12px;color:var(--text3)">×</span><input type="number" id="kw-height" value="180" min="60" max="640" oninput="updateKwResizePreview()" style="max-width:80px"/><span style="font-size:11px;color:var(--text3)">也可拖拽预览框右下角</span></div>
       <div style="display:flex;gap:7px;margin-top:7px">
         <button class="btn-s" style="flex:1" onclick="previewKwAnim(-1)">👀 预览</button>
-        <button class="btn-p" style="flex:1" onclick="addKwAnim()">➕ 添加</button>
+        <button class="btn-s" style="flex:1" onclick="resetKwForm()">清空</button>
+        <button class="btn-p" id="kw-save-btn" style="flex:1" onclick="addKwAnim()">➕ 添加</button>
       </div>
     </div>
   </div>

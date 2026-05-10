@@ -22,6 +22,7 @@ let S = {
   proTimer: null, proCount: 0, proDate: '',
   kwAnimEnabled: true,
   kwAnims: [],
+  chatListContactFilter: null,
   myStatus: '😊 在线',
   // runtime caches
   _contacts: {}, _chats: {}, _memories: [], _stickers: [],
@@ -49,7 +50,7 @@ let S = {
   _imgSearchTarget: 'compose',
   _imgSearchSelected: [],
   _composePics: [],
-  _newGifData: null, _newAnimType: 'gif',
+  _newGifData: null, _newAnimType: 'gif', _editingKwAnimId: null,
   _animTimeout: null, _animRaf: null,
   _statusTimers: {},
 };
@@ -372,6 +373,7 @@ function toggleContactTemp() {
 }
 async function startChatWith(contactId) {
   const c = S._contacts[contactId]; if (!c) return;
+  S.chatListContactFilter = contactId;
   const chatId = uid();
   const chat = { id: chatId, name: `与${c.name}的对话`, contactId, summary: null, archived: false, createdAt: Date.now(), updatedAt: Date.now() };
   dbPut('chats', chat); S._chats[chatId] = chat;
@@ -439,6 +441,7 @@ async function createChatWith(contactId) {
   const chat = { id: chatId, name: c ? `与${c.name}的对话` : '新对话', contactId: contactId||null, summary: null, archived: false, createdAt: Date.now(), updatedAt: Date.now() };
   await dbPut('chats', chat); S._chats[chatId] = chat;
   S.currentChat = chatId; S.currentContact = contactId||null;
+  S.chatListContactFilter = contactId || null;
   await saveSetting('currentChat', chatId); await saveSetting('currentContact', contactId||null);
   switchPage('chat-page'); renderChatList(); await openChat(chatId);
 }
@@ -454,11 +457,11 @@ async function openChat(id) {
   const hdrAv = $i('hdr-avatar');
   if (av?.startsWith('data:')) hdrAv.innerHTML = `<img src="${av}">`;
   else hdrAv.textContent = av || '🐱';
-  $i('hint-model').textContent = contact?.model || s.model || '';
+  $i('hint-model').textContent = contact?.model || S.settings.model || '';
   updateHeaderStatus();
   // Apply contact-specific appearance overrides
-  const effAiBubble = cs(contact?.xAiBubble, s.aiBubble) || '#ffffff';
-  const effChatBg = cs(contact?.xChatBg, s.chatBg) || '#fdf6f0';
+  const effAiBubble = cs(contact?.xAiBubble, S.settings.aiBubble) || '#ffffff';
+  const effChatBg = cs(contact?.xChatBg, S.settings.chatBg) || '#fdf6f0';
   document.documentElement.style.setProperty('--ai-bubble', effAiBubble);
   const ca2 = $i('chat-area'); if (ca2) ca2.style.background = effChatBg;
   await renderMsgs(); highlightChat(); scrollTo_(false, true);
@@ -491,7 +494,7 @@ function showWelcome() {
   const ca = $i('chat-area'); ca.innerHTML = '';
   const div = document.createElement('div'); div.id = 'welcome'; div.className = '';
   const s = S.settings;
-  div.innerHTML = `<div class="w-icon" id="welcome-icon">${esc(s.welcomeIcon||'🐻')}</div><div class="w-title" id="welcome-title">${esc(s.welcomeTitle||'你好呀！')}</div><div class="w-sub" id="welcome-sub">${esc(s.welcomeSub||'')}</div>`;
+  div.innerHTML = `<div class="w-icon" id="welcome-icon">${esc(s.welcomeIcon||'🐻')}</div><div class="w-title" id="welcome-title">${esc(s.welcomeTitle||'你好呀！')}</div><div class="w-sub" id="welcome-sub">${esc(s.welcomeSub||'')}</div><button class="welcome-action" onclick="openNewChatModal()">选择 AI 助手开始聊天</button>`;
   ca.appendChild(div);
   $i('hdr-name').textContent = '选择或新建对话';
 }
@@ -521,7 +524,16 @@ async function saveWelcome() {
 
 function renderChatList(filter = '') {
   const list = $i('chat-list'); list.innerHTML = '';
-  const all = Object.values(S._chats).sort((a, b) => (b.updatedAt||b.createdAt||0) - (a.updatedAt||a.createdAt||0));
+  const scopedContact = S.chatListContactFilter;
+  let all = Object.values(S._chats).sort((a, b) => (b.updatedAt||b.createdAt||0) - (a.updatedAt||a.createdAt||0));
+  if (scopedContact) all = all.filter(c => c.contactId === scopedContact);
+  if (scopedContact) {
+    const c = S._contacts[scopedContact];
+    const scope = document.createElement('div');
+    scope.className = 'chat-scope-banner';
+    scope.innerHTML = `<span>只显示：${esc(c?.name || '当前助手')}</span><button onclick="S.chatListContactFilter=null;renderChatList()">显示全部</button>`;
+    list.appendChild(scope);
+  }
   const active = all.filter(c => !c.archived);
   const archived = all.filter(c => c.archived);
   const render = (chats, label) => {
@@ -559,6 +571,12 @@ function renderChatList(filter = '') {
     });
   };
   render(active, ''); render(archived, '归档');
+  if (!active.length && !archived.length) {
+    const empty = document.createElement('div');
+    empty.style.cssText = 'text-align:center;padding:24px 10px;color:var(--text3);font-size:12px;line-height:1.7';
+    empty.innerHTML = scopedContact ? '这个助手还没有对话<br><button class="btn-p" onclick="createChatWith(S.chatListContactFilter)">新建与 TA 的对话</button>' : '还没有对话';
+    list.appendChild(empty);
+  }
 }
 function highlightChat() { document.querySelectorAll('.chat-item').forEach(el => el.classList.toggle('active', el.dataset.id === S.currentChat)); }
 function filterChats(v) { renderChatList(v); }
@@ -1698,8 +1716,38 @@ function buildSettingsUI() {
     // 更新登录状态显示
     const ai = $i('auth-info');
     if (ai) ai.textContent = window._fbUser ? ('已登录：' + window._fbUser.email) : '未登录';
+    initSettingsSubpages();
   },0);
 }
+
+function initSettingsSubpages(){
+  const wrap=$i('settings-wrap'); if(!wrap)return;
+  const sections=Array.from(wrap.querySelectorAll('.s-section'));
+  if(!sections.length)return;
+  wrap.dataset.subpages='1';
+  const home=document.createElement('div'); home.className='settings-home';
+  home.innerHTML='<div class="settings-home-tip">点击大标题进入对应设置，每个页面都有独立保存按钮。</div>';
+  sections.forEach((section,idx)=>{
+    const title=section.querySelector('h3')?.textContent?.trim()||`设置 ${idx+1}`;
+    const tile=document.createElement('button'); tile.type='button'; tile.className='settings-tile';
+    tile.innerHTML=`<span>${esc(title)}</span><small>进入设置 ›</small>`;
+    tile.onclick=()=>openSettingsSection(section,title,home);
+    home.appendChild(tile); section.hidden=true;
+  });
+  wrap.prepend(home);
+}
+function openSettingsSection(section,title,home){
+  const wrap=$i('settings-wrap'); if(!wrap)return;
+  home.hidden=true; section.hidden=false;
+  let page=wrap.querySelector('.settings-subpage-shell'); if(page)page.remove();
+  page=document.createElement('div'); page.className='settings-subpage-shell';
+  const header=document.createElement('div'); header.className='settings-subpage-header';
+  header.innerHTML=`<button type="button" class="btn-s">‹ 返回</button><h3>${esc(title)}</h3><button type="button" class="btn-p">保存本页</button>`;
+  header.querySelector('.btn-s').onclick=()=>{section.hidden=true;page.before(section);page.remove();home.hidden=false;};
+  header.querySelector('.btn-p').onclick=()=>saveAllSettings();
+  section.before(page); page.append(header,section);
+}
+
 function onTtsModeChange(){const m=$i('s-tts-mode');if(!m)return;const v=m.value;const rb=$i('r-bvoice');const rc=$i('r-custom-tts');if(rb)rb.style.display=v==='browser'?'flex':'none';if(rc)rc.style.display=v==='custom'?'block':'none';}
 async function saveAllSettings(){
   const s=S.settings;
@@ -1767,17 +1815,74 @@ function buildAnimTypeGrid(){const g=$i('anim-type-grid');if(!g)return;g.innerHT
 async function openKwAnimModal(){
   $i('kw-master').checked=S.kwAnimEnabled;
   S.kwAnims=await dbGetAll('kwAnims');
+  resetKwForm();
   renderKwList();$i('kwanim-modal').classList.add('show');
 }
-function renderKwList(){const list=$i('kw-list');list.innerHTML='';if(!S.kwAnims.length){list.innerHTML='<div style="text-align:center;padding:16px;color:var(--text3);font-size:12px">还没有关键词动画，在下方添加！</div>';return;}const ICONS={gif:'🖼️',confetti:'🎊',fireworks:'🎆',snow:'❄️',petals:'🌸',hearts:'💖',stars:'⭐',meteors:'🌠',birthday:'🎂',lightning:'⚡',cats:'🐱',bubbles:'🫧'};S.kwAnims.forEach((item,i)=>{const div=document.createElement('div');div.className='kw-item';const prev=item.type==='gif'&&item.gifData?`<img class="kw-preview" src="${item.gifData}">`:`<div class="kw-preview-ic">${ICONS[item.type]||'✨'}</div>`;div.innerHTML=`${prev}<div class="kw-info"><div class="kw-keyword">"${esc(item.keyword)}"</div><div class="kw-meta">${ICONS[item.type]||'✨'} ${item.type==='gif'?'自定义GIF':item.type} · ${({both:'双向',user:'我发',ai:'AI发'})[item.triggerBy]||'双向'} · ${item.duration||3}s</div></div><div class="kw-btns"><button class="kw-btn" onclick="previewKwAnim(${i})">▶</button><button class="kw-btn" style="color:#e74c3c" onclick="delKwAnim(${i})">✕</button></div>`;list.appendChild(div);});}
-function handleGifUpload(input){const file=input.files[0];if(!file)return;const fr=new FileReader();fr.onload=e=>{S._newGifData=e.target.result;$i('kw-gif-preview').innerHTML=`<img src="${S._newGifData}" style="max-height:90px;max-width:100%;border-radius:8px"><br><small style="color:var(--accent)">✓ ${file.name}</small>`;};fr.readAsDataURL(file);input.value='';}
+function normalizeKwAnim(item={}){
+  return {
+    id:item.id||uid(), keyword:item.keyword||'', type:item.type||'gif', gifData:item.gifData||null,
+    triggerBy:item.triggerBy||'both', duration:parseFloat(item.duration)||3,
+    emoji:item.emoji||'✨', layerMode:item.layerMode || (item.showEmoji?'both':'custom'),
+    mask:item.mask||'soft', width:parseInt(item.width||180), height:parseInt(item.height||180)
+  };
+}
+function renderKwList(){
+  const list=$i('kw-list');list.innerHTML='';
+  if(!S.kwAnims.length){list.innerHTML='<div style="text-align:center;padding:16px;color:var(--text3);font-size:12px">还没有关键词动画，在下方添加！</div>';return;}
+  const ICONS={gif:'🖼️',confetti:'🎊',fireworks:'🎆',snow:'❄️',petals:'🌸',hearts:'💖',stars:'⭐',meteors:'🌠',birthday:'🎂',lightning:'⚡',cats:'🐱',bubbles:'🫧'};
+  S.kwAnims.forEach((raw,i)=>{const item=normalizeKwAnim(raw);const div=document.createElement('div');div.className='kw-item';
+    const prev=item.type==='gif'&&item.gifData?`<img class="kw-preview kw-mask-${item.mask}" src="${item.gifData}">`:`<div class="kw-preview-ic">${ICONS[item.type]||'✨'}</div>`;
+    const layerText=({custom:'上传动画',emoji:'Emoji',both:'上传+Emoji'})[item.layerMode]||'上传动画';
+    div.innerHTML=`${prev}<div class="kw-info"><div class="kw-keyword">"${esc(item.keyword)}"</div><div class="kw-meta">${ICONS[item.type]||'✨'} ${item.type==='gif'?'自定义GIF':item.type} · ${({both:'双向',user:'我发',ai:'AI发'})[item.triggerBy]||'双向'} · ${item.duration}s · ${layerText} · ${item.width}×${item.height}</div></div><div class="kw-btns"><button class="kw-btn" onclick="previewKwAnim(${i})">▶</button><button class="kw-btn" onclick="editKwAnim(${i})">编辑</button><button class="kw-btn" style="color:#e74c3c" onclick="delKwAnim(${i})">✕</button></div>`;
+    list.appendChild(div);});
+}
+function resetKwForm(){
+  S._editingKwAnimId=null; S._newGifData=null; S._newAnimType='gif';
+  $i('kw-word').value=''; $i('kw-trigger').value='both'; $i('kw-dur').value=3; $i('kw-dur-v').textContent='3s';
+  if($i('kw-emoji'))$i('kw-emoji').value='✨'; if($i('kw-layer-mode'))$i('kw-layer-mode').value='custom'; if($i('kw-mask'))$i('kw-mask').value='soft';
+  if($i('kw-width'))$i('kw-width').value=180; if($i('kw-height'))$i('kw-height').value=180;
+  $i('kw-gif-preview').innerHTML='📁 点击上传 GIF / 图片<br><small>支持 GIF、PNG、JPG</small>';
+  $i('kw-form-title').textContent='➕ 添加'; $i('kw-save-btn').textContent='➕ 添加';
+  buildAnimTypeGrid(); updateKwResizePreview();
+}
+function editKwAnim(i){
+  const item=normalizeKwAnim(S.kwAnims[i]); S._editingKwAnimId=item.id; S._newGifData=item.gifData; S._newAnimType=item.type;
+  $i('kw-word').value=item.keyword; $i('kw-trigger').value=item.triggerBy; $i('kw-dur').value=item.duration; $i('kw-dur-v').textContent=item.duration+'s';
+  if($i('kw-emoji'))$i('kw-emoji').value=item.emoji; if($i('kw-layer-mode'))$i('kw-layer-mode').value=item.layerMode; if($i('kw-mask'))$i('kw-mask').value=item.mask;
+  if($i('kw-width'))$i('kw-width').value=item.width; if($i('kw-height'))$i('kw-height').value=item.height;
+  buildAnimTypeGrid(); document.querySelectorAll('.atyp').forEach(b=>b.classList.toggle('sel',b.dataset.type===item.type));
+  $i('kw-gif-zone').style.display=item.type==='gif'?'block':'none';
+  $i('kw-gif-preview').innerHTML=item.gifData?`<div class="kw-resize-box kw-mask-${item.mask}" style="width:${item.width}px;height:${item.height}px"><img src="${item.gifData}"></div><small style="color:var(--accent)">拖拽右下角可调整尺寸</small>`:'📁 点击上传 GIF / 图片<br><small>支持 GIF、PNG、JPG</small>';
+  $i('kw-form-title').textContent='✏️ 编辑动画'; $i('kw-save-btn').textContent='💾 保存修改';
+}
+function updateKwResizePreview(){
+  const box=document.querySelector('#kw-gif-preview .kw-resize-box'); if(!box)return;
+  const w=parseInt($i('kw-width')?.value||box.offsetWidth||180), h=parseInt($i('kw-height')?.value||box.offsetHeight||180), mask=$i('kw-mask')?.value||'soft';
+  box.style.width=w+'px'; box.style.height=h+'px'; box.className='kw-resize-box kw-mask-'+mask;
+}
+function syncKwResizeInputs(){
+  const box=document.querySelector('#kw-gif-preview .kw-resize-box'); if(!box)return;
+  if($i('kw-width'))$i('kw-width').value=Math.round(box.offsetWidth); if($i('kw-height'))$i('kw-height').value=Math.round(box.offsetHeight);
+}
+function handleGifUpload(input){const file=input.files[0];if(!file)return;const fr=new FileReader();fr.onload=e=>{S._newGifData=e.target.result;$i('kw-gif-preview').innerHTML=`<div class="kw-resize-box kw-mask-${$i('kw-mask')?.value||'soft'}" style="width:${$i('kw-width')?.value||180}px;height:${$i('kw-height')?.value||180}px"><img src="${S._newGifData}"></div><small style="color:var(--accent)">✓ ${esc(file.name)} · 拖拽右下角可调整尺寸</small>`;};fr.readAsDataURL(file);input.value='';}
 function dropGif(e){e.preventDefault();const file=e.dataTransfer?.files?.[0];if(!file)return;const obj={files:[file]};handleGifUpload(obj);}
-async function addKwAnim(){const word=$i('kw-word').value.trim();if(!word){toast('请输入关键词');return;}if(S._newAnimType==='gif'&&!S._newGifData){toast('请上传GIF或选择其他动画类型');return;}const item={id:uid(),keyword:word,type:S._newAnimType,gifData:S._newAnimType==='gif'?S._newGifData:null,triggerBy:$i('kw-trigger').value,duration:parseFloat($i('kw-dur').value)||3};await dbPut('kwAnims',item);S.kwAnims.push(item);$i('kw-word').value='';S._newGifData=null;$i('kw-gif-preview').innerHTML='📁 点击上传 GIF / 图片<br><small>支持 GIF、PNG、JPG</small>';renderKwList();toast('✅ 已添加');}
+async function addKwAnim(){
+  syncKwResizeInputs(); const word=$i('kw-word').value.trim();if(!word){toast('请输入关键词');return;}if(S._newAnimType==='gif'&&!S._newGifData){toast('请上传GIF或选择其他动画类型');return;}
+  const item=normalizeKwAnim({id:S._editingKwAnimId||uid(),keyword:word,type:S._newAnimType,gifData:S._newAnimType==='gif'?S._newGifData:null,triggerBy:$i('kw-trigger').value,duration:parseFloat($i('kw-dur').value)||3,emoji:$i('kw-emoji')?.value||'✨',layerMode:$i('kw-layer-mode')?.value||'custom',mask:$i('kw-mask')?.value||'soft',width:$i('kw-width')?.value||180,height:$i('kw-height')?.value||180});
+  const wasEditing=Boolean(S._editingKwAnimId);
+  await dbPut('kwAnims',item); const idx=S.kwAnims.findIndex(x=>x.id===item.id); if(idx>=0)S.kwAnims[idx]=item; else S.kwAnims.push(item);
+  resetKwForm(); renderKwList(); toast(wasEditing?'✅ 已保存':'✅ 已添加');
+}
 async function delKwAnim(i){await dbDel('kwAnims',S.kwAnims[i].id);S.kwAnims.splice(i,1);renderKwList();}
-function previewKwAnim(i){if(i===-1){const w=$i('kw-word').value.trim()||'预览';playAnim({keyword:w,type:S._newAnimType,gifData:S._newGifData,duration:parseFloat($i('kw-dur').value)||3});}else playAnim(S.kwAnims[i]);}
-function checkKwAnims(text,role){if(!S.kwAnimEnabled||!S.kwAnims.length)return;for(const item of S.kwAnims){const tb=item.triggerBy||'both';if(tb==='user'&&role!=='user')continue;if(tb==='ai'&&role!=='ai')continue;if(text.includes(item.keyword)){setTimeout(()=>playAnim(item),350);break;}}}
-function playAnim(item){if(!item)return;stopAnim();const overlay=$i('anim-overlay'),canvas=$i('anim-canvas'),gifWrap=$i('anim-gif-wrap');const dur=(item.duration||3)*1000;overlay.classList.add('active');gifWrap.innerHTML='';canvas.width=window.innerWidth;canvas.height=window.innerHeight;if(item.type==='gif'&&item.gifData){overlay.classList.add('has-bd');const img=document.createElement('img');img.src=item.gifData;img.style.cssText='max-width:80vw;max-height:70vh;border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,.45)';gifWrap.appendChild(img);}else{overlay.classList.remove('has-bd');startParticle(item.type,canvas,dur);}S._animTimeout=setTimeout(()=>stopAnim(),dur+400);}
-function stopAnim(){if(S._animTimeout){clearTimeout(S._animTimeout);S._animTimeout=null;}if(S._animRaf){cancelAnimationFrame(S._animRaf);S._animRaf=null;}const o=$i('anim-overlay');o.classList.remove('active','has-bd');$i('anim-gif-wrap').innerHTML='';document.querySelectorAll('.cfp,.snf,.ptl,.hrtf,.strf,.mtrf,.ckb,.catr').forEach(el=>el.remove());const c=$i('anim-canvas');c.getContext('2d').clearRect(0,0,c.width,c.height);}
+function previewKwAnim(i){if(i===-1){syncKwResizeInputs();const w=$i('kw-word').value.trim()||'预览';playAnim(normalizeKwAnim({keyword:w,type:S._newAnimType,gifData:S._newGifData,duration:parseFloat($i('kw-dur').value)||3,emoji:$i('kw-emoji')?.value||'✨',layerMode:$i('kw-layer-mode')?.value||'custom',mask:$i('kw-mask')?.value||'soft',width:$i('kw-width')?.value||180,height:$i('kw-height')?.value||180}));}else playAnim(S.kwAnims[i]);}
+function checkKwAnims(text,role){if(!S.kwAnimEnabled||!S.kwAnims.length)return;for(const raw of S.kwAnims){const item=normalizeKwAnim(raw);const tb=item.triggerBy||'both';if(tb==='user'&&role!=='user')continue;if(tb==='ai'&&role!=='ai')continue;if(item.keyword&&text.includes(item.keyword))setTimeout(()=>playAnim(item),350);}}
+function playAnim(raw){
+  if(!raw)return;const item=normalizeKwAnim(raw),overlay=$i('anim-overlay'),canvas=$i('anim-canvas'),gifWrap=$i('anim-gif-wrap'),dur=item.duration*1000;
+  overlay.classList.add('active'); canvas.width=window.innerWidth;canvas.height=window.innerHeight;
+  if(item.type==='gif'&&item.gifData&&(item.layerMode==='custom'||item.layerMode==='both')){overlay.classList.add('has-bd');const layer=document.createElement('div');layer.className=`anim-media-layer kw-mask-${item.mask}`;layer.style.cssText=`width:${item.width}px;height:${item.height}px;animation-duration:${item.duration}s`;layer.innerHTML=`<img src="${item.gifData}" alt="关键词动画">`;gifWrap.appendChild(layer);setTimeout(()=>layer.remove(),dur+450);}else if(item.type!=='gif'){startParticle(item.type,canvas,dur);}
+  if(item.layerMode==='emoji'||item.layerMode==='both'){const em=document.createElement('div');em.className='anim-emoji-layer';em.style.animationDuration=item.duration+'s';em.textContent=item.emoji||'✨';gifWrap.appendChild(em);setTimeout(()=>em.remove(),dur+450);}
+  clearTimeout(S._animTimeout);S._animTimeout=setTimeout(()=>{if(!gifWrap.children.length)stopAnim();},dur+700);
+}
 function startParticle(type,canvas,dur){const ctx=canvas.getContext('2d');if(type==='confetti')spawnConfetti(dur);else if(type==='fireworks')animFW(ctx,canvas,dur);else if(type==='snow')spawnSnow(dur);else if(type==='petals')spawnPetals(dur);else if(type==='hearts')spawnHearts(dur);else if(type==='stars')spawnStars(dur);else if(type==='meteors')spawnMeteors(dur);else if(type==='birthday'){spawnConfetti(dur);spawnBirthday(dur);}else if(type==='lightning')animLightning(canvas,ctx,dur);else if(type==='cats')spawnCats(dur);else if(type==='bubbles')animBubbles(ctx,canvas,dur);}
 function spawnEl(cls,style,text,lifeMs){const el=document.createElement('div');el.className=cls;el.style.cssText=style+'position:fixed;z-index:9001;pointer-events:none;';if(text)el.textContent=text;document.body.appendChild(el);setTimeout(()=>el.remove(),lifeMs);}
 const CCOLORS=['#ff8fab','#ffb3c6','#ffd6e0','#ff6b6b','#ffa94d','#51cf66','#339af0','#cc5de8','#ffe066','#74c0fc'];
@@ -1808,7 +1913,7 @@ function fmtDate(ts){if(!ts)return'今天';const d=new Date(ts),n=new Date();if(
 function fmtTime(ts){if(!ts)return'';const d=new Date(ts);return`${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;}
 function fmtTimeFull(ts){return ts?`${fmtDate(ts)} ${fmtTime(ts)}`:''}
 function fmtText(t){return esc(t).replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>').replace(/\*(.*?)\*/g,'<em>$1</em>').replace(/`([^`]+)`/g,'<code style="background:rgba(0,0,0,.08);padding:1px 5px;border-radius:4px;font-family:monospace">$1</code>').replace(/\n/g,'<br>');}
-function onKey(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMsg();}}
+function onKey(e){if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)){e.preventDefault();sendMsg();}}
 function autoH(el){el.style.height='auto';el.style.height=Math.min(el.scrollHeight,100)+'px';}
 function toast(msg,dur=2000){const t=$i('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),dur);}
 function closeModal(id){$i(id).classList.remove('show');}
@@ -1953,6 +2058,12 @@ function updateAuthUI(user) {
     btn.onclick = user ? () => syncToCloud() : () => openAuthModal();
   }
   if (ai) ai.textContent = user ? ('已登录：' + user.email) : '未登录';
+  if (user && sessionStorage.getItem('raimosWelcomeShownAfterLogin') !== user.uid) {
+    sessionStorage.setItem('raimosWelcomeShownAfterLogin', user.uid);
+    S.currentChat = null; S.chatListContactFilter = null;
+    switchPage('chat-page'); showWelcome(); renderChatList();
+    toast('欢迎回来，先选择一个聊天吧');
+  }
 }
 
 async function syncToCloud() {

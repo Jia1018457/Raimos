@@ -498,6 +498,17 @@ function showWelcome() {
   ca.appendChild(div);
   $i('hdr-name').textContent = '选择或新建对话';
 }
+
+function openWelcomeFromLogo(){
+  S.currentChat = null;
+  S.currentContact = null;
+  S.chatListContactFilter = null;
+  switchPage('chat-page');
+  showWelcome();
+  renderChatList();
+  if (typeof closeSidebar === 'function') closeSidebar();
+}
+
 function updateWelcome() {
   const s = S.settings;
   const ic = $i('welcome-icon'); const tl = $i('welcome-title'); const sb = $i('welcome-sub');
@@ -1612,6 +1623,7 @@ function uploadAvatar(input){const file=input.files[0];if(!file)return;const fr=
 //  SETTINGS UI
 // ══════════════════════════════
 function buildSettingsUI() {
+  const pageEl=$i('settings-page'); if(pageEl)pageEl.classList.remove('settings-subpage-open');
   const wrap = $i('settings-wrap'); if (!wrap) return;
   const s = S.settings;
   wrap.innerHTML = `
@@ -1738,12 +1750,13 @@ function initSettingsSubpages(){
 }
 function openSettingsSection(section,title,home){
   const wrap=$i('settings-wrap'); if(!wrap)return;
+  $i('settings-page')?.classList.add('settings-subpage-open');
   home.hidden=true; section.hidden=false;
   let page=wrap.querySelector('.settings-subpage-shell'); if(page)page.remove();
   page=document.createElement('div'); page.className='settings-subpage-shell';
   const header=document.createElement('div'); header.className='settings-subpage-header';
   header.innerHTML=`<button type="button" class="btn-s">‹ 返回</button><h3>${esc(title)}</h3><button type="button" class="btn-p">保存本页</button>`;
-  header.querySelector('.btn-s').onclick=()=>{section.hidden=true;page.before(section);page.remove();home.hidden=false;};
+  header.querySelector('.btn-s').onclick=()=>{section.hidden=true;page.before(section);page.remove();home.hidden=false;$i('settings-page')?.classList.remove('settings-subpage-open');};
   header.querySelector('.btn-p').onclick=()=>saveAllSettings();
   section.before(page); page.append(header,section);
 }
@@ -1880,8 +1893,31 @@ function playAnim(raw){
   if(!raw)return;const item=normalizeKwAnim(raw),overlay=$i('anim-overlay'),canvas=$i('anim-canvas'),gifWrap=$i('anim-gif-wrap'),dur=item.duration*1000;
   overlay.classList.add('active'); canvas.width=window.innerWidth;canvas.height=window.innerHeight;
   if(item.type==='gif'&&item.gifData&&(item.layerMode==='custom'||item.layerMode==='both')){overlay.classList.add('has-bd');const layer=document.createElement('div');layer.className=`anim-media-layer kw-mask-${item.mask}`;layer.style.cssText=`width:${item.width}px;height:${item.height}px;animation-duration:${item.duration}s`;layer.innerHTML=`<img src="${item.gifData}" alt="关键词动画">`;gifWrap.appendChild(layer);setTimeout(()=>layer.remove(),dur+450);}else if(item.type!=='gif'){startParticle(item.type,canvas,dur);}
-  if(item.layerMode==='emoji'||item.layerMode==='both'){const em=document.createElement('div');em.className='anim-emoji-layer';em.style.animationDuration=item.duration+'s';em.textContent=item.emoji||'✨';gifWrap.appendChild(em);setTimeout(()=>em.remove(),dur+450);}
+  if(item.layerMode==='emoji'||item.layerMode==='both') spawnEmojiRain(item.emoji||'✨',dur,item.width);
   clearTimeout(S._animTimeout);S._animTimeout=setTimeout(()=>{if(!gifWrap.children.length)stopAnim();},dur+700);
+}
+function spawnEmojiRain(emoji,dur,width=180){
+  const chars=Array.from(String(emoji||'✨').trim()||'✨');
+  const count=Math.min(90,Math.max(26,Math.round((dur/1000)*12)));
+  for(let i=0;i<count;i++){
+    setTimeout(()=>{
+      const el=document.createElement('div');
+      el.className='anim-emoji-rain';
+      el.textContent=chars[i%chars.length]||'✨';
+      const size=Math.max(22,Math.min(54,Number(width)*(.14+Math.random()*.12)));
+      el.style.cssText=`left:${Math.random()*100}vw;font-size:${size}px;animation-duration:${1.8+Math.random()*1.8}s;animation-delay:${Math.random()*.12}s;`;
+      document.body.appendChild(el);
+      setTimeout(()=>el.remove(),4200);
+    },Math.random()*Math.max(300,dur*.72));
+  }
+}
+function stopAnim(){
+  if(S._animTimeout){clearTimeout(S._animTimeout);S._animTimeout=null;}
+  if(S._animRaf){cancelAnimationFrame(S._animRaf);S._animRaf=null;}
+  const o=$i('anim-overlay'); if(o)o.classList.remove('active','has-bd');
+  const wrap=$i('anim-gif-wrap'); if(wrap)wrap.innerHTML='';
+  document.querySelectorAll('.cfp,.snf,.ptl,.hrtf,.strf,.mtrf,.ckb,.catr,.anim-emoji-rain').forEach(el=>el.remove());
+  const c=$i('anim-canvas'); if(c)c.getContext('2d').clearRect(0,0,c.width,c.height);
 }
 function startParticle(type,canvas,dur){const ctx=canvas.getContext('2d');if(type==='confetti')spawnConfetti(dur);else if(type==='fireworks')animFW(ctx,canvas,dur);else if(type==='snow')spawnSnow(dur);else if(type==='petals')spawnPetals(dur);else if(type==='hearts')spawnHearts(dur);else if(type==='stars')spawnStars(dur);else if(type==='meteors')spawnMeteors(dur);else if(type==='birthday'){spawnConfetti(dur);spawnBirthday(dur);}else if(type==='lightning')animLightning(canvas,ctx,dur);else if(type==='cats')spawnCats(dur);else if(type==='bubbles')animBubbles(ctx,canvas,dur);}
 function spawnEl(cls,style,text,lifeMs){const el=document.createElement('div');el.className=cls;el.style.cssText=style+'position:fixed;z-index:9001;pointer-events:none;';if(text)el.textContent=text;document.body.appendChild(el);setTimeout(()=>el.remove(),lifeMs);}

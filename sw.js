@@ -1,4 +1,4 @@
-const CACHE_NAME = 'raimos-v3-settings-anim-v1';
+const CACHE_NAME = 'raimos-v3-settings-anim-v2';
 const ASSETS = [
   './',
   './index.html',

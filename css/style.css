@@ -548,3 +548,19 @@ body{font-family:'Nunito','Noto Sans SC',sans-serif;background:var(--bg);color:v
 .chat-scope-banner{display:flex;align-items:center;justify-content:space-between;gap:6px;margin:4px 5px 8px;padding:8px 9px;border-radius:11px;background:var(--hover);font-size:11.5px;color:var(--text2);font-weight:700;}
 .chat-scope-banner button{border:0;border-radius:999px;background:var(--accent3);color:var(--accent-dark);font-size:11px;font-weight:800;padding:4px 8px;cursor:pointer;}
 .welcome-action{margin-top:6px;border:0;border-radius:999px;background:linear-gradient(135deg,var(--accent),var(--accent-dark));color:#fff;font-weight:800;font-family:inherit;padding:9px 16px;cursor:pointer;box-shadow:0 8px 24px var(--shadow2);}
+
+/* REFINED SETTINGS PAGE + ANIMATION FIXES */
+.nav-logo{width:38px;height:38px;border:0;border-radius:14px;background:linear-gradient(135deg,var(--accent3),transparent);display:flex;align-items:center;justify-content:center;cursor:pointer;font-family:inherit;}
+.nav-logo:hover{background:var(--hover);transform:translateY(-1px);}
+#settings-page.settings-subpage-open>.page-header{display:none;}
+#settings-page.settings-subpage-open .s-wrap{max-width:none;width:100%;height:100%;padding:0;margin:0;}
+.settings-home{max-width:520px;width:100%;margin:0 auto;padding:14px;}
+.settings-subpage-shell{height:100%;background:var(--bg2);overflow-y:auto;animation:settingsSlideIn .22s ease-out;}
+.settings-subpage-header{top:0;padding:12px 14px;border-bottom:1.5px solid var(--border);background:color-mix(in srgb,var(--bg3) 94%,transparent);}
+.settings-subpage-shell>.s-section{max-width:560px;width:calc(100% - 28px);margin:14px auto;border-radius:18px;}
+@keyframes settingsSlideIn{from{opacity:.2;transform:translateX(24px)}to{opacity:1;transform:translateX(0)}}
+.kw-mask-none,.kw-mask-soft,.kw-mask-blob,.kw-mask-vignette,.kw-mask-sparkle{overflow:hidden;}
+#anim-gif-wrap .anim-media-layer img{max-width:none;max-height:none;width:100%;height:100%;border-radius:0;box-shadow:none;object-fit:contain;}
+.anim-emoji-rain{position:fixed;top:-60px;z-index:9002;pointer-events:none;filter:drop-shadow(0 0 10px rgba(255,255,255,.75));animation:emojiRain linear forwards;}
+@keyframes emojiRain{0%{opacity:0;transform:translateY(-10vh) rotate(0deg) scale(.75)}12%{opacity:1}100%{opacity:0;transform:translateY(112vh) rotate(360deg) scale(1.12)}}
+@media (max-width: 768px){.nav-logo{display:none;}}

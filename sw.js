@@ -1,8 +1,11 @@
-const CACHE_NAME = 'kelivo-v1';
+const CACHE_NAME = 'raimos-v3-settings-anim-v1';
 const ASSETS = [
   './',
   './index.html',
   './manifest.json',
+  './css/style.css',
+  './js/db.js',
+  './js/app.js',
 ];
 
 self.addEventListener('install', e => {

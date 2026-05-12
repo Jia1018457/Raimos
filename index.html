@@ -22,8 +22,8 @@
   <button class="nav-tab" data-page="moments-page" onclick="switchPage('moments-page')" title="朋友圈">🌸</button>
   <button class="nav-tab" data-page="companion-page" onclick="switchPage('companion-page')" title="陪伴">💗</button>
   <button class="nav-tab" data-page="memory-page" onclick="switchPage('memory-page')" title="记忆库">🧠</button>
-  <button class="nav-tab" data-page="settings-page" onclick="switchPage('settings-page')" title="设置">⚙️</button>
   <button class="nav-tab" data-page="wardrobe-page" onclick="switchPage('wardrobe-page')" title="换装衣柜">👗</button>
+  <button class="nav-tab" data-page="settings-page" onclick="switchPage('settings-page')" title="设置">⚙️</button>
   <div class="nav-spacer"></div>
   <button class="nav-tab" id="nav-user-av" onclick="openUserModal()" title="我的账号" style="font-size:22px">😊</button>
 </div>
@@ -149,6 +149,8 @@
       <button class="btn-p" id="comp-btn-start" onclick="companionToggleRun()">▶︎ 开始</button>
       <button class="btn-s" onclick="companionReset()">↺ 重置</button>
       <button class="btn-s" onclick="companionEnterImmersive()" title="全屏沉浸模式">⛶ 全屏</button>
+      <button class="btn-s" onclick="companionEnterPiP()" title="画中画·悬浮小窗">⧉ 画中画</button>
+      <button class="btn-s" id="comp-btn-mini" onclick="companionToggleMini()" title="小窗模式">▭ 小窗</button>
     </div>
   </div>
 
@@ -225,6 +227,11 @@
           <div class="comp-row" id="comp-char-upload-row" style="display:none">
             <label>上传</label>
             <button class="btn-s" onclick="companionPickMedia('char')">上传图片/视频</button>
+          </div>
+          <div class="comp-row">
+            <label>大小</label>
+            <input id="comp-char-size" type="range" min="20" max="100" value="40" oninput="companionApplyCharSize(this.value)" />
+            <span id="comp-char-size-val" style="font-size:11px;color:var(--text3);min-width:28px">40%</span>
           </div>
         </div>
       </div>
@@ -341,6 +348,19 @@
 </div>
 
 </div><!-- #pages -->
+
+<!-- COMPANION MINI WINDOW (floating overlay) -->
+<div id="comp-mini-win" style="display:none">
+  <div id="comp-mini-header">
+    <span id="comp-mini-title">💗 陪伴</span>
+    <div style="display:flex;gap:4px">
+      <button onclick="companionSpeakNow()" title="说一句">💬</button>
+      <button id="comp-mini-start" onclick="companionToggleRun()">▶︎</button>
+      <button onclick="companionToggleMini()" title="关闭小窗">✕</button>
+    </div>
+  </div>
+  <div id="comp-mini-stage"></div>
+</div>
 
 <!-- EMOJI PICKER -->
 <div id="emoji-picker">

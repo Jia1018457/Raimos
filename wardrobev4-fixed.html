@@ -252,6 +252,7 @@ body{font-family:'PingFang SC','Hiragino Sans',sans-serif;background:#FFF5F9;col
   <div class="card">
     <div class="ct">点击衣物添加到搭配</div>
     <div class="cr" id="cf-d"></div>
+    <div class="cr" id="cf-d-sub" style="display:none;margin-top:-4px;padding-left:8px;border-left:2px solid #F48FB1"></div>
     <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-bottom:5px">
       <span style="font-size:10px;color:#9B7B9B;flex-shrink:0">季节</span>
       <div class="cr" id="cf-d-season" style="margin-bottom:0;flex-shrink:0"></div>
@@ -272,6 +273,7 @@ body{font-family:'PingFang SC','Hiragino Sans',sans-serif;background:#FFF5F9;col
     </div>
   </div>
   <div class="cr" id="cf-c"></div>
+  <div class="cr" id="cf-c-sub" style="display:none;margin-top:-4px;padding-left:8px;border-left:2px solid #F48FB1"></div>
   <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-bottom:5px">
     <span style="font-size:10px;color:#9B7B9B;flex-shrink:0">季节</span>
     <div class="cr" id="cf-c-season" style="margin-bottom:0;flex-shrink:0"></div>
@@ -310,10 +312,9 @@ body{font-family:'PingFang SC','Hiragino Sans',sans-serif;background:#FFF5F9;col
       <label class="flb">分类</label>
       <select class="fi" id="inp-c">
         <option>上衣</option><option>套装</option><option>下装</option><option>裙子</option><option>裤子</option>
-        <option>连衣裙</option><option>外套</option><option>内搭</option><option>衬裙</option><option>外层罩裙</option>
-        <option>袜子</option><option>鞋子</option><option>发型</option>
-        <option>头饰</option><option>耳饰</option><option>颈饰</option><option>面部装饰</option>
-        <option>首饰</option><option>腰带</option><option>包</option><option>其他</option>
+        <option>连衣裙</option><option>外套</option><option>袜子</option><option>鞋子</option><option>发型</option>
+        <option>饰品</option><option>头饰</option><option>颈饰</option><option>耳饰</option>
+        <option>面部装饰</option><option>腰带</option><option>包</option><option>其他</option>
       </select>
     </div>
     <div class="fr"><label class="flb">标签（逗号分隔）</label><input class="fi" id="inp-t" placeholder="例：蓝色, lolita, 春秋"></div>
@@ -368,8 +369,9 @@ body{font-family:'PingFang SC','Hiragino Sans',sans-serif;background:#FFF5F9;col
         <button class="bsm" onclick="selFlipV()">↕翻转</button>
         <button class="bsm" onclick="selCopy()">📋复制</button>
         <button class="bsm" onclick="selToStamp()">🔖存印章</button>
+        <button class="bsm" onclick="selScalePrompt()">↕↔缩放</button>
         <button class="bsm" onclick="selClear()" style="color:#E57373">🗑️删除</button>
-        <button class="bsm" id="sel-move-hint" style="color:#9B7B9B;font-size:10px">拖动可移动选区</button>
+        <button class="bsm" id="sel-move-hint" style="color:#9B7B9B;font-size:10px">拖动移动·拉圆点缩放</button>
       </div>
       <!-- Row 5: Stamp -->
       <div class="tr2" id="stamp-r" style="display:none">
@@ -470,10 +472,9 @@ body{font-family:'PingFang SC','Hiragino Sans',sans-serif;background:#FFF5F9;col
       <label class="flb">分类</label>
       <select class="fi" id="em-c">
         <option>上衣</option><option>套装</option><option>下装</option><option>裙子</option><option>裤子</option>
-        <option>连衣裙</option><option>外套</option><option>内搭</option><option>衬裙</option><option>外层罩裙</option>
-        <option>袜子</option><option>鞋子</option><option>发型</option>
-        <option>头饰</option><option>耳饰</option><option>颈饰</option><option>面部装饰</option>
-        <option>首饰</option><option>腰带</option><option>包</option><option>其他</option>
+        <option>连衣裙</option><option>外套</option><option>袜子</option><option>鞋子</option><option>发型</option>
+        <option>饰品</option><option>头饰</option><option>颈饰</option><option>耳饰</option>
+        <option>面部装饰</option><option>腰带</option><option>包</option><option>其他</option>
       </select>
     </div>
     <div class="fr"><label class="flb">标签（逗号分隔）</label><input class="fi" id="em-t" placeholder="例：蓝色, lolita"></div>
@@ -549,10 +550,9 @@ body{font-family:'PingFang SC','Hiragino Sans',sans-serif;background:#FFF5F9;col
       <label class="flb">分类</label>
       <select class="fi" id="iim-c">
         <option>上衣</option><option>套装</option><option>下装</option><option>裙子</option><option>裤子</option>
-        <option>连衣裙</option><option>外套</option><option>内搭</option><option>衬裙</option><option>外层罩裙</option>
-        <option>袜子</option><option>鞋子</option><option>发型</option>
-        <option>头饰</option><option>耳饰</option><option>颈饰</option><option>面部装饰</option>
-        <option>首饰</option><option>腰带</option><option>包</option><option>其他</option>
+        <option>连衣裙</option><option>外套</option><option>袜子</option><option>鞋子</option><option>发型</option>
+        <option>饰品</option><option>头饰</option><option>颈饰</option><option>耳饰</option>
+        <option>面部装饰</option><option>腰带</option><option>包</option><option>其他</option>
       </select>
     </div>
     <div class="fr"><label class="flb">标签</label><input class="fi" id="iim-t" placeholder="ai生成, 蓝色 等"></div>
@@ -578,7 +578,10 @@ body{font-family:'PingFang SC','Hiragino Sans',sans-serif;background:#FFF5F9;col
 // ═══════════════════════════════════════
 const COLS=48,ROWS=80,CELL=8;  // ROWS=80: top 16 rows = hair zone
 const HAIR_ROWS=16; // rows reserved for hair at top
-const CATS=['套装','上衣','下装','裙子','裤子','连衣裙','外套','内搭','衬裙','外层罩裙','袜子','鞋子','发型','头饰','耳饰','颈饰','面部装饰','首饰','腰带','包','其他'];
+const CATS=['套装','上衣','下装','连衣裙','外套','袜子','鞋子','发型','饰品','其他'];
+const CAT_CHILDREN={下装:['裙子','裤子'],饰品:['头饰','颈饰','耳饰','面部装饰','腰带','包']};
+// All precise categories that items can be saved with (for dropdowns)
+const CATS_PRECISE=['套装','上衣','下装','裙子','裤子','连衣裙','外套','袜子','鞋子','发型','饰品','头饰','颈饰','耳饰','面部装饰','腰带','包','其他'];
 const SEASONS=['春秋','夏','冬'];
 const GENDERS=['女','男','中性'];
 const SK='#F5CBA7',HR='#4A2C2A',AC='#B5D5F5';
@@ -630,7 +633,8 @@ let uLayers=[],aiMap={};
 // 衣物在“人物”上的位置/大小记忆：优先 avatarId|itemId，其次 default|itemId
 let layerTF=(()=>{try{return JSON.parse(localStorage.getItem('rLayerTF')||'{}');}catch(e){return {};}})();
 let curTgt='user';
-let fdress='全部',fcloset='全部';
+let fdress='全部',fdressSub='全部';
+let fcloset='全部',fclosetSub='全部';
 let seasonFilter='全部',genderFilter='全部';
 let closetSeasonFilter='全部',closetGenderFilter='全部';
 let uAvatars=[
@@ -854,18 +858,33 @@ function clrLayers(){sL([]);rLL();rWQ();}
 // ═══════════════════════════════════════
 // WARDROBE
 // ═══════════════════════════════════════
+function catMatch(itemCat,filterCat,subFilter){
+  if(filterCat==='全部')return true;
+  if(subFilter&&subFilter!=='全部')return itemCat===subFilter;
+  const children=CAT_CHILDREN[filterCat]||[];
+  return itemCat===filterCat||children.includes(itemCat);
+}
 function catF(id,gF,sF){const el=document.getElementById(id);if(!el)return;el.innerHTML=['全部',...CATS].map(c=>`<button class="cb${gF()===c?' on':''}" onclick="${sF}('${c}')">${c}</button>`).join('');}
+function renderSubFilter(id,parent,subGetter,subSetter){
+  const el=document.getElementById(id);if(!el)return;
+  const children=CAT_CHILDREN[parent]||[];
+  if(!children.length||parent==='全部'){el.style.display='none';return;}
+  el.style.display='';
+  el.innerHTML=['全部',...children].map(c=>`<button class="cb${subGetter()===c?' on':''}" onclick="${subSetter}('${c}')">${c}</button>`).join('');
+}
 function renderSeasonFilter(id,getter,setter){const el=document.getElementById(id);if(!el)return;el.innerHTML=['全部',...SEASONS].map(s=>`<button class="cb${getter()===s?' on':''}" onclick="${setter}('${s}')">${s}</button>`).join('');}
 function renderGenderFilter(id,getter,setter){const el=document.getElementById(id);if(!el)return;el.innerHTML=['全部',...GENDERS].map(g=>`<button class="cb${getter()===g?' on':''}" onclick="${setter}('${g}')">${g}</button>`).join('');}
-function sfd(c){fdress=c;rWQ();}
+function sfd(c){fdress=c;fdressSub='全部';rWQ();}
+function sfdSub(c){fdressSub=c;rWQ();}
 function setSF(s){seasonFilter=s;rWQ();}
 function setGF(g){genderFilter=g;rWQ();}
 function rWQ(){
   catF('cf-d',()=>fdress,'sfd');
+  renderSubFilter('cf-d-sub',fdress,()=>fdressSub,'sfdSub');
   renderSeasonFilter('cf-d-season',()=>seasonFilter,'setSF');
   renderGenderFilter('cf-d-gender',()=>genderFilter,'setGF');
   const ls=gL();
-  let items=fdress==='全部'?wardrobe:wardrobe.filter(i=>i.category===fdress);
+  let items=wardrobe.filter(i=>catMatch(i.category,fdress,fdressSub));
   if(seasonFilter!=='全部')items=items.filter(i=>(i.tags||[]).some(t=>t===seasonFilter||t.includes(seasonFilter)));
   if(genderFilter!=='全部')items=items.filter(i=>(i.tags||[]).some(t=>t===genderFilter));
   document.getElementById('wq').innerHTML=items.map(item=>{
@@ -876,15 +895,17 @@ function rWQ(){
   }).join('');
 }
 
-function sfc(c){fcloset=c;rCloset();}
+function sfc(c){fcloset=c;fclosetSub='全部';rCloset();}
+function sfcSub(c){fclosetSub=c;rCloset();}
 function setCSF(s){closetSeasonFilter=s;rCloset();}
 function setCGF(g){closetGenderFilter=g;rCloset();}
 function rCloset(){
   catF('cf-c',()=>fcloset,'sfc');
+  renderSubFilter('cf-c-sub',fcloset,()=>fclosetSub,'sfcSub');
   renderSeasonFilter('cf-c-season',()=>closetSeasonFilter,'setCSF');
   renderGenderFilter('cf-c-gender',()=>closetGenderFilter,'setCGF');
   document.getElementById('ccount').textContent=`(${wardrobe.length}件)`;
-  let items=fcloset==='全部'?wardrobe:wardrobe.filter(i=>i.category===fcloset);
+  let items=wardrobe.filter(i=>catMatch(i.category,fcloset,fclosetSub));
   if(closetSeasonFilter!=='全部')items=items.filter(i=>(i.tags||[]).some(t=>t===closetSeasonFilter||t.includes(closetSeasonFilter)));
   if(closetGenderFilter!=='全部')items=items.filter(i=>(i.tags||[]).some(t=>t===closetGenderFilter));
   document.getElementById('cg').innerHTML=items.map(item=>`
@@ -1229,10 +1250,13 @@ let rawPts=[],lastPts=[];
 // selection
 let selStart=null,selEnd=null,selHasSel=false;
 let selContent=null;
+let selBackground=null; // pix snapshot with selection cut out (used during drag)
 let selOffset={x:0,y:0};
 let isDragSel=false,selDragStart=null;
 // line/geo/poly
 let shpStart=null,shpSnap=null;
+// resize
+let isResizeSel=false,resizeHandle=null,resizeOrigSel=null;
 // lasso
 let lassoPath=[];
 let lassoClosedPath=[]; // stored closed path for redrawing after finLasso
@@ -1263,7 +1287,7 @@ function setupCvs(){
 function openCvs(){
   document.getElementById('df').style.display='none';
   document.getElementById('cvs-sec').classList.add('on');
-  setupCvs();pix.fill('');undo=[];rawPts=[];lastPts=[];selStart=null;shpStart=null;lassoPath=[];lassoClosedPath=[];lassoPix=null;pendingGeo=null;
+  setupCvs();pix.fill('');undo=[];rawPts=[];lastPts=[];selStart=null;selContent=null;selBackground=null;selHasSel=false;isResizeSel=false;resizeHandle=null;resizeOrigSel=null;shpStart=null;lassoPath=[];lassoClosedPath=[];lassoPix=null;pendingGeo=null;
   initPal();setTool('pen');
   syncStampsFromWardrobe();
   if(localStorage.getItem('rDraft'))document.getElementById('load-btn').style.display='';
@@ -1332,6 +1356,15 @@ function attachCvs(){
 
   cv.onmousedown=cv.ontouchstart=e=>{
     e.preventDefault();isDrawing=true;const p=pos(e);
+    // Check resize handles first (when selection active and on sel/csel/lasso tool)
+    if(selHasSel&&(curTool2==='sel'||curTool2==='csel'||curTool2==='lasso')){
+      const handle=nearResizeHandle(p.px,p.py,sc());
+      if(handle){
+        isResizeSel=true;resizeHandle=handle;
+        resizeOrigSel={b:getBounds(),selStart:{...selStart},selEnd:{...selEnd}};
+        return;
+      }
+    }
     // Pending geo drag takes priority
     if(pendingGeo){
       const inside=p.col>=pendingGeo.ox&&p.col<=(pendingGeo.ox+pendingGeo.w-1)&&p.row>=pendingGeo.oy&&p.row<=(pendingGeo.oy+pendingGeo.h-1);
@@ -1344,13 +1377,24 @@ function attachCvs(){
     if(curTool2==='fill'){pushU();doFill(p.col,p.row,curC);dCvs();return;}
     if(curTool2==='sel'||curTool2==='csel'){
       if(selHasSel&&!inSel(p.col,p.row)){selHasSel=false;selContent=null;lassoPix=null;lassoClosedPath=[];dSel();isDrawing=false;return;}
-      if(selHasSel&&inSel(p.col,p.row)){isDragSel=true;selDragStart={col:p.col,row:p.row};selContent=getSelPixels();return;}
-      selStart={...p};selEnd={...p};selHasSel=false;selContent=null;lassoPix=null;lassoClosedPath=[];return;
+      if(selHasSel&&inSel(p.col,p.row)){
+        isDragSel=true;selDragStart={col:p.col,row:p.row};
+        selContent=getSelPixels();
+        // Build background: current pix with selection pixels cut out
+        selBackground=[...pix];
+        selContent.data.forEach(({c,r,inSel,v})=>{if(inSel&&v)selBackground[gi(c,r)]='';});
+        return;
+      }
+      selStart={...p};selEnd={...p};selHasSel=false;selContent=null;selBackground=null;isResizeSel=false;resizeHandle=null;resizeOrigSel=null;lassoPix=null;lassoClosedPath=[];return;
     }
     if(curTool2==='lasso'){
       // 允许对已完成的套索选区进行拖动移动
       if(selHasSel&&lassoPix&&lassoPix.size>0&&inSel(p.col,p.row)){
-        isDragSel=true;selDragStart={col:p.col,row:p.row};selContent=getSelPixels();return;
+        isDragSel=true;selDragStart={col:p.col,row:p.row};
+        selContent=getSelPixels();
+        selBackground=[...pix];
+        selContent.data.forEach(({c,r,inSel,v})=>{if(inSel&&v)selBackground[gi(c,r)]='';});
+        return;
       }
       if(selHasSel&&(!lassoPix||lassoPix.size===0)&&!inSel(p.col,p.row)){selHasSel=false;selContent=null;lassoPix=null;lassoClosedPath=[];dSel();isDrawing=false;return;}
       lassoPath=[p];lassoPix=null;lassoClosedPath=[];return;
@@ -1361,6 +1405,10 @@ function attachCvs(){
 
   cv.onmousemove=cv.ontouchmove=e=>{
     e.preventDefault();if(!isDrawing)return;const p=pos(e);
+    // Resize selection handle drag
+    if(isResizeSel&&resizeHandle&&resizeOrigSel){
+      _applyResizeHandle(p.col,p.row);dSel();return;
+    }
     // Pending geo move
     if(pendingGeo&&pendingGeoDrag){movePendingGeo(p.col,p.row);return;}
     if(curTool2==='stamp'){return;} // 印章改为“点一下放置”
@@ -1368,7 +1416,10 @@ function attachCvs(){
       if(isDragSel){moveSel(p.col,p.row);return;}
       selEnd={...p};dSel();return;
     }
-    if(curTool2==='lasso'){lassoPath.push(p);dLasso();return;}
+    if(curTool2==='lasso'){
+      if(isDragSel){moveSel(p.col,p.row);return;}
+      lassoPath.push(p);dLasso();return;
+    }
     if(curTool2==='line'&&shpStart){prvLine(shpStart,p);return;}
     if(curTool2==='geo'&&shpStart){prvGeo(shpStart,p);return;}
     if(curTool2==='poly'&&shpStart){prvPoly(shpStart,p);return;}
@@ -1378,6 +1429,13 @@ function attachCvs(){
   cv.onmouseup=cv.ontouchend=e=>{
     if(!isDrawing){isDrawing=false;return;}isDrawing=false;
     const p=posE(e);
+    // Commit resize
+    if(isResizeSel){
+      isResizeSel=false;
+      _commitResize();
+      resizeHandle=null;resizeOrigSel=null;
+      return;
+    }
     // End pending geo drag
     if(pendingGeoDrag){pendingGeoDrag=false;pendingGeoDragStart=null;return;}
     if(isDragSel){isDragSel=false;return;}
@@ -1447,14 +1505,15 @@ function buildPendingGeo(x0,y0,x1,y1){
   const savedPix=pix;
   pix=tmpPix;
   dGeo(x0,y0,x1,y1);
-  // Extract relative data
+  // Extract relative data - include ALL pixels the shape colored (not just changed ones)
+  // so that overlapping same-colored content also moves correctly with the shape
   const mnX=Math.min(x0,x1),mxX=Math.max(x0,x1);
   const mnY=Math.min(y0,y1),mxY=Math.max(y0,y1);
   const relData=[];
   for(let r=Math.max(0,mnY);r<=Math.min(ROWS-1,mxY);r++)
     for(let c=Math.max(0,mnX);c<=Math.min(COLS-1,mxX);c++){
       const v=pix[gi(c,r)];
-      if(v&&v!==snapPix[gi(c,r)])relData.push({dc:c-mnX,dr:r-mnY,color:v});
+      if(v===curC)relData.push({dc:c-mnX,dr:r-mnY,color:v});
     }
   pix=[...snapPix]; // restore
   pendingGeo={snapPix,relData,ox:mnX,oy:mnY,w:mxX-mnX+1,h:mxY-mnY+1};
@@ -1464,12 +1523,13 @@ function buildPendingGeo(x0,y0,x1,y1){
 }
 
 function buildPendingFromDiff(snapPix,tmpPix){
-  // 从 tmpPix 与 snapPix 的差异中提取一个可移动的 pendingGeo（用于多边形等）
+  // Extract all pixels that the shape colored (tmpPix[i]===curC), regardless of
+  // whether they match snapPix, so overlapping same-colored content moves with shape
   let mnC=COLS, mnR=ROWS, mxC=-1, mxR=-1;
   const diffs=[];
   for(let i=0;i<COLS*ROWS;i++){
     const v=tmpPix[i];
-    if(v && v!==snapPix[i]){
+    if(v===curC){
       const c=i%COLS,r=Math.floor(i/COLS);
       diffs.push({c,r,color:v});
       if(c<mnC)mnC=c;if(r<mnR)mnR=r;if(c>mxC)mxC=c;if(r>mxR)mxR=r;
@@ -1604,6 +1664,27 @@ function drawPoly2(pts,fill){
 }
 
 // ── SELECTION ──
+function _selHandlePos(b){
+  // Returns 4 corner + 4 edge handle positions in CANVAS pixel coords
+  const x0=b.c0*CELL,y0=b.r0*CELL,x1=(b.c1+1)*CELL,y1=(b.r1+1)*CELL;
+  const mx=(x0+x1)/2,my=(y0+y1)/2;
+  return[
+    {name:'nw',cx:x0,cy:y0},{name:'n',cx:mx,cy:y0},{name:'ne',cx:x1,cy:y0},
+    {name:'e', cx:x1,cy:my},
+    {name:'se',cx:x1,cy:y1},{name:'s',cx:mx,cy:y1},{name:'sw',cx:x0,cy:y1},
+    {name:'w', cx:x0,cy:my},
+  ];
+}
+function nearResizeHandle(px,py,scale){
+  if(!selHasSel)return null;
+  const b=getBounds();if(!b)return null;
+  const threshold=8/scale; // 8 canvas-pixels → cell units
+  const handles=_selHandlePos(b);
+  for(const h of handles){
+    if(Math.abs(px-h.cx)<threshold&&Math.abs(py-h.cy)<threshold)return h.name;
+  }
+  return null;
+}
 function dSel(){
   const sc2el=document.getElementById('sc2');
   const ctx=sc2el.getContext('2d');ctx.clearRect(0,0,sc2el.width,sc2el.height);
@@ -1614,7 +1695,9 @@ function dSel(){
     lassoClosedPath.forEach(p=>ctx.lineTo(p.px,p.py));
     ctx.closePath();ctx.stroke();
     ctx.fillStyle='rgba(244,143,177,.08)';ctx.fill();
-    ctx.setLineDash([]);return;
+    ctx.setLineDash([]);
+    if(selHasSel){_drawSelHandles(ctx);}
+    return;
   }
   if(!selStart||!selEnd)return;
   if(curTool2==='csel'){
@@ -1631,6 +1714,59 @@ function dSel(){
     ctx.fillStyle='rgba(244,143,177,.1)';ctx.fillRect(x,y,w,h2);
     ctx.setLineDash([]);
   }
+  if(selHasSel){_drawSelHandles(ctx);}
+}
+function _drawSelHandles(ctx){
+  const b=getBounds();if(!b)return;
+  const handles=_selHandlePos(b);
+  handles.forEach(({cx,cy})=>{
+    ctx.fillStyle='white';ctx.strokeStyle='#F48FB1';ctx.lineWidth=1.5;
+    ctx.beginPath();ctx.arc(cx,cy,4,0,Math.PI*2);ctx.fill();ctx.stroke();
+  });
+}
+function _applyResizeHandle(col,row){
+  // Adjust selStart/selEnd based on which handle is being dragged
+  const ob=resizeOrigSel.b;
+  const h=resizeHandle;
+  let c0=ob.c0,r0=ob.r0,c1=ob.c1,r1=ob.r1;
+  // Constrain to canvas
+  const cCol=Math.max(0,Math.min(COLS-1,col));
+  const cRow=Math.max(0,Math.min(ROWS-1,row));
+  if(h==='nw'||h==='n'||h==='ne'){r0=Math.min(cRow,r1-1);}
+  if(h==='sw'||h==='s'||h==='se'){r1=Math.max(cRow,r0+1);}
+  if(h==='nw'||h==='w'||h==='sw'){c0=Math.min(cCol,c1-1);}
+  if(h==='ne'||h==='e'||h==='se'){c1=Math.max(cCol,c0+1);}
+  selStart={px:c0*CELL,py:r0*CELL};
+  selEnd={px:(c1+1)*CELL,py:(r1+1)*CELL};
+}
+function _commitResize(){
+  // Scale the pixel content from original bounds to new bounds
+  const nb=getBounds();if(!nb)return;
+  const ob=resizeOrigSel.b;
+  if(ob.c0===nb.c0&&ob.r0===nb.r0&&ob.c1===nb.c1&&ob.r1===nb.r1)return;
+  const{data}=getSelPixels();
+  const selPix=data.filter(d=>d.inSel&&d.v);
+  if(!selPix.length)return;
+  pushU();
+  // Clear original area
+  selPix.forEach(({c,r})=>pix[gi(c,r)]='');
+  const ow=ob.c1-ob.c0+1,oh=ob.r1-ob.r0+1;
+  const nw=nb.c1-nb.c0+1,nh=nb.r1-nb.r0+1;
+  // Nearest-neighbour scale to new bounds
+  for(let y=0;y<nh;y++)for(let x=0;x<nw;x++){
+    const oc=ob.c0+Math.round(x/nw*(ow-1));
+    const or=ob.r0+Math.round(y/nh*(oh-1));
+    const found=selPix.find(v=>v.c===oc&&v.r===or);
+    if(found&&found.v){
+      const nc=nb.c0+x,nr=nb.r0+y;
+      if(nc>=0&&nc<COLS&&nr>=0&&nr<ROWS)pix[gi(nc,nr)]=found.v;
+    }
+  }
+  lassoPix=null;lassoClosedPath=[];
+  selContent=getSelPixels();
+  selBackground=[...pix];
+  selContent.data.forEach(({c,r,inSel,v})=>{if(inSel&&v)selBackground[gi(c,r)]='';});
+  dCvs();dSel();
 }
 function dLasso(){
   const sc2el=document.getElementById('sc2');
@@ -1691,13 +1827,12 @@ function getSelPixels(){
   return{b,data};
 }
 function moveSel(col,row){
-  if(!selDragStart||!selContent)return;
+  if(!selDragStart||!selContent||!selBackground)return;
   const dc=col-selDragStart.col,dr=row-selDragStart.row;
   if(dc===0&&dr===0)return;
-  // 用快照方式移动，避免误删其它区域
-  const snap=[...pix];
-  const next=[...snap];
-  selContent.data.forEach(({c,r,inSel,v})=>{if(inSel&&v)next[gi(c,r)]='';});
+  // Use selBackground (pix without the selection) as base so moving selection
+  // never erases content underneath it
+  const next=[...selBackground];
   selContent.data.forEach(({c,r,v,inSel})=>{
     if(!inSel||!v)return;
     const nc=c+dc,nr=r+dr;
@@ -1720,32 +1855,22 @@ function selCopy(){
   const{b,data}=getSelPixels();if(!b)return;
   const selPix=data.filter(d=>d.inSel&&d.v);
   if(!selPix.length)return;
-  // 找到不会覆盖其它像素的偏移
-  let off=2;
-  for(let tries=0;tries<10;tries++){
-    let hit=false;
-    for(const p of selPix){
-      const nc=p.c+off,nr=p.r+off;
-      if(nc<0||nc>=COLS||nr<0||nr>=ROWS)continue;
-      if(pix[gi(nc,nr)]){hit=true;break;}
-    }
-    if(!hit)break;
-    off+=2;
-  }
+  // Place copy with fixed 3-cell diagonal offset; use pushU so it's undoable
+  const off=3;
   pushU();
   selPix.forEach(({c,r,v})=>{
     const nc=c+off,nr=r+off;
     if(nc>=0&&nc<COLS&&nr>=0&&nr<ROWS)pix[gi(nc,nr)]=v;
   });
   // 复制出来的内容成为新的选区（可继续拖动/缩放/再复制）
+  lassoPix=null;lassoClosedPath=[]; // 降级为矩形选区，保证可移动
   selStart={px:(b.c0+off)*CELL,py:(b.r0+off)*CELL};
   selEnd={px:(b.c1+1+off)*CELL,py:(b.r1+1+off)*CELL};
   selHasSel=true;
-  if(lassoPix){
-    const np=new Set();lassoPix.forEach(idx=>{const c2=idx%COLS,r2=Math.floor(idx/COLS);const nc=c2+off,nr=r2+off;if(nc>=0&&nc<COLS&&nr>=0&&nr<ROWS)np.add(gi(nc,nr));});lassoPix=np;
-  }
-  if(lassoClosedPath.length){lassoClosedPath=lassoClosedPath.map(p=>({px:p.px+off*CELL,py:p.py+off*CELL}));}
   selContent=getSelPixels();
+  // Build background so user can immediately drag the copy
+  selBackground=[...pix];
+  selContent.data.forEach(({c,r,inSel,v})=>{if(inSel&&v)selBackground[gi(c,r)]='';});
   dCvs();dSel();
 }
 

@@ -2511,6 +2511,12 @@ function syncCompanionUIFromSettings() {
   const charIsUpload = (s.companionCharType || 'builtin') === 'upload';
   $i('comp-char-builtin-row') && ($i('comp-char-builtin-row').style.display = charIsUpload ? 'none' : '');
   $i('comp-char-upload-row') && ($i('comp-char-upload-row').style.display = charIsUpload ? '' : 'none');
+  // Size slider
+  const szSlider = $i('comp-char-size');
+  const szVal = Math.max(20, Math.min(100, parseInt(s.companionCharSize ?? 40, 10) || 40));
+  if (szSlider) szSlider.value = String(szVal);
+  const szLabel = $i('comp-char-size-val'); if (szLabel) szLabel.textContent = szVal + '%';
+  const char = $i('comp-char'); if (char) char.style.width = szVal + '%';
   setV('comp-bg-type', s.companionBgType || 'builtin');
   setV('comp-bg-builtin', s.companionBgBuiltin || 'bg1');
   const bgIsUpload = (s.companionBgType || 'builtin') === 'upload';
@@ -2841,14 +2847,180 @@ async function callCompanionAI() {
   } catch(e) { toast(`❌ 陪伴说话失败：${e.message}`); return ''; }
 }
 
+// ── Character Size ──
+function companionApplyCharSize(val) {
+  const char = $i('comp-char'); if (!char) return;
+  const pct = Math.max(20, Math.min(100, +val));
+  char.style.width = pct + '%';
+  const lv = $i('comp-char-size-val'); if (lv) lv.textContent = pct + '%';
+  S.settings.companionCharSize = pct;
+  saveSetting('companionCharSize', pct);
+}
+
 // ── Fullscreen Immersive Mode ──
 function companionEnterImmersive() {
   S._companion.immersive = true;
   document.body.classList.add('comp-immersive');
   updateCompanionStartBtn();
+  // Request true fullscreen (covers browser UI)
+  const el = $i('companion-page') || document.documentElement;
+  if (el.requestFullscreen) el.requestFullscreen().catch(() => {});
+  else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+  // Listen for exit via Escape
+  document.addEventListener('fullscreenchange', _companionFsChange);
+  document.addEventListener('webkitfullscreenchange', _companionFsChange);
+}
+function _companionFsChange() {
+  if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+    if (S._companion.immersive) companionExitImmersive();
+  }
 }
 function companionExitImmersive() {
   S._companion.immersive = false;
   document.body.classList.remove('comp-immersive');
   updateCompanionStartBtn();
+  if (document.exitFullscreen && document.fullscreenElement) document.exitFullscreen();
+  else if (document.webkitExitFullscreen && document.webkitFullscreenElement) document.webkitExitFullscreen();
+  document.removeEventListener('fullscreenchange', _companionFsChange);
+  document.removeEventListener('webkitfullscreenchange', _companionFsChange);
+}
+
+// ── Picture-in-Picture (Document PiP) ──
+let _pipWin = null;
+async function companionEnterPiP() {
+  // Try Document Picture-in-Picture API (Chrome 116+)
+  if (window.documentPictureInPicture) {
+    try {
+      if (_pipWin) { try { _pipWin.close(); } catch(e) {} _pipWin = null; }
+      const pipWin = await window.documentPictureInPicture.requestWindow({ width: 340, height: 280 });
+      _pipWin = pipWin;
+      // Copy styles
+      [...document.styleSheets].forEach(ss => {
+        try {
+          const link = pipWin.document.createElement('link');
+          link.rel = 'stylesheet'; link.href = ss.href || '';
+          if (ss.href) pipWin.document.head.appendChild(link);
+        } catch(e) {}
+      });
+      pipWin.document.body.style.cssText = 'margin:0;padding:0;overflow:hidden;background:#ffe6ef;font-family:inherit;';
+      // Move comp-stage into pip window
+      const stage = $i('comp-stage');
+      if (stage) {
+        pipWin.document.body.appendChild(stage);
+        stage.style.cssText = 'position:absolute;inset:0;border-radius:0;border:none;';
+      }
+      pipWin.addEventListener('pagehide', () => {
+        // Return stage to original location when PiP closes
+        const wrap = $i('comp-wrap'); const orig = $i('comp-stage');
+        if (orig && wrap) wrap.insertBefore(orig, wrap.firstChild);
+        if (orig) orig.style.cssText = '';
+        _pipWin = null;
+      });
+      toast('✅ 画中画已开启，可置顶在所有窗口前');
+      return;
+    } catch(e) { /* fall through to popup */ }
+  }
+  // Fallback: open a small popup window
+  _companionOpenPopup();
+}
+function _companionOpenPopup() {
+  const w = 340, h = 300;
+  const left = window.screen.width - w - 20;
+  const top = window.screen.height - h - 80;
+  const popup = window.open('', '_companion_pip',
+    `width=${w},height=${h},left=${left},top=${top},resizable=yes,scrollbars=no,toolbar=no,menubar=no,location=no,status=no,alwaysOnTop=yes`);
+  if (!popup) { toast('请允许弹出窗口以使用小窗功能'); return; }
+  const char = S.settings.companionCharBuiltin || '😊';
+  const bg = S.settings.companionBgBuiltin || 'bg1';
+  const bgMap = { bg1:'#FCE4EC,#F8BBD0', bg2:'#E3F2FD,#BBDEFB', bg3:'#E8F5E9,#C8E6C9', bg4:'#EDE7F6,#D1C4E9', bg5:'FFF8E1,#FFECB3' };
+  const grad = bgMap[bg] || '#FCE4EC,#F8BBD0';
+  popup.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>💗 陪伴</title>
+    <style>*{margin:0;padding:0;box-sizing:border-box;}body{background:linear-gradient(135deg,${grad});height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;font-family:sans-serif;overflow:hidden;}
+    .ch{font-size:72px;margin-bottom:10%;filter:drop-shadow(0 6px 12px rgba(0,0,0,.15));}
+    .tm{position:fixed;top:10px;right:10px;font-size:13px;font-weight:900;background:rgba(255,255,255,.8);padding:4px 8px;border-radius:8px;}
+    </style></head><body>
+    <div class="tm" id="tm">00:00</div>
+    <div class="ch">${char}</div>
+    </body></html>`);
+  popup.document.close();
+  toast('✅ 小窗已打开（部分浏览器不支持置顶）');
+}
+
+// ── Mini Float Window (within app, for mobile) ──
+let _miniDragging = false, _miniDragX = 0, _miniDragY = 0, _miniInitX = 0, _miniInitY = 0;
+let _miniTimerInt = null;
+
+function companionToggleMini() {
+  const win = $i('comp-mini-win'); if (!win) return;
+  if (win.style.display === 'none' || !win.style.display) {
+    companionShowMini();
+  } else {
+    companionHideMini();
+  }
+}
+function companionShowMini() {
+  const win = $i('comp-mini-win'); if (!win) return;
+  win.style.display = 'flex';
+  S._companion.mini = true;
+  // Render mini content
+  _miniRender();
+  // Start drag
+  const header = $i('comp-mini-header'); if (!header) return;
+  const onDown = e => {
+    _miniDragging = true;
+    const t = e.touches?.[0] || e;
+    const r = win.getBoundingClientRect();
+    _miniDragX = t.clientX - r.left; _miniDragY = t.clientY - r.top;
+    e.preventDefault();
+  };
+  const onMove = e => {
+    if (!_miniDragging) return;
+    const t = e.touches?.[0] || e;
+    const nx = t.clientX - _miniDragX, ny = t.clientY - _miniDragY;
+    win.style.left = Math.max(0, Math.min(window.innerWidth - win.offsetWidth, nx)) + 'px';
+    win.style.top = Math.max(0, Math.min(window.innerHeight - win.offsetHeight, ny)) + 'px';
+    win.style.bottom = 'auto'; win.style.right = 'auto';
+    e.preventDefault();
+  };
+  const onUp = () => { _miniDragging = false; };
+  header.addEventListener('mousedown', onDown);
+  header.addEventListener('touchstart', onDown, { passive: false });
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('touchmove', onMove, { passive: false });
+  document.addEventListener('mouseup', onUp);
+  document.addEventListener('touchend', onUp);
+  // Update mini timer
+  if (_miniTimerInt) clearInterval(_miniTimerInt);
+  _miniTimerInt = setInterval(_miniUpdateTimer, 1000);
+}
+function companionHideMini() {
+  const win = $i('comp-mini-win'); if (!win) return;
+  win.style.display = 'none';
+  S._companion.mini = false;
+  if (_miniTimerInt) { clearInterval(_miniTimerInt); _miniTimerInt = null; }
+}
+function _miniRender() {
+  const stage = $i('comp-mini-stage'); if (!stage) return;
+  const charType = S.settings.companionCharType || 'builtin';
+  const charVal = charType === 'builtin' ? (S.settings.companionCharBuiltin || '😊') : '';
+  const bg = S.settings.companionBgBuiltin || 'bg1';
+  const bgColors = { bg1:'linear-gradient(135deg,#FCE4EC,#F8BBD0)', bg2:'linear-gradient(135deg,#E3F2FD,#BBDEFB)', bg3:'linear-gradient(135deg,#E8F5E9,#C8E6C9)', bg4:'linear-gradient(135deg,#EDE7F6,#D1C4E9)', bg5:'linear-gradient(135deg,#FFF8E1,#FFECB3)' };
+  stage.innerHTML = `
+    <div id="comp-mini-bg" style="position:absolute;inset:0;background:${bgColors[bg]||bgColors.bg1}"></div>
+    <div class="mini-char">${charType==='builtin'?charVal:'🖼️'}</div>
+    <div class="mini-bubble" id="comp-mini-bubble"></div>
+    <div class="mini-timer" id="comp-mini-timer">00:00</div>
+  `;
+  _miniUpdateTimer();
+}
+function _miniUpdateTimer() {
+  const el = $i('comp-mini-timer'); if (!el) return;
+  el.textContent = $i('comp-timer')?.textContent?.replace(/[⏰]/g,'').trim() || '00:00';
+  const mb = $i('comp-mini-start'); if (mb) mb.textContent = S._companion.running ? '⏸' : '▶︎';
+  // Mirror speech bubble
+  const b = $i('comp-bubble'); const mb2 = $i('comp-mini-bubble');
+  if (b && mb2) {
+    mb2.textContent = b.textContent || '';
+    mb2.classList.toggle('on', b.style.display !== 'none' && !!b.textContent);
+  }
 }

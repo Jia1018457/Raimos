@@ -293,7 +293,16 @@
         <label class="cm-inherit-lbl"><input type="checkbox" id="cm-imggen-inherit" onchange="toggleCmSection('imggen')"> 继承全局</label>
       </div>
       <div id="cm-imggen-body" style="display:none;padding:6px 0 10px">
-        <div class="mrow"><label>生图模型</label><select id="cm-x-imggen"><option value="openai/dall-e-3">DALL-E 3</option><option value="stabilityai/stable-diffusion-xl-base-1.0">SDXL</option></select></div>
+        <div class="mrow"><label>生图模型</label><select id="cm-imggen-model" onchange="onImgGenChange('cm')">
+          <option value="openai/dall-e-3">DALL-E 3</option>
+          <option value="stabilityai/stable-diffusion-xl-base-1.0">SDXL</option>
+          <option value="custom">🔧 自定义…</option>
+        </select></div>
+        <div id="cm-imggen-custom-wrap" style="display:none">
+          <div class="mrow"><label>模型名称</label><input type="text" id="cm-x-imggen-custom-model" placeholder="例: black-forest-labs/FLUX.1-schnell"/></div>
+          <div class="mrow"><label>API 地址</label><input type="text" id="cm-x-imggen-api-url" placeholder="留空继承全局"/></div>
+          <div class="mrow"><label>API Key</label><input type="password" id="cm-x-imggen-api-key" placeholder="留空继承全局"/></div>
+        </div>
       </div>
 
       <!-- 主动消息 -->

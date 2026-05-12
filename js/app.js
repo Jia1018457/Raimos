@@ -412,10 +412,9 @@ function updateHeaderStatus() {
   $i('hdr-status-emoji').textContent = status.split(' ')[0] || '';
   $i('hdr-status-text').textContent = status.split(' ').slice(1).join(' ') || '在线';
 }
-function openStatusModal() { $i('custom-status-inp').value = ''; $i('status-modal').classList.add('show'); closeCtxMenu(); }
 async function setMyStatus(s) {
   if (!s) return; S.myStatus = s; await saveSetting('myStatus', s);
-  updateHeaderStatus(); closeModal('status-modal'); toast('状态已更新');
+  updateHeaderStatus(); toast('状态已更新');
 }
 
 // ══════════════════════════════
@@ -563,8 +562,7 @@ function renderChatList(filter = '') {
     div.innerHTML = `
       <div class="ci-avatar-wrap">
         <div class="ci-avatar">${av.startsWith('data:') ? avInner : `<span>${avInner}</span>`}</div>
-        ${status ? `<div class="ci-status-dot" title="${esc(status)}">${status.split(' ')[0]||''}</div>` : ''}
-      </div>
+        </div>
       <div class="ci-info">
         <div class="ci-name">${esc(chat.name)}</div>
         <div class="ci-preview" id="ci-prev-${chat.id}">加载中…</div>
@@ -665,8 +663,10 @@ async function renderMsgs() {
       groupEl = document.createElement('div'); groupEl.className = 'msg-group ' + (isUser ? 'user' : 'ai');
       const gh = document.createElement('div'); gh.className = 'mg-header';
       const av = document.createElement('div'); av.className = 'msg-av ' + (isUser ? 'user-av' : 'ai-av');
-      if (isUser) av.textContent = userAv;
-      else if (aiAv?.startsWith('data:')) av.innerHTML = `<img src="${aiAv}">`;
+      if (isUser) {
+        if (userAv?.startsWith('data:')) av.innerHTML = `<img src="${userAv}">`;
+        else av.textContent = userAv;
+      } else if (aiAv?.startsWith('data:')) av.innerHTML = `<img src="${aiAv}">`;
       else av.textContent = aiAv || '🐱';
       if (isUser && S.settings.showUserAvatar === false) av.style.display = 'none';
       if (!isUser && S.settings.showAiAvatar === false) av.style.display = 'none';
@@ -1519,9 +1519,9 @@ function initEmoji(){const tabs=$i('ep-tabs');tabs.innerHTML='';let first=true;f
 function renderEmojiGrid(emojis){const c=$i('ep-content');c.innerHTML='';const g=document.createElement('div');g.className='ep-grid';emojis.forEach(e=>{const b=document.createElement('button');b.className='ep-btn';b.textContent=e;b.onclick=()=>insertEmoji(e);g.appendChild(b);});c.appendChild(g);}
 function renderStickerPicker(){const c=$i('ep-content');c.innerHTML='';if(!S._stickers.length){c.innerHTML='<div style="text-align:center;padding:18px;color:var(--text3);font-size:12px">还没有表情包</div>';return;}const g=document.createElement('div');g.className='ep-sticker-grid';S._stickers.forEach(s=>{const d=document.createElement('div');d.className='ep-sticker';if(s.isImg)d.innerHTML=`<img src="${s.url}">`;else d.innerHTML=`<span>${s.content}</span>`;d.onclick=()=>sendSticker(s);g.appendChild(d);});c.appendChild(g);}
 
-// ★ 修复：toggleEmoji 不再直接 toggle，而是显式判断
-function toggleEmoji(){
-  const picker = $i('emoji-picker');
+function toggleEmoji(e){
+  if(e){e.preventDefault();e.stopPropagation();}
+  const picker=$i('emoji-picker');
   picker.classList.toggle('show');
 }
 
@@ -1545,8 +1545,8 @@ async function regenMsg(id){const msgs=await dbGetAll('messages','chatId',S.curr
 // ══════════════════════════════
 //  ONLINE / IMGGEN
 // ══════════════════════════════
-function toggleOnline(){S.onlineSearch=!S.onlineSearch;$i('btn-online').classList.toggle('on',S.onlineSearch);$i('hint-online').style.display=S.onlineSearch?'inline':'none';toast(S.onlineSearch?'🌐 联网已开':'联网已关');}
-function toggleImgGen(){S.imgGenMode=!S.imgGenMode;$i('btn-imggen').classList.toggle('on',S.imgGenMode);$i('hint-imggen').style.display=S.imgGenMode?'inline':'none';toast(S.imgGenMode?'🎨 图生成模式已开':'图生成已关');}
+function toggleOnline(){S.onlineSearch=!S.onlineSearch;$i('hint-online').style.display=S.onlineSearch?'inline':'none';toast(S.onlineSearch?'🌐 联网已开':'联网已关');closeCtxMenu();}
+function toggleImgGen(){S.imgGenMode=!S.imgGenMode;$i('hint-imggen').style.display=S.imgGenMode?'inline':'none';toast(S.imgGenMode?'🎨 图生成模式已开':'图生成已关');closeCtxMenu();}
 
 // ══════════════════════════════
 //  PROACTIVE
@@ -1579,8 +1579,8 @@ function toggleMinimap(){
   const body=$i('chat-body');
   const on=mm.classList.toggle('show');
   body.classList.toggle('minimap-on',on);
-  $i('btn-minimap').classList.toggle('on',on);
   saveSetting('minimapOn',on);
+  closeCtxMenu();
   if(on)renderMinimap();
 }
 
@@ -1645,7 +1645,6 @@ function initMinimap(){
   if(on){
     mm.classList.add('show');
     $i('chat-body').classList.add('minimap-on');
-    $i('btn-minimap').classList.add('on');
   }
 }
 
@@ -1685,6 +1684,21 @@ function openUserModal() {
   $i('um-username').value = s.userName || '我';
   $i('um-show-user-av').checked = s.showUserAvatar !== false;
   $i('um-show-ai-av').checked = s.showAiAvatar !== false;
+  // 加载我的状态
+  const statusInp = $i('um-my-status');
+  if (statusInp) statusInp.value = S.myStatus || '';
+  // 填充 AI 联系人选择器
+  const sel = $i('um-ai-contact');
+  if (sel) {
+    sel.innerHTML = '<option value="">— 选择助手 —</option>';
+    Object.values(S._contacts).forEach(c => {
+      const opt = document.createElement('option');
+      opt.value = c.id;
+      const av2 = c.avatar?.startsWith('data:') ? '🤖' : (c.avatar || '🤖');
+      opt.textContent = av2 + ' ' + (c.name || '助手');
+      sel.appendChild(opt);
+    });
+  }
   const info = $i('um-auth-info');
   const logoutBtn = $i('um-logout-btn');
   if (window._fbUser) { info.textContent = '已登录：' + window._fbUser.email; logoutBtn.style.display = ''; }
@@ -1697,13 +1711,40 @@ async function saveUserProfile() {
   s.userName = $i('um-username').value.trim() || '我';
   s.showUserAvatar = $i('um-show-user-av').checked;
   s.showAiAvatar = $i('um-show-ai-av').checked;
+  const newStatus = ($i('um-my-status')?.value || '').trim();
+  if (newStatus) S.myStatus = newStatus;
   await saveSetting('userAvatar', s.userAvatar);
   await saveSetting('userName', s.userName);
   await saveSetting('showUserAvatar', s.showUserAvatar);
   await saveSetting('showAiAvatar', s.showAiAvatar);
+  if (newStatus) await saveSetting('myStatus', S.myStatus);
   updateNavUserAv();
   if (S.currentChat) await renderMsgs();
   closeModal('user-modal'); toast('✅ 已保存');
+}
+
+async function doAiMessage() {
+  const status = ($i('um-my-status')?.value || '').trim();
+  const contactId = $i('um-ai-contact')?.value;
+  if (!status) { toast('请先写上你的状态'); return; }
+  if (!contactId) { toast('请选择一个助手'); return; }
+  S.myStatus = status;
+  await saveSetting('myStatus', status);
+  const existing = Object.values(S._chats).filter(c => c.contactId === contactId && !c.archived)
+    .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+  let chatId = existing[0]?.id;
+  if (!chatId) {
+    const c = S._contacts[contactId];
+    chatId = uid();
+    const chat = { id: chatId, name: `与${c?.name || 'AI'}的对话`, contactId, summary: null, archived: false, createdAt: Date.now(), updatedAt: Date.now() };
+    await dbPut('chats', chat); S._chats[chatId] = chat;
+  }
+  closeModal('user-modal');
+  S.currentChat = chatId; S.currentContact = contactId;
+  await saveSetting('currentChat', chatId); await saveSetting('currentContact', contactId);
+  switchPage('chat-page'); await openChat(chatId);
+  const inp = $i('msg-input');
+  if (inp) { inp.value = `我现在的状态：${status}，来和我说说话吧～`; autoH(inp); sendMsg(); }
 }
 async function uploadUserAv(input) {
   const file = input.files[0]; if (!file) return;
@@ -1778,6 +1819,13 @@ function buildSettingsUI() {
       <div class="s-row"><label>摘要阈值</label><input type="number" id="s-sumthresh" value="${s.sumThresh||40}" min="10" max="200" style="max-width:80px"/><span style="font-size:11px;color:var(--text3)">条后自动摘要</span></div>
     </div>
     <div class="s-section"><h3>🎨 外观</h3>
+      <div class="s-row"><label>主题</label>
+        <select id="s-theme" onchange="S.settings.theme=this.value;applyTheme();saveSetting('theme',this.value)">
+          <option value="light">☀️ 明亮</option>
+          <option value="dark">🌙 深色</option>
+        </select>
+      </div>
+      <div class="s-row"><label>聊天背景</label><button class="btn-s" onclick="openBgModal()">🖼️ 选择背景</button></div>
       <div class="s-row"><label>字体大小</label><input type="range" id="s-fontsize" min="11" max="20" step="1" value="${s.fontSize||14}" oninput="$i('s-fontsize-v').textContent=this.value+'px';document.documentElement.style.setProperty('--font-size',this.value+'px')"><span class="rval" id="s-fontsize-v">${s.fontSize||14}px</span></div>
       <div class="s-row"><label>背景透明度</label><input type="range" id="s-bgopa" min="0" max="1" step="0.05" value="${s.bgOpacity??1}" oninput="$i('s-bgopa-v').textContent=Math.round(this.value*100)+'%';document.documentElement.style.setProperty('--bg-opacity',this.value)"><span class="rval" id="s-bgopa-v">${Math.round((s.bgOpacity??1)*100)}%</span></div>
       <div class="s-row"><label>用户气泡色</label><div class="color-row" id="cr-user"></div></div>
@@ -1817,7 +1865,18 @@ function buildSettingsUI() {
       </div></div>
     </div>
     <div class="s-section"><h3>🎲 图片生成</h3>
-      <div class="s-row"><label>生图模型</label><select id="s-imggen-model"><option value="openai/dall-e-3">DALL-E 3</option><option value="stabilityai/stable-diffusion-xl-base-1.0">SDXL</option></select></div>
+      <div class="s-row"><label>生图模型</label>
+        <select id="s-imggen-model" onchange="onImgGenChange('s')">
+          <option value="openai/dall-e-3">DALL-E 3</option>
+          <option value="stabilityai/stable-diffusion-xl-base-1.0">SDXL</option>
+          <option value="custom">🔧 自定义…</option>
+        </select>
+      </div>
+      <div id="s-imggen-custom-wrap" style="display:none">
+        <div class="s-row"><label>模型名称</label><input type="text" id="s-imggen-custom-model" value="${s.imgGenCustomModel||''}" placeholder="例: black-forest-labs/FLUX.1-schnell"/></div>
+        <div class="s-row"><label>API URL</label><input type="text" id="s-imggen-api-url" value="${s.imgGenApiUrl||''}" placeholder="留空继承全局"/></div>
+        <div class="s-row"><label>API Key</label><input type="password" id="s-imggen-api-key" value="${s.imgGenApiKey||''}" placeholder="留空继承全局"/></div>
+      </div>
     </div>
     <div class="s-section"><h3>💾 数据管理</h3>
       <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:9px">
@@ -1834,11 +1893,12 @@ function buildSettingsUI() {
   setTimeout(() => {
     const tm = $i('s-tts-mode'); if(tm)tm.value=s.ttsMode||'browser';
     const vr = $i('s-voice-reply'); if(vr)vr.value=s.voiceReplyMode||'text';
-    const ig = $i('s-imggen-model'); if(ig)ig.value=s.imgGenModel||'openai/dall-e-3';
+    const ig = $i('s-imggen-model');
+    if(ig){ const v=s.imgGenModel||'openai/dall-e-3'; ig.value=v; onImgGenChange('s'); }
+    const th = $i('s-theme'); if(th)th.value=s.theme||'light';
     onTtsModeChange(); initVoices();
     renderColorPickers($i('cr-user'),$i('cr-ai'));
     updateStorageInfo();
-    // 更新登录状态显示
     const ai = $i('auth-info');
     if (ai) ai.textContent = window._fbUser ? ('已登录：' + window._fbUser.email) : '未登录';
     initSettingsSubpages();
@@ -1875,6 +1935,7 @@ function openSettingsSection(section,title,home){
 }
 
 function onTtsModeChange(){const m=$i('s-tts-mode');if(!m)return;const v=m.value;const rb=$i('r-bvoice');const rc=$i('r-custom-tts');if(rb)rb.style.display=v==='browser'?'flex':'none';if(rc)rc.style.display=v==='custom'?'block':'none';}
+function onImgGenChange(prefix){const m=$i(prefix+'-imggen-model');if(!m)return;const wrap=$i(prefix+'-imggen-custom-wrap');if(wrap)wrap.style.display=m.value==='custom'?'block':'none';}
 async function saveAllSettings(){
   const s=S.settings;
   const get=(id,def='')=>{const el=$i(id);return el?el.value:def;};
@@ -1897,7 +1958,11 @@ async function saveAllSettings(){
   s.postImages=getB('s-post-images');s.imageFreq=parseInt(get('s-image-freq','50'));
   s.imageSources=['stickers','search','generate'].filter(x=>getB(`s-imgsrc-${x}`)).join(',');
   s.fontSize=parseInt(get('s-fontsize','14'));s.bgOpacity=parseFloat(get('s-bgopa','1'));
-  s.imgGenModel=get('s-imggen-model','openai/dall-e-3');
+  const igm=get('s-imggen-model','openai/dall-e-3');
+  s.imgGenModel=igm==='custom'?(get('s-imggen-custom-model')||'openai/dall-e-3'):igm;
+  s.imgGenCustomModel=get('s-imggen-custom-model');
+  s.imgGenApiUrl=get('s-imggen-api-url');
+  s.imgGenApiKey=get('s-imggen-api-key');
   s.userName=get('s-username','我');
   s.showUserAvatar=getB('s-show-user-av'); s.showAiAvatar=getB('s-show-ai-av');
   document.documentElement.style.setProperty('--font-size',s.fontSize+'px');
@@ -1933,8 +1998,14 @@ function openCtxMenu(e){
   const m=$i('ctx-menu');
   const pinItem=$i('ctx-pin-item');
   if(pinItem&&S.currentChat){pinItem.textContent=S._chats[S.currentChat]?.pinned?'📌 取消置顶':'📌 置顶';}
-  m.style.top=Math.min(e.clientY||100,window.innerHeight-200)+'px';
-  m.style.left=Math.min(e.clientX||100,window.innerWidth-170)+'px';
+  const onlineItem=$i('ctx-online-item');
+  if(onlineItem)onlineItem.textContent=(S.onlineSearch?'🌐 联网 ✓':'🌐 联网搜索');
+  const imggenItem=$i('ctx-imggen-item');
+  if(imggenItem)imggenItem.textContent=(S.imgGenMode?'🎨 图片生成 ✓':'🎨 图片生成');
+  const mmItem=$i('ctx-minimap-item');
+  if(mmItem)mmItem.textContent=($i('chat-minimap')?.classList.contains('show')?'🗺️ 迷你地图 ✓':'🗺️ 迷你地图');
+  m.style.top=Math.min(e.clientY||100,window.innerHeight-240)+'px';
+  m.style.left=Math.min(e.clientX||100,window.innerWidth-175)+'px';
   m.classList.add('show');e.stopPropagation();
 }
 function closeCtxMenu(){$i('ctx-menu').classList.remove('show');}
@@ -2137,6 +2208,7 @@ document.addEventListener('click', e => {
 let _authMode = 'login';
 
 function openAuthModal() {
+  closeModal('user-modal');
   switchAuthTab('login');
   $i('auth-error').style.display = 'none';
   $i('auth-email').value = '';

@@ -1934,15 +1934,21 @@ function initSettingsSubpages(){
 }
 function openSettingsSection(section,title,home){
   const wrap=$i('settings-wrap'); if(!wrap)return;
+  // Remove any previous subpage header
+  wrap.querySelectorAll('.s-subpage-header').forEach(h=>h.remove());
   $i('settings-page')?.classList.add('settings-subpage-open');
-  home.hidden=true; section.hidden=false;
-  let page=wrap.querySelector('.settings-subpage-shell'); if(page)page.remove();
-  page=document.createElement('div'); page.className='settings-subpage-shell';
-  const header=document.createElement('div'); header.className='settings-subpage-header';
+  home.style.display='none';
+  section.hidden=false;
+  const header=document.createElement('div'); header.className='settings-subpage-header s-subpage-header';
   header.innerHTML=`<button type="button" class="btn-s">‹ 返回</button><h3>${esc(title)}</h3><button type="button" class="btn-p">保存本页</button>`;
-  header.querySelector('.btn-s').onclick=()=>{section.hidden=true;page.before(section);page.remove();home.hidden=false;$i('settings-page')?.classList.remove('settings-subpage-open');};
+  header.querySelector('.btn-s').onclick=()=>{
+    header.remove(); section.hidden=true;
+    home.style.display=''; $i('settings-page')?.classList.remove('settings-subpage-open');
+    wrap.scrollTo(0,0);
+  };
   header.querySelector('.btn-p').onclick=()=>saveAllSettings();
-  section.before(page); page.append(header,section);
+  wrap.prepend(header);
+  wrap.scrollTo(0,0);
 }
 
 function onTtsModeChange(){const m=$i('s-tts-mode');if(!m)return;const v=m.value;const rb=$i('r-bvoice');const rc=$i('r-custom-tts');if(rb)rb.style.display=v==='browser'?'flex':'none';if(rc)rc.style.display=v==='custom'?'block':'none';}

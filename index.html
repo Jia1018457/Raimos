@@ -60,20 +60,26 @@
     </div>
     <button class="hbtn" id="btn-online" onclick="toggleOnline()" title="联网搜索">🌐</button>
     <button class="hbtn" id="btn-imggen" onclick="toggleImgGen()" title="图片生成">🎨</button>
+    <button class="hbtn" id="btn-minimap" onclick="toggleMinimap()" title="迷你地图">🗺️</button>
     <button class="hbtn" onclick="openCtxMenu(event)" title="更多">⋯</button>
     <button class="hbtn" onclick="openBgModal()" title="背景">🖼️</button>
   </div>
 
-  <div id="chat-area">
-    <div id="welcome">
-      <div class="w-icon" id="welcome-icon">🐻</div>
-      <div class="w-title" id="welcome-title">你好呀！</div>
-      <div class="w-sub" id="welcome-sub">点左上角 ＋ 新建对话，或先去⚙️设置里填 OpenRouter API Key 哦～</div>
+  <div id="chat-body">
+    <div id="chat-area">
+      <div id="welcome">
+        <div class="w-icon" id="welcome-icon">🐻</div>
+        <div class="w-title" id="welcome-title">你好呀！</div>
+        <div class="w-sub" id="welcome-sub">点左上角 ＋ 新建对话，或先去⚙️设置里填 OpenRouter API Key 哦～</div>
+      </div>
     </div>
+    <div id="chat-minimap">
+      <div id="minimap-content"></div>
+      <div id="minimap-viewport"></div>
+    </div>
+    <button class="scroll-fab" id="fab-top" onclick="scrollTo_(true)" title="回到顶部">↑</button>
+    <button class="scroll-fab" id="fab-bottom" onclick="scrollTo_(false)" title="回到底部">↓</button>
   </div>
-
-  <button class="scroll-fab" id="fab-top" onclick="scrollTo_(true)">↑</button>
-  <button class="scroll-fab" id="fab-bottom" onclick="scrollTo_(false)">↓</button>
 
   <div id="input-wrap">
     <div id="rec-bar">
@@ -599,6 +605,7 @@
 
 <!-- Ctx Menu -->
 <div id="ctx-menu">
+  <div class="ctx-item" id="ctx-pin-item" onclick="pinChat()">📌 置顶</div>
   <div class="ctx-item" onclick="clearCtx()">🧹 清空上下文</div>
   <div class="ctx-item" onclick="compressCtx()">🗜️ 压缩上下文</div>
   <div class="ctx-item" onclick="renameChat()">✏️ 重命名</div>

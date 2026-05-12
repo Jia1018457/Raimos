@@ -104,6 +104,7 @@ async function init() {
   initEmoji();
   initVoices();
   initScrollObs();
+  initMinimap();
   initProactive();
   initStatusTimers();
   initMomentTimers();
@@ -141,6 +142,7 @@ async function loadAllData() {
   S.currentContact = savedSettings.currentContact || null;
   S.proCount = savedSettings.proCount || 0;
   S.proDate = savedSettings.proDate || '';
+  S._minimapOn = savedSettings.minimapOn === true;
 }
 
 async function saveSetting(key, value) {
@@ -545,44 +547,67 @@ function renderChatList(filter = '') {
     scope.innerHTML = `<span>只显示：${esc(c?.name || '当前助手')}</span><button onclick="S.chatListContactFilter=null;renderChatList()">显示全部</button>`;
     list.appendChild(scope);
   }
-  const active = all.filter(c => !c.archived);
+  const activeAll = all.filter(c => !c.archived);
+  const pinned = activeAll.filter(c => c.pinned);
+  const unpinned = activeAll.filter(c => !c.pinned);
   const archived = all.filter(c => c.archived);
+
+  const renderItem = (chat) => {
+    const contact = chat.contactId ? S._contacts[chat.contactId] : null;
+    const av = contact?.avatar || '💬';
+    const status = contact?.status || '';
+    const div = document.createElement('div');
+    div.className = 'chat-item' + (chat.id === S.currentChat ? ' active' : '') + (chat.pinned ? ' pinned' : '');
+    div.dataset.id = chat.id;
+    const avInner = av.startsWith('data:') ? `<img src="${av}">` : av;
+    div.innerHTML = `
+      <div class="ci-avatar-wrap">
+        <div class="ci-avatar">${av.startsWith('data:') ? avInner : `<span>${avInner}</span>`}</div>
+        ${status ? `<div class="ci-status-dot" title="${esc(status)}">${status.split(' ')[0]||''}</div>` : ''}
+      </div>
+      <div class="ci-info">
+        <div class="ci-name">${esc(chat.name)}</div>
+        <div class="ci-preview" id="ci-prev-${chat.id}">加载中…</div>
+      </div>
+      <div class="ci-time">${fmtTime(chat.updatedAt||chat.createdAt)}</div>
+      <button class="chat-item-menu" onclick="event.stopPropagation();S.currentChat='${chat.id}';openCtxMenu(event)">⋮</button>`;
+    div.addEventListener('click', e => { if (e.target.classList.contains('chat-item-menu')) return; S.currentChat = chat.id; S.currentContact = chat.contactId || null; switchPage('chat-page'); openChat(chat.id); });
+    list.appendChild(div);
+    dbGetAll('messages', 'chatId', chat.id).then(msgs => {
+      const last = msgs[msgs.length - 1];
+      const p = $i('ci-prev-' + chat.id);
+      if (p) p.textContent = last ? (last.type === 'voice' ? '🎤 语音' : last.type === 'image' ? '🖼️ 图片' : last.type === 'sticker' ? '😄 表情包' : last.type === 'file' ? '📎 文件' : (last.content || '').slice(0, 24)) : '暂无消息';
+    });
+  };
+
   const render = (chats, label) => {
-    if (label && chats.length) {
+    const filtered = chats.filter(c => !filter || c.name.toLowerCase().includes(filter.toLowerCase()));
+    if (!filtered.length) return;
+    if (label) {
       const lel = document.createElement('div');
       lel.style.cssText = 'font-size:9.5px;font-weight:800;color:var(--text3);padding:4px 9px;text-transform:uppercase;letter-spacing:.08em;';
       lel.textContent = label; list.appendChild(lel);
     }
-    chats.filter(c => !filter || c.name.toLowerCase().includes(filter.toLowerCase())).forEach(chat => {
-      const contact = chat.contactId ? S._contacts[chat.contactId] : null;
-      const av = contact?.avatar || '💬';
-      const status = contact?.status || '';
-      const div = document.createElement('div');
-      div.className = 'chat-item' + (chat.id === S.currentChat ? ' active' : '');
-      div.dataset.id = chat.id;
-      const avInner = av.startsWith('data:') ? `<img src="${av}">` : av;
-      div.innerHTML = `
-        <div class="ci-avatar-wrap">
-          <div class="ci-avatar">${av.startsWith('data:') ? avInner : `<span>${avInner}</span>`}</div>
-          ${status ? `<div class="ci-status-dot" title="${esc(status)}">${status.split(' ')[0]||''}</div>` : ''}
-        </div>
-        <div class="ci-info">
-          <div class="ci-name">${esc(chat.name)}</div>
-          <div class="ci-preview" id="ci-prev-${chat.id}">加载中…</div>
-        </div>
-        <div class="ci-time">${fmtTime(chat.updatedAt||chat.createdAt)}</div>
-        <button class="chat-item-menu" onclick="event.stopPropagation();S.currentChat='${chat.id}';openCtxMenu(event)">⋮</button>`;
-      div.addEventListener('click', e => { if (e.target.classList.contains('chat-item-menu')) return; S.currentChat = chat.id; S.currentContact = chat.contactId || null; switchPage('chat-page'); openChat(chat.id); });
-      list.appendChild(div);
-      dbGetAll('messages', 'chatId', chat.id).then(msgs => {
-        const last = msgs[msgs.length - 1];
-        const p = $i('ci-prev-' + chat.id);
-        if (p) p.textContent = last ? (last.type === 'voice' ? '🎤 语音' : last.type === 'image' ? '🖼️ 图片' : last.type === 'sticker' ? '😄 表情包' : last.type === 'file' ? '📎 文件' : (last.content || '').slice(0, 24)) : '暂无消息';
-      });
-    });
+    filtered.forEach(renderItem);
   };
-  render(active, ''); render(archived, '归档');
-  if (!active.length && !archived.length) {
+
+  if (pinned.length) {
+    const pd = document.createElement('div');
+    pd.className = 'pinned-divider';
+    pd.textContent = '📌 置顶';
+    list.appendChild(pd);
+    render(pinned, '');
+    if (unpinned.length || archived.length) {
+      const sep = document.createElement('div');
+      sep.style.cssText = 'font-size:9.5px;font-weight:800;color:var(--text3);padding:4px 9px;text-transform:uppercase;letter-spacing:.08em;';
+      sep.textContent = '全部对话';
+      list.appendChild(sep);
+    }
+  }
+  render(unpinned, '');
+  render(archived, '归档');
+
+  if (!activeAll.length && !archived.length) {
     const empty = document.createElement('div');
     empty.style.cssText = 'text-align:center;padding:24px 10px;color:var(--text3);font-size:12px;line-height:1.7';
     empty.innerHTML = scopedContact ? '这个助手还没有对话<br><button class="btn-p" onclick="createChatWith(S.chatListContactFilter)">新建与 TA 的对话</button>' : '还没有对话';
@@ -652,6 +677,7 @@ async function renderMsgs() {
     }
     appendBubble(groupEl, msg);
   }
+  requestAnimationFrame(renderMinimap);
 }
 
 function appendBubble(groupEl, msg) {
@@ -1533,8 +1559,95 @@ async function triggerProactive(){const s=S.settings;const now=new Date();const 
 // ══════════════════════════════
 //  SCROLL
 // ══════════════════════════════
-function initScrollObs(){const ca=$i('chat-area');ca.addEventListener('scroll',()=>{const atTop=ca.scrollTop<80;const atBot=ca.scrollTop+ca.clientHeight>ca.scrollHeight-80;$i('fab-top').classList.toggle('vis',!atTop);$i('fab-bottom').classList.toggle('vis',!atBot);});}
+function initScrollObs(){
+  const ca=$i('chat-area');
+  ca.addEventListener('scroll',()=>{
+    const atTop=ca.scrollTop<80;
+    const atBot=ca.scrollTop+ca.clientHeight>ca.scrollHeight-80;
+    $i('fab-top').classList.toggle('vis',!atTop);
+    $i('fab-bottom').classList.toggle('vis',!atBot);
+    updateMinimapViewport();
+  });
+}
 function scrollTo_(top,instant){const ca=$i('chat-area');ca.scrollTo({top:top?0:ca.scrollHeight,behavior:instant?'auto':'smooth'});}
+
+// ══════════════════════════════
+//  MINIMAP
+// ══════════════════════════════
+function toggleMinimap(){
+  const mm=$i('chat-minimap');
+  const body=$i('chat-body');
+  const on=mm.classList.toggle('show');
+  body.classList.toggle('minimap-on',on);
+  $i('btn-minimap').classList.toggle('on',on);
+  saveSetting('minimapOn',on);
+  if(on)renderMinimap();
+}
+
+function renderMinimap(){
+  const ca=$i('chat-area');
+  const mm=$i('chat-minimap');
+  const mc=$i('minimap-content');
+  if(!mm||!mc||!mm.classList.contains('show'))return;
+  mc.innerHTML='';
+  const totalH=ca.scrollHeight;
+  const mmH=mm.clientHeight;
+  if(totalH<=0||mmH<=0)return;
+  const scale=mmH/totalH;
+  const children=Array.from(ca.children);
+  for(const child of children){
+    const blockTop=Math.round(child.offsetTop*scale);
+    const blockH=Math.max(2,Math.round(child.offsetHeight*scale));
+    const block=document.createElement('div');
+    block.className='mm-block';
+    block.style.top=blockTop+'px';
+    block.style.height=blockH+'px';
+    if(child.classList.contains('msg-group')){
+      block.classList.add(child.classList.contains('user')?'user':'ai');
+    } else if(child.classList.contains('date-div')){
+      block.classList.add('date');
+    } else if(child.classList.contains('sum-card')){
+      block.classList.add('summary');
+    } else {
+      block.classList.add('other');
+    }
+    mc.appendChild(block);
+  }
+  updateMinimapViewport();
+}
+
+function updateMinimapViewport(){
+  const ca=$i('chat-area');
+  const mm=$i('chat-minimap');
+  const mv=$i('minimap-viewport');
+  if(!mm||!mv||!mm.classList.contains('show'))return;
+  const totalH=ca.scrollHeight;
+  const mmH=mm.clientHeight;
+  if(totalH<=0)return;
+  const scale=mmH/totalH;
+  const vpTop=Math.round(ca.scrollTop*scale);
+  const vpH=Math.max(16,Math.round(ca.clientHeight*scale));
+  mv.style.top=vpTop+'px';
+  mv.style.height=vpH+'px';
+}
+
+function initMinimap(){
+  const mm=$i('chat-minimap');
+  const ca=$i('chat-area');
+  if(!mm||!ca)return;
+  mm.addEventListener('click',e=>{
+    const rect=mm.getBoundingClientRect();
+    const ratio=(e.clientY-rect.top)/mm.clientHeight;
+    ca.scrollTo({top:ratio*ca.scrollHeight,behavior:'smooth'});
+  });
+  // Restore saved state
+  const on=S._minimapOn===true;
+  if(on){
+    mm.classList.add('show');
+    $i('chat-body').classList.add('minimap-on');
+    $i('btn-minimap').classList.add('on');
+  }
+}
 
 // ══════════════════════════════
 //  THEME & APPEARANCE
@@ -1816,8 +1929,24 @@ function dl(name,content,type){const a=document.createElement('a');a.href=URL.cr
 // ══════════════════════════════
 //  CONTEXT MENU
 // ══════════════════════════════
-function openCtxMenu(e){const m=$i('ctx-menu');m.style.top=Math.min(e.clientY||100,window.innerHeight-200)+'px';m.style.left=Math.min(e.clientX||100,window.innerWidth-170)+'px';m.classList.add('show');e.stopPropagation();}
+function openCtxMenu(e){
+  const m=$i('ctx-menu');
+  const pinItem=$i('ctx-pin-item');
+  if(pinItem&&S.currentChat){pinItem.textContent=S._chats[S.currentChat]?.pinned?'📌 取消置顶':'📌 置顶';}
+  m.style.top=Math.min(e.clientY||100,window.innerHeight-200)+'px';
+  m.style.left=Math.min(e.clientX||100,window.innerWidth-170)+'px';
+  m.classList.add('show');e.stopPropagation();
+}
 function closeCtxMenu(){$i('ctx-menu').classList.remove('show');}
+
+async function pinChat(){
+  if(!S.currentChat)return;
+  const chat=S._chats[S.currentChat];
+  chat.pinned=!chat.pinned;
+  await dbPut('chats',chat);
+  renderChatList();closeCtxMenu();
+  toast(chat.pinned?'📌 已置顶':'已取消置顶');
+}
 
 // ══════════════════════════════
 //  KEYWORD ANIMATIONS

@@ -1,0 +1,2057 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Raimos · 换装衣柜 v4</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'PingFang SC','Hiragino Sans',sans-serif;background:#FFF5F9;color:#3D2B3D;min-height:100vh;overscroll-behavior:none;}
+#hdr{background:linear-gradient(135deg,#FCE4EC,#E3F2FD);padding:11px 15px 7px;border-bottom:1.5px solid #F0D0E0;}
+#hdr h1{font-size:18px;font-weight:800;letter-spacing:1px;}
+#hdr p{font-size:11px;color:#9B7B9B;margin-top:1px;}
+#tabs{display:flex;gap:6px;padding:8px 11px;background:white;border-bottom:1px solid #F0D0E0;overflow-x:auto;scrollbar-width:none;}
+#tabs::-webkit-scrollbar{display:none;}
+.tb{padding:6px 13px;border-radius:18px;border:none;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;flex-shrink:0;transition:all .2s;color:#9B7B9B;background:white;}
+.tb.on{background:linear-gradient(135deg,#F48FB1,#E8A0BF);color:white;box-shadow:0 2px 8px rgba(244,143,177,.4);}
+.pg{display:none;padding:11px;}
+.pg.on{display:block;}
+.card{background:white;border-radius:13px;border:1.5px solid #F0D0E0;padding:11px;margin-bottom:11px;}
+.ct{font-size:13px;font-weight:700;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;}
+/* figures */
+#figs{display:flex;justify-content:center;align-items:flex-end;gap:18px;min-height:248px;padding:5px 0;}
+.fc{text-align:center;}
+.fl{font-size:11px;color:#9B7B9B;margin-bottom:4px;}
+.fb{border-radius:11px;padding:9px 7px;border:1.5px solid #F0D0E0;cursor:pointer;}
+.fb:hover{border-color:#F48FB1;}
+.fb.ub{background:linear-gradient(180deg,#FFF9FC,#F3E5F5);}
+.fb.ab{background:linear-gradient(180deg,#F0F8FF,#E3F2FD);}
+.ft{font-size:10px;color:#9B7B9B;margin-top:3px;}
+/* target */
+#trow{display:flex;gap:7px;justify-content:center;margin-top:9px;flex-wrap:wrap;}
+.trb{padding:4px 13px;border-radius:18px;border:1.5px solid #F0D0E0;background:white;color:#3D2B3D;font-size:11px;cursor:pointer;}
+.trb.u{border-color:#F48FB1;background:#FFF0F5;}
+.trb.a{border-color:#90CAF9;background:#F0F8FF;}
+/* layers */
+#ll{display:flex;flex-direction:column;gap:4px;min-height:24px;}
+.li{display:flex;align-items:center;gap:6px;padding:5px 8px;border-radius:9px;border:1.5px solid #F0D0E0;background:#FAFAFA;cursor:grab;user-select:none;}
+.ld{width:16px;height:16px;border-radius:4px;border:1px solid rgba(0,0,0,.1);flex-shrink:0;}
+.ln{flex:1;font-size:12px;}
+.lc{font-size:9px;color:#9B7B9B;background:#F5F5F5;padding:1px 5px;border-radius:7px;}
+.lx{background:none;border:none;color:#BDBDBD;font-size:16px;cursor:pointer;line-height:1;}
+.dh{color:#9B7B9B;font-size:12px;}
+.eh{text-align:center;color:#9B7B9B;font-size:12px;padding:12px 0;}
+/* nudge buttons */
+.lnudge{display:flex;flex-direction:column;gap:1px;flex-shrink:0;}
+.lnb{background:none;border:1px solid #F0D0E0;border-radius:3px;color:#9B7B9B;font-size:9px;width:16px;height:13px;cursor:pointer;line-height:1;padding:0;}
+.lnb:hover{background:#FFF0F5;border-color:#F48FB1;color:#F48FB1;}
+.lnv{font-size:9px;color:#9B7B9B;min-width:18px;text-align:center;}
+/* btns */
+.bp{background:linear-gradient(135deg,#F48FB1,#E8A0BF);color:white;border:none;border-radius:9px;padding:8px;font-size:12px;font-weight:600;cursor:pointer;}
+.bp:disabled{opacity:.5;cursor:not-allowed;}
+.bs{background:white;border:1.5px solid #F0D0E0;color:#9B7B9B;border-radius:9px;padding:7px 12px;font-size:12px;cursor:pointer;}
+.bd{background:white;border:1.5px solid #FFCDD2;color:#E57373;border-radius:18px;padding:2px 9px;font-size:11px;cursor:pointer;}
+.bsm{padding:4px 9px;border-radius:14px;border:1.5px solid #F0D0E0;background:white;color:#3D2B3D;font-size:11px;cursor:pointer;white-space:nowrap;}
+.bsm.on{border-color:#F48FB1;background:#FFF0F5;color:#F48FB1;}
+/* ai comment */
+#aic{display:none;background:linear-gradient(135deg,#FFF0F5,#F0F8FF);border-radius:9px;padding:10px;font-size:12px;line-height:1.7;margin-bottom:8px;}
+#aic.on{display:block;}
+/* cat filter */
+.cr{display:flex;gap:4px;overflow-x:auto;padding-bottom:3px;scrollbar-width:none;margin-bottom:8px;}
+.cr::-webkit-scrollbar{display:none;}
+.cb{padding:3px 9px;border-radius:14px;border:1px solid #F0D0E0;background:white;color:#9B7B9B;font-size:11px;cursor:pointer;white-space:nowrap;flex-shrink:0;}
+.cb.on{border-color:#F48FB1;background:#FFF0F5;color:#F48FB1;}
+/* wardrobe */
+.wg{display:grid;grid-template-columns:repeat(auto-fill,minmax(80px,1fr));gap:6px;}
+.ic{border-radius:10px;border:2px solid #F0D0E0;background:white;cursor:pointer;overflow:hidden;transition:all .15s;}
+.ic.w{border-color:#F48FB1;background:#FFF0F5;}
+.ith{height:50px;display:flex;align-items:center;justify-content:center;}
+.ith img{width:100%;height:100%;object-fit:contain;image-rendering:pixelated;}
+.ii{padding:3px 4px 5px;text-align:center;}
+.in{font-size:10px;font-weight:600;line-height:1.3;}
+.in.w{color:#F48FB1;}
+.icat{font-size:9px;color:#9B7B9B;margin-top:1px;}
+.iwb{background:#F48FB1;color:white;text-align:center;font-size:9px;padding:2px 0;}
+/* closet */
+.cg{display:grid;grid-template-columns:repeat(auto-fill,minmax(105px,1fr));gap:8px;}
+.cc{background:white;border-radius:11px;border:1.5px solid #F0D0E0;overflow:hidden;}
+.cth{height:68px;display:flex;align-items:center;justify-content:center;}
+.cb2{padding:6px;}
+.cn{font-size:11px;font-weight:600;margin-bottom:2px;}
+.ccat{font-size:10px;color:#9B7B9B;margin-bottom:3px;}
+.tr{display:flex;flex-wrap:wrap;gap:2px;}
+.tg{font-size:9px;background:#F5F5F5;color:#9B7B9B;padding:1px 4px;border-radius:6px;}
+.cact{display:flex;gap:4px;padding:0 6px 6px;}
+.cact button{flex:1;border-radius:8px;border:1px solid #F0D0E0;background:white;font-size:10px;cursor:pointer;padding:3px 0;}
+.cact button:first-child:hover{background:#FFF0F5;border-color:#F48FB1;color:#F48FB1;}
+.cact button:last-child:hover{background:#FFF5F5;border-color:#FFCDD2;color:#E57373;}
+/* photo */
+#photowrap{position:relative;border-radius:17px;border:2px solid #F0D0E0;overflow:hidden;min-height:320px;margin-bottom:9px;background:linear-gradient(135deg,#FCE4EC,#E3F2FD);touch-action:none;}
+#photo-bg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.6;display:none;}
+#photo-figs{position:absolute;inset:0;}
+.pfig{position:absolute;cursor:grab;user-select:none;text-align:center;}
+.pfig:active{cursor:grabbing;}
+.pfig.sel{outline:2px solid rgba(244,143,177,.8);border-radius:10px;padding:2px;background:rgba(255,255,255,.25);}
+.pfig svg{display:block;}
+.pfl{font-size:10px;font-weight:600;margin-top:2px;}
+.pfig-scale{display:none;gap:3px;justify-content:center;margin-top:2px;}
+.pfig.sel .pfig-scale{display:flex;}
+.pfig-scale button{background:white;border:1px solid #F0D0E0;border-radius:6px;width:22px;height:22px;font-size:14px;cursor:pointer;line-height:1;display:flex;align-items:center;justify-content:center;}
+.pfig-scale button:hover{background:#FFF0F5;border-color:#F48FB1;}
+#photo-ai-sel{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;}
+.pasb{padding:4px 11px;border-radius:14px;border:1.5px solid #F0D0E0;background:white;font-size:11px;cursor:pointer;}
+.pasb.on{border-color:#90CAF9;background:#F0F8FF;}
+#bgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:8px;}
+.bgb{height:42px;border-radius:8px;border:1.5px solid #F0D0E0;cursor:pointer;font-size:11px;}
+.bgb.on{border-color:#F48FB1;border-width:2px;}
+/* draw */
+.fr{margin-bottom:9px;}
+.flb{font-size:11px;color:#9B7B9B;display:block;margin-bottom:3px;}
+.fi{width:100%;padding:7px 10px;border-radius:8px;border:1.5px solid #F0D0E0;font-size:13px;color:#3D2B3D;outline:none;font-family:inherit;}
+.fi:focus{border-color:#F48FB1;}
+.tip{background:#FFF8E1;border-radius:8px;padding:9px;font-size:11px;color:#795548;line-height:1.6;margin-top:9px;}
+#cvs-sec{display:none;}
+#cvs-sec.on{display:block;}
+#tb2{background:white;border:1.5px solid #F0D0E0;border-radius:13px;padding:9px;margin-bottom:9px;}
+.tr2{display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-bottom:5px;}
+.tr2:last-child{margin-bottom:0;}
+.tl{font-size:10px;color:#9B7B9B;flex-shrink:0;min-width:24px;}
+.tb2{width:30px;height:30px;border-radius:7px;border:1.5px solid #F0D0E0;background:white;cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;transition:all .15s;flex-shrink:0;}
+.tb2.on{border-color:#F48FB1;background:#FFF0F5;}
+#cp{display:flex;gap:3px;flex-wrap:wrap;}
+.sw{width:19px;height:19px;border-radius:5px;cursor:pointer;border:2px solid rgba(0,0,0,.1);flex-shrink:0;transition:transform .1s;}
+.sw:hover{transform:scale(1.2);}
+.sw.on{border-color:#E91E63;box-shadow:0 0 0 1px white inset;}
+#cc2{width:23px;height:23px;border-radius:5px;border:1.5px solid #ddd;cursor:pointer;padding:0;flex-shrink:0;}
+.sr{display:flex;align-items:center;gap:5px;flex:1;}
+.sr input[type=range]{flex:1;accent-color:#F48FB1;}
+.sv{font-size:11px;color:#9B7B9B;min-width:14px;}
+.swrow{display:flex;align-items:center;gap:6px;font-size:11px;color:#9B7B9B;}
+.tog{width:30px;height:17px;background:#ddd;border-radius:9px;position:relative;cursor:pointer;transition:background .2s;flex-shrink:0;}
+.tog.on{background:#F48FB1;}
+.tog::after{content:'';position:absolute;width:13px;height:13px;background:white;border-radius:50%;top:2px;left:2px;transition:left .2s;}
+.tog.on::after{left:15px;}
+#cvo{position:relative;border:2px solid #F0D0E0;border-radius:9px;overflow:hidden;margin:0 auto;display:block;width:fit-content;max-width:100%;}
+#pc,#gc,#sc2{display:block;image-rendering:pixelated;touch-action:none;}
+#gc,#sc2{position:absolute;top:0;left:0;pointer-events:none;}
+#pc{position:relative;}
+#cvbtns{display:flex;gap:6px;margin-top:9px;flex-wrap:wrap;}
+#cvbtns .bp{flex:1;}
+/* Pending geo bar */
+#geo-pending-bar{display:none;background:#FFF8E1;border-radius:9px;padding:7px 10px;font-size:11px;color:#795548;margin-bottom:7px;display:none;align-items:center;gap:8px;}
+#geo-pending-bar.on{display:flex;}
+#strow{display:flex;gap:6px;overflow-x:auto;padding-bottom:3px;scrollbar-width:none;align-items:flex-start;}
+#strow::-webkit-scrollbar{display:none;}
+.sti{flex-shrink:0;text-align:center;cursor:pointer;}
+.stcv{border:2px solid #F0D0E0;border-radius:5px;display:block;image-rendering:pixelated;}
+.stcv.on{border-color:#F48FB1;}
+.stl{font-size:9px;color:#9B7B9B;margin-top:2px;max-width:48px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;}
+/* avatar */
+.ag{display:grid;grid-template-columns:repeat(auto-fill,minmax(76px,1fr));gap:7px;margin-bottom:8px;}
+.ac{background:white;border-radius:11px;border:2px solid #F0D0E0;padding:7px;text-align:center;cursor:pointer;transition:all .15s;position:relative;}
+.ac:hover,.ac.on{border-color:#F48FB1;background:#FFF0F5;}
+.an{font-size:10px;color:#9B7B9B;margin-top:4px;}
+.ac-cfg{position:absolute;top:4px;right:4px;background:white;border:1px solid #F0D0E0;border-radius:5px;width:18px;height:18px;font-size:9px;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:2;}
+.ac-cfg:hover{background:#FFF0F5;border-color:#F48FB1;}
+.ac-del{position:absolute;top:4px;left:4px;background:white;border:1px solid #F0D0E0;border-radius:5px;width:18px;height:18px;font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:2;color:#BDBDBD;}
+.ac-del:hover{background:#FFF5F5;border-color:#FFCDD2;color:#E57373;}
+/* gender modal */
+#gm{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:999;align-items:center;justify-content:center;}
+#gm.on{display:flex;}
+#gmc{background:white;border-radius:18px;padding:22px;max-width:320px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,.15);}
+#gmc h2{font-size:16px;font-weight:700;margin-bottom:6px;}
+#gmc p{font-size:12px;color:#9B7B9B;margin-bottom:16px;}
+.gc3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px;}
+.gb{padding:14px 6px;border-radius:12px;border:2px solid #F0D0E0;background:white;cursor:pointer;text-align:center;transition:all .15s;}
+.gb:hover,.gb.on{border-color:#F48FB1;background:#FFF0F5;}
+.gbi{font-size:26px;margin-bottom:4px;}
+.gbn{font-size:11px;font-weight:600;}
+.gmr{margin-bottom:10px;}
+/* Edit item modal */
+#em{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:999;align-items:center;justify-content:center;}
+#em.on{display:flex;}
+#emc{background:white;border-radius:18px;padding:20px;max-width:320px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,.15);}
+#emc h2{font-size:15px;font-weight:700;margin-bottom:14px;}
+/* AI config modal */
+#acm{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:999;align-items:center;justify-content:center;}
+#acm.on{display:flex;}
+#acmc{background:white;border-radius:18px;padding:20px;max-width:340px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,.15);}
+#acmc h2{font-size:15px;font-weight:700;margin-bottom:4px;}
+#acmc p{font-size:11px;color:#9B7B9B;margin-bottom:14px;}
+/* Image import modal */
+#iim{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:999;align-items:flex-end;justify-content:center;}
+#iim.on{display:flex;}
+#iimc{background:white;border-radius:18px 18px 0 0;padding:20px;width:100%;max-width:480px;box-shadow:0 -4px 24px rgba(0,0,0,.15);}
+#iimc h2{font-size:15px;font-weight:700;margin-bottom:6px;}
+#img-preview-wrap{width:100%;height:160px;background:#F5F5F5;border-radius:10px;margin:10px 0;display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative;border:1.5px solid #F0D0E0;}
+#img-preview-wrap img{max-width:100%;max-height:100%;object-fit:contain;}
+.img-tip{font-size:11px;color:#9B7B9B;background:#FFF8E1;border-radius:7px;padding:6px 9px;margin-bottom:10px;}
+@media(max-width:480px){.wg{grid-template-columns:repeat(auto-fill,minmax(70px,1fr));}.tb2{width:27px;height:27px;font-size:12px;}}
+</style>
+</head>
+<body>
+<div id="hdr"><h1>👗 换装衣柜</h1><p>Raimos · 穿搭系统 v4</p></div>
+<div id="tabs">
+  <button class="tb on" onclick="sw('dress')">👗 换装</button>
+  <button class="tb" onclick="sw('closet')">🗂️ 衣柜</button>
+  <button class="tb" onclick="sw('photo')">📸 合拍</button>
+  <button class="tb" onclick="sw('draw')">🎨 画衣服</button>
+  <button class="tb" onclick="sw('avatar')">🧑 形象</button>
+</div>
+
+<!-- DRESS -->
+<div class="pg on" id="pg-dress">
+  <div class="card" style="position:relative">
+    <div id="figs">
+      <div class="fc">
+        <div class="fl">我的形象</div>
+        <div class="fb ub" onclick="sw('avatar')"><svg id="sv-u" viewBox="0 0 100 250" width="90" height="225"></svg></div>
+        <div class="ft">点击换形象</div>
+      </div>
+      <div id="d-ai-col" class="fc"></div>
+    </div>
+    <div id="trow">
+      <button class="trb u" id="btn-tu" onclick="setTgt('user')">给我换装</button>
+      <div id="ai-tbtns" style="display:contents"></div>
+    </div>
+    <button onclick="openFigPreview()" style="position:absolute;right:11px;bottom:11px;background:white;border:1.5px solid #F0D0E0;border-radius:8px;padding:4px 8px;font-size:11px;cursor:pointer;color:#9B7B9B" title="放大预览">🔍 放大</button>
+  </div>
+  <div class="card">
+    <div class="ct"><span id="ltitle">当前搭配 <span style="font-weight:400;font-size:10px;color:#9B7B9B">拖动调整·▲▼微调位置</span></span><button class="bd" onclick="clrLayers()">清空</button></div>
+    <div id="ll"><div class="eh">从下方点击衣物添加～</div></div>
+  </div>
+  <div class="card">
+    <div class="ct">✨ AI搭配推荐</div>
+    <div id="aic"></div>
+    <div style="display:flex;gap:7px">
+      <button class="bp" id="aibtn" onclick="askAI()" style="flex:1">🤖 让AI帮我搭配</button>
+      <button class="bs" id="airr" onclick="askAI()" style="display:none">重选</button>
+    </div>
+    <div style="margin-top:8px;background:#FAFAFA;border:1.5px dashed #F0D0E0;border-radius:10px;padding:8px">
+      <div style="font-size:11px;font-weight:700;margin-bottom:6px;color:#9B7B9B">可选条件（不填也能用）</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+        <select class="fi" id="ai-mood" style="padding:6px 10px;font-size:12px">
+          <option value="">心情(可不选)</option>
+          <option>甜酷</option><option>可爱</option><option>温柔</option><option>通勤</option><option>约会</option><option>慵懒</option><option>运动</option><option>派对</option>
+        </select>
+        <input class="fi" id="ai-temp" placeholder="今晚温度范围 例 18-24℃" style="padding:6px 10px;font-size:12px">
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px">
+        <select class="fi" id="ai-season" style="padding:6px 10px;font-size:12px">
+          <option value="">季节(可不选)</option>
+          <option>春秋</option><option>夏</option><option>冬</option>
+        </select>
+        <input class="fi" id="ai-city" placeholder="城市(可不填)" style="padding:6px 10px;font-size:12px">
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px">
+        <input class="fi" id="ai-color" placeholder="想要的颜色(可不填)" style="padding:6px 10px;font-size:12px">
+        <input class="fi" id="ai-want" placeholder="想要的单品(可不填)" style="padding:6px 10px;font-size:12px">
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="ct">点击衣物添加到搭配</div>
+    <div class="cr" id="cf-d"></div>
+    <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-bottom:5px">
+      <span style="font-size:10px;color:#9B7B9B;flex-shrink:0">季节</span>
+      <div class="cr" id="cf-d-season" style="margin-bottom:0;flex-shrink:0"></div>
+      <span style="font-size:10px;color:#9B7B9B;flex-shrink:0;margin-left:4px">性别</span>
+      <div class="cr" id="cf-d-gender" style="margin-bottom:0;flex-shrink:0"></div>
+    </div>
+    <div class="wg" id="wq"></div>
+  </div>
+</div>
+
+<!-- CLOSET -->
+<div class="pg" id="pg-closet">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:9px">
+    <div style="font-size:14px;font-weight:700">🗂️ 衣柜 <span id="ccount" style="font-size:11px;color:#9B7B9B;font-weight:400"></span></div>
+    <div style="display:flex;gap:6px">
+      <label class="bsm" style="cursor:pointer;font-size:11px" title="导入图片到衣柜（推荐正方形PNG，透明背景更佳）">🖼️ 导入图片<input type="file" accept="image/*" style="display:none" onchange="importClosetImage(this)"></label>
+      <button onclick="sw('draw')" style="padding:4px 11px;border-radius:14px;border:none;background:linear-gradient(135deg,#F48FB1,#E8A0BF);color:white;font-size:11px;cursor:pointer">+ 画新衣服</button>
+    </div>
+  </div>
+  <div class="cr" id="cf-c"></div>
+  <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-bottom:5px">
+    <span style="font-size:10px;color:#9B7B9B;flex-shrink:0">季节</span>
+    <div class="cr" id="cf-c-season" style="margin-bottom:0;flex-shrink:0"></div>
+    <span style="font-size:10px;color:#9B7B9B;flex-shrink:0;margin-left:4px">性别</span>
+    <div class="cr" id="cf-c-gender" style="margin-bottom:0;flex-shrink:0"></div>
+  </div>
+  <div class="cg" id="cg"></div>
+</div>
+
+<!-- PHOTO -->
+<div class="pg" id="pg-photo">
+  <div style="font-size:13px;font-weight:700;margin-bottom:8px">📸 合拍展示区</div>
+  <div style="font-size:11px;font-weight:600;margin-bottom:5px">选择出镜AI</div>
+  <div id="photo-ai-sel"></div>
+  <div id="photowrap">
+    <img id="photo-bg" alt="">
+    <div id="photo-figs"></div>
+  </div>
+  <div style="font-size:11px;color:#9B7B9B;margin-bottom:8px;text-align:center">拖动移位 · ➕➖缩放 · 支持多人合拍</div>
+  <div style="display:flex;gap:7px;margin-bottom:9px;flex-wrap:wrap">
+    <button class="bp" style="flex:1" onclick="savePhoto()">📸 保存合拍</button>
+    <label class="bs" style="cursor:pointer">🖼️ 上传背景<input type="file" accept="image/*" style="display:none" onchange="upBg(this)"></label>
+    <button class="bs" onclick="clrBg()">清除</button>
+  </div>
+  <div style="font-size:11px;font-weight:600;margin-bottom:6px">预设背景</div>
+  <div id="bgrid"></div>
+</div>
+
+<!-- DRAW -->
+<div class="pg" id="pg-draw">
+  <div style="font-size:14px;font-weight:700;margin-bottom:3px">🎨 画衣服</div>
+  <div style="font-size:11px;color:#9B7B9B;margin-bottom:9px">48×80格子 · 空白=透明 · 上方16格为发型区</div>
+  <div class="card" id="df">
+    <div class="fr"><label class="flb">衣物名称</label><input class="fi" id="inp-n" placeholder="例：蓝色蕾丝连衣裙"></div>
+    <div class="fr">
+      <label class="flb">分类</label>
+      <select class="fi" id="inp-c">
+        <option>上衣</option><option>套装</option><option>下装</option><option>裙子</option><option>裤子</option>
+        <option>连衣裙</option><option>外套</option><option>内搭</option><option>衬裙</option><option>外层罩裙</option>
+        <option>袜子</option><option>鞋子</option><option>发型</option>
+        <option>头饰</option><option>耳饰</option><option>颈饰</option><option>面部装饰</option>
+        <option>首饰</option><option>腰带</option><option>包</option><option>其他</option>
+      </select>
+    </div>
+    <div class="fr"><label class="flb">标签（逗号分隔）</label><input class="fi" id="inp-t" placeholder="例：蓝色, lolita, 春秋"></div>
+    <button class="bp" onclick="openCvs()" style="width:100%">🖌️ 开始画</button>
+    <div class="tip">💡 空白=透明，叠在形象上透出下面图层。发型请画在顶部16行内，开启定位线可看人形参考。</div>
+  </div>
+  <div id="cvs-sec">
+    <div id="geo-pending-bar">
+      <span style="flex:1">🔷 拖动几何形状调整位置，满意后确认</span>
+      <button class="bsm" onclick="confirmPendingGeo()" style="border-color:#90CAF9;background:#F0F8FF;color:#1565C0">✅ 确认位置</button>
+      <button class="bsm" onclick="cancelPendingGeo()" style="color:#E57373">✕ 取消</button>
+    </div>
+    <div id="tb2">
+      <!-- Row 1: Tools -->
+      <div class="tr2">
+        <span class="tl">工具</span>
+        <button class="tb2 on" id="t-pen" onclick="setTool('pen')" title="画笔">✏️</button>
+        <button class="tb2" id="t-curve" onclick="setTool('curve')" title="曲线（强平滑）">〜</button>
+        <button class="tb2" id="t-eraser" onclick="setTool('eraser')" title="橡皮">🧹</button>
+        <button class="tb2" id="t-fill" onclick="setTool('fill')" title="填充">🪣</button>
+        <button class="tb2" id="t-line" onclick="setTool('line')" title="直线">📏</button>
+        <button class="tb2" id="t-geo" onclick="setTool('geo')" title="几何形状（可拖动后确认）">⬜</button>
+        <button class="tb2" id="t-poly" onclick="setTool('poly')" title="正多边形">⬡</button>
+        <button class="tb2" id="t-sel" onclick="setTool('sel')" title="矩形选区">⬚</button>
+        <button class="tb2" id="t-csel" onclick="setTool('csel')" title="圆形选区">○</button>
+        <button class="tb2" id="t-lasso" onclick="setTool('lasso')" title="不规则套索">🔆</button>
+        <button class="tb2" id="t-eye" onclick="setTool('eye')" title="取色">💉</button>
+        <button class="tb2" id="t-stamp" onclick="setTool('stamp')" title="印章">🔖</button>
+      </div>
+      <!-- Row 2: Geo options -->
+      <div class="tr2" id="geo-r" style="display:none">
+        <span class="tl">几何</span>
+        <button class="bsm on" id="g-rect" onclick="setGeo('rect')">▭矩形</button>
+        <button class="bsm" id="g-tri" onclick="setGeo('tri')">△三角</button>
+        <button class="bsm" id="g-ellipse" onclick="setGeo('ellipse')">⬭椭圆</button>
+        <button class="bsm" id="g-circle" onclick="setGeo('circle')">○圆</button>
+        <button class="bsm" id="g-fill" onclick="togGeoFill()">填充:开</button>
+        <span style="font-size:10px;color:#9B7B9B">画后可拖动调整位置</span>
+      </div>
+      <!-- Row 3: Poly options -->
+      <div class="tr2" id="poly-r" style="display:none">
+        <span class="tl">多边形</span>
+        <span style="font-size:11px;color:#9B7B9B">边数</span>
+        <input type="range" min="3" max="12" value="6" id="poly-sides" oninput="polySides=+this.value;document.getElementById('psv').textContent=this.value" style="width:80px;accent-color:#F48FB1">
+        <span class="sv" id="psv">6</span>
+        <button class="bsm" id="p-fill" onclick="togPolyFill()">填充:开</button>
+      </div>
+      <!-- Row 4: Sel actions -->
+      <div class="tr2" id="sel-r" style="display:none">
+        <span class="tl">选区</span>
+        <button class="bsm" onclick="selFlipH()">↔翻转</button>
+        <button class="bsm" onclick="selFlipV()">↕翻转</button>
+        <button class="bsm" onclick="selCopy()">📋复制</button>
+        <button class="bsm" onclick="selToStamp()">🔖存印章</button>
+        <button class="bsm" onclick="selClear()" style="color:#E57373">🗑️删除</button>
+        <button class="bsm" id="sel-move-hint" style="color:#9B7B9B;font-size:10px">拖动可移动选区</button>
+      </div>
+      <!-- Row 5: Stamp -->
+      <div class="tr2" id="stamp-r" style="display:none">
+        <span class="tl">印章</span>
+        <div id="strow"><span style="font-size:11px;color:#9B7B9B">加载中…</span></div>
+      </div>
+      <!-- Row 6: Sizes -->
+      <div class="tr2">
+        <span class="tl">笔刷</span>
+        <div class="sr"><input type="range" min="1" max="8" value="1" id="bs-r" oninput="brushSz=+this.value;document.getElementById('bsv').textContent=this.value"><span class="sv" id="bsv">1</span></div>
+        <span class="tl" style="margin-left:5px">平滑</span>
+        <div class="sr"><input type="range" min="0" max="10" value="4" id="sm-r" oninput="smLv=+this.value;document.getElementById('smv').textContent=this.value"><span class="sv" id="smv">4</span></div>
+      </div>
+      <!-- Row 7: Colors -->
+      <div class="tr2"><span class="tl">色</span><div id="cp"></div><input type="color" id="cc2" value="#E8A0BF" oninput="pickC(this.value)"></div>
+      <!-- Row 8: Misc -->
+      <div class="tr2" style="gap:7px;flex-wrap:wrap">
+        <div class="swrow"><div class="tog on" id="tg-guide" onclick="togGuide()"></div><span>定位线</span></div>
+        <button class="bsm" onclick="doBlur()">模糊</button>
+        <button class="bsm" onclick="doUndo()">↩撤销</button>
+        <button class="bsm" onclick="doClear()" style="color:#E57373">🗑️清空</button>
+      </div>
+    </div>
+    <div id="cvo"><canvas id="pc"></canvas><canvas id="gc"></canvas><canvas id="sc2"></canvas></div>
+    <div id="cvbtns">
+      <button class="bs" onclick="saveDraft()">💾 暂存</button>
+      <button class="bs" id="load-btn" style="display:none" onclick="loadDraft()">📂 草稿</button>
+      <button class="bs" onclick="closeCvs()">取消</button>
+      <button class="bp" onclick="saveCvs()">✅ 存入衣柜</button>
+    </div>
+  </div>
+</div>
+
+<!-- AVATAR -->
+<div class="pg" id="pg-avatar">
+  <div class="card">
+    <div class="ct">🙋 我的形象</div>
+    <div style="font-size:11px;color:#9B7B9B;margin-bottom:7px">选择底图或上传PNG，发型可在「画衣服」里单独画再调图层位置</div>
+    <div class="ag" id="u-ag"></div>
+    <div style="display:flex;gap:7px;flex-wrap:wrap">
+      <button class="bsm" onclick="openGenderModal('user')">+ 新建形象</button>
+      <label class="bsm" style="cursor:pointer">📁 上传PNG<input type="file" accept="image/png" style="display:none" onchange="upUserAv(this)"></label>
+    </div>
+  </div>
+  <div class="card">
+    <div class="ct">🤖 AI形象 <span style="font-size:10px;font-weight:400;color:#9B7B9B">点⚙️配置各AI的API</span></div>
+    <div style="font-size:11px;color:#9B7B9B;margin-bottom:7px">多个AI形象，可在换装和合拍时选择。为每个AI单独配置API地址和密钥。</div>
+    <div class="ag" id="ai-ag"></div>
+    <div style="display:flex;gap:7px;flex-wrap:wrap">
+      <button class="bsm" onclick="openGenderModal('ai')">+ 新建AI形象</button>
+      <label class="bsm" style="cursor:pointer">📁 上传AI PNG<input type="file" accept="image/png" style="display:none" onchange="upAIAv(this)"></label>
+    </div>
+  </div>
+</div>
+
+<!-- Figure Preview Modal -->
+<div id="fig-preview-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:1000;align-items:center;justify-content:center;" onclick="if(event.target===this)closeFigPreview()">
+  <div style="background:white;border-radius:18px;padding:20px;max-width:95vw;max-height:90vh;overflow:auto;box-shadow:0 8px 32px rgba(0,0,0,.3)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <span style="font-size:14px;font-weight:700">👗 当前搭配预览</span>
+      <button onclick="closeFigPreview()" style="background:none;border:none;font-size:22px;cursor:pointer;color:#9B7B9B;line-height:1">✕</button>
+    </div>
+    <div id="fig-preview-content" style="display:flex;gap:24px;justify-content:center;align-items:flex-end"></div>
+  </div>
+</div>
+
+<!-- Gender Modal -->
+<div id="gm">
+  <div id="gmc">
+    <h2>新建形象</h2>
+    <p>选择性别，系统会使用对应的预设底图</p>
+    <div class="gc3">
+      <div class="gb" id="g-f" onclick="selGender('f')"><div class="gbi">👧</div><div class="gbn">女生</div></div>
+      <div class="gb" id="g-m" onclick="selGender('m')"><div class="gbi">👦</div><div class="gbn">男生</div></div>
+      <div class="gb" id="g-o" onclick="selGender('o')"><div class="gbi">🧑</div><div class="gbn">其他</div></div>
+    </div>
+    <div class="gmr"><label class="flb">形象名称</label><input class="fi" id="gm-name" placeholder="给这个形象起个名字…"></div>
+    <div class="gmr">
+      <label class="flb">上传图片（可选，不上传则使用预设轮廓）</label>
+      <div id="gm-img-preview" style="width:100%;height:72px;background:#F5F5F5;border-radius:8px;border:1.5px dashed #F0D0E0;display:flex;align-items:center;justify-content:center;margin-bottom:6px;overflow:hidden;cursor:pointer" onclick="document.getElementById('gm-img-input').click()">
+        <span style="font-size:11px;color:#9B7B9B">点此选择图片</span>
+      </div>
+      <input type="file" accept="image/*" id="gm-img-input" style="display:none" onchange="previewGMImg(this)">
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="bs" onclick="closeGM()" style="flex:1">取消</button>
+      <button class="bp" onclick="confirmGM()" style="flex:1">创建</button>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Item Modal -->
+<div id="em">
+  <div id="emc">
+    <h2>✏️ 编辑衣物</h2>
+    <div class="fr"><label class="flb">名称</label><input class="fi" id="em-n" placeholder="衣物名称"></div>
+    <div class="fr">
+      <label class="flb">分类</label>
+      <select class="fi" id="em-c">
+        <option>上衣</option><option>套装</option><option>下装</option><option>裙子</option><option>裤子</option>
+        <option>连衣裙</option><option>外套</option><option>内搭</option><option>衬裙</option><option>外层罩裙</option>
+        <option>袜子</option><option>鞋子</option><option>发型</option>
+        <option>头饰</option><option>耳饰</option><option>颈饰</option><option>面部装饰</option>
+        <option>首饰</option><option>腰带</option><option>包</option><option>其他</option>
+      </select>
+    </div>
+    <div class="fr"><label class="flb">标签（逗号分隔）</label><input class="fi" id="em-t" placeholder="例：蓝色, lolita"></div>
+    <div style="display:flex;gap:8px;margin-top:4px">
+      <button class="bs" onclick="closeEditModal()" style="flex:1">取消</button>
+      <button class="bp" onclick="saveEdit()" style="flex:1">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- Transform Modal (衣物位置/大小记忆) -->
+<div id="tm" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:999;align-items:center;justify-content:center;">
+  <div id="tmc" style="background:white;border-radius:18px;padding:20px;max-width:340px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,.15);">
+    <h2 style="font-size:15px;font-weight:700;margin-bottom:4px;">🧷 调整衣物位置/大小</h2>
+    <p id="tm-name" style="font-size:11px;color:#9B7B9B;margin-bottom:14px;">支持位置、整体缩放和宽高独立缩放，调整后会记忆</p>
+    <div style="background:#FAFAFA;border:1.5px solid #F0D0E0;border-radius:12px;padding:8px;margin-bottom:10px">
+      <div style="font-size:10px;color:#9B7B9B;margin-bottom:6px">参考预览（当前形象 + 当前这件衣服）</div>
+      <div id="tm-prev" style="display:flex;justify-content:center;align-items:center;min-height:160px"></div>
+    </div>
+    <div class="fr"><label class="flb">X 偏移</label><input class="fi" id="tm-x" type="range" min="-80" max="80" step="1" oninput="tmOnInput()"><div class="sv" id="tm-xv" style="margin-top:4px">0</div></div>
+    <div class="fr"><label class="flb">Y 偏移</label><input class="fi" id="tm-y" type="range" min="-160" max="160" step="1" oninput="tmOnInput()"><div class="sv" id="tm-yv" style="margin-top:4px">0</div></div>
+    <div class="fr"><label class="flb">整体缩放</label><input class="fi" id="tm-s" type="range" min="0.3" max="3" step="0.1" oninput="tmOnInput()"><div class="sv" id="tm-sv" style="margin-top:4px">1.0</div></div>
+    <div class="fr"><label class="flb">宽度缩放（拉宽↔）</label><input class="fi" id="tm-sx" type="range" min="0.3" max="3" step="0.05" oninput="tmOnInput()"><div class="sv" id="tm-sxv" style="margin-top:4px">1.0</div></div>
+    <div class="fr"><label class="flb">高度缩放（拉高↕）</label><input class="fi" id="tm-sy" type="range" min="0.3" max="3" step="0.05" oninput="tmOnInput()"><div class="sv" id="tm-syv" style="margin-top:4px">1.0</div></div>
+    <div style="display:flex;gap:8px">
+      <button class="bs" onclick="closeTM()" style="flex:1">关闭</button>
+      <button class="bp" onclick="saveTM()" style="flex:1">保存记忆</button>
+    </div>
+  </div>
+</div>
+
+<!-- AI API Config Modal -->
+<div id="acm">
+  <div id="acmc">
+    <h2>⚙️ AI助手API配置</h2>
+    <p id="acm-name">配置API地址和密钥，不同AI助手可用不同的接口</p>
+    <div class="fr">
+      <label class="flb">API 地址</label>
+      <input class="fi" id="acm-url" placeholder="https://api.openai.com/v1/chat/completions 等">
+    </div>
+    <div class="fr">
+      <label class="flb">API Key</label>
+      <input class="fi" id="acm-key" type="password" placeholder="sk-…（留空则使用全局设置）">
+    </div>
+    <div class="fr">
+      <label class="flb">模型名称</label>
+      <input class="fi" id="acm-model" placeholder="gpt-4o / claude-3-5-sonnet-20241022 等">
+    </div>
+    <div style="font-size:10px;color:#9B7B9B;background:#F5F5F5;border-radius:7px;padding:7px;margin-bottom:12px;line-height:1.6">
+      支持 OpenAI、Anthropic Claude、DeepSeek、Moonshot 等兼容接口。<br>
+      留空则使用下方全局默认配置。
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="bs" onclick="closeAIConfig()" style="flex:1">取消</button>
+      <button class="bp" onclick="saveAIConfig()" style="flex:1">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- Image Import Modal -->
+<div id="iim">
+  <div id="iimc">
+    <h2>🖼️ 导入图片到衣柜</h2>
+    <div class="img-tip">💡 推荐使用透明背景PNG，建议正方形。导入后图片将以原比例保存，在换装时与人物等比缩放显示。</div>
+    <div id="img-preview-wrap"><span style="color:#9B7B9B;font-size:12px">预览</span></div>
+    <div class="fr">
+      <label class="flb">参考形象（用于调位置/大小）</label>
+      <select class="fi" id="iim-av" onchange="updateIIMPreview()"></select>
+      <div id="iim-ref" style="display:flex;justify-content:center;align-items:center;background:#FAFAFA;border:1.5px solid #F0D0E0;border-radius:12px;padding:8px;margin-top:8px;min-height:160px"></div>
+    </div>
+    <div class="fr"><label class="flb">衣物名称</label><input class="fi" id="iim-n" placeholder="例：AI生成蓝色礼服"></div>
+    <div class="fr">
+      <label class="flb">分类</label>
+      <select class="fi" id="iim-c">
+        <option>上衣</option><option>套装</option><option>下装</option><option>裙子</option><option>裤子</option>
+        <option>连衣裙</option><option>外套</option><option>内搭</option><option>衬裙</option><option>外层罩裙</option>
+        <option>袜子</option><option>鞋子</option><option>发型</option>
+        <option>头饰</option><option>耳饰</option><option>颈饰</option><option>面部装饰</option>
+        <option>首饰</option><option>腰带</option><option>包</option><option>其他</option>
+      </select>
+    </div>
+    <div class="fr"><label class="flb">标签</label><input class="fi" id="iim-t" placeholder="ai生成, 蓝色 等"></div>
+    <div class="fr">
+      <label class="flb">穿上时的默认位置/大小（可选，之后也能再调并记忆）</label>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+        <input class="fi" id="iim-x" type="number" step="1" placeholder="X偏移(建议 -40~40)" oninput="updateIIMPreview()">
+        <input class="fi" id="iim-y" type="number" step="1" placeholder="Y偏移(建议 -120~120)" oninput="updateIIMPreview()">
+      </div>
+      <input class="fi" id="iim-s" type="number" step="0.1" placeholder="缩放(建议 0.5~2.0)" oninput="updateIIMPreview()">
+      <div style="font-size:10px;color:#9B7B9B;margin-top:4px">偏移单位为人物SVG坐标（大概等同像素感），缩放=1 为默认。</div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="bs" onclick="closeImageImport()" style="flex:1">取消</button>
+      <button class="bp" onclick="saveImageImport()" style="flex:1">✅ 导入衣柜</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════
+// CONSTANTS
+// ═══════════════════════════════════════
+const COLS=48,ROWS=80,CELL=8;  // ROWS=80: top 16 rows = hair zone
+const HAIR_ROWS=16; // rows reserved for hair at top
+const CATS=['套装','上衣','下装','裙子','裤子','连衣裙','外套','内搭','衬裙','外层罩裙','袜子','鞋子','发型','头饰','耳饰','颈饰','面部装饰','首饰','腰带','包','其他'];
+const SEASONS=['春秋','夏','冬'];
+const GENDERS=['女','男','中性'];
+const SK='#F5CBA7',HR='#4A2C2A',AC='#B5D5F5';
+const PC=['#F5CBA7','#E8A0BF','#B5D5F5','#A8D8A8','#FFE082','#EF9A9A','#CE93D8','#80DEEA','#FFAB91','#F0F0F0','#BDBDBD','#4A4A4A','#FFFFFF','#2C1810','#1A237E','#1B5E20','#B71C1C','#000000'];
+const BGS=[{n:'春日粉',b:'linear-gradient(135deg,#FCE4EC,#F8BBD0)'},{n:'晴天蓝',b:'linear-gradient(135deg,#E3F2FD,#BBDEFB)'},{n:'星空紫',b:'linear-gradient(135deg,#EDE7F6,#D1C4E9)'},{n:'森林绿',b:'linear-gradient(135deg,#E8F5E9,#C8E6C9)'},{n:'暖阳橙',b:'linear-gradient(135deg,#FFF8E1,#FFECB3)'},{n:'纯白净',b:'linear-gradient(135deg,#FAFAFA,#F5F5F5)'}];
+
+// ═══════════════════════════════════════
+// SVG BASES
+// ═══════════════════════════════════════
+function svgF(){return`<rect x="38" y="185" width="11" height="55" rx="5" fill="${SK}"/><rect x="51" y="185" width="11" height="55" rx="5" fill="${SK}"/><ellipse cx="43" cy="240" rx="9" ry="5" fill="#555"/><ellipse cx="57" cy="240" rx="9" ry="5" fill="#555"/><rect x="32" y="110" width="36" height="80" rx="10" fill="${SK}"/><rect x="18" y="112" width="13" height="50" rx="6" fill="${SK}"/><rect x="69" y="112" width="13" height="50" rx="6" fill="${SK}"/><rect x="44" y="95" width="12" height="20" rx="5" fill="${SK}"/><ellipse cx="50" cy="78" rx="24" ry="26" fill="${SK}"/><ellipse cx="50" cy="60" rx="26" ry="22" fill="${HR}"/><rect x="26" y="55" width="48" height="18" rx="8" fill="${HR}"/><rect x="24" y="65" width="8" height="30" rx="4" fill="${HR}"/><rect x="68" y="65" width="8" height="30" rx="4" fill="${HR}"/><ellipse cx="42" cy="80" rx="4" ry="4.5" fill="white"/><ellipse cx="58" cy="80" rx="4" ry="4.5" fill="white"/><ellipse cx="42" cy="81" rx="2.5" ry="3" fill="#3D2B3D"/><ellipse cx="58" cy="81" rx="2.5" ry="3" fill="#3D2B3D"/><circle cx="43" cy="80" r="1" fill="white"/><circle cx="59" cy="80" r="1" fill="white"/><ellipse cx="36" cy="87" rx="5" ry="3" fill="#F8BBD0" opacity=".7"/><ellipse cx="64" cy="87" rx="5" ry="3" fill="#F8BBD0" opacity=".7"/><path d="M46 92 Q50 96 54 92" stroke="#E57373" stroke-width="1.5" fill="none" stroke-linecap="round"/>`;}
+function svgM(){return`<rect x="37" y="185" width="12" height="58" rx="5" fill="${SK}"/><rect x="51" y="185" width="12" height="58" rx="5" fill="${SK}"/><ellipse cx="43" cy="243" rx="10" ry="5" fill="#444"/><ellipse cx="57" cy="243" rx="10" ry="5" fill="#444"/><rect x="29" y="108" width="42" height="82" rx="10" fill="${SK}"/><rect x="14" y="110" width="14" height="55" rx="6" fill="${SK}"/><rect x="72" y="110" width="14" height="55" rx="6" fill="${SK}"/><rect x="43" y="92" width="14" height="22" rx="5" fill="${SK}"/><ellipse cx="50" cy="76" rx="23" ry="24" fill="${SK}"/><ellipse cx="50" cy="60" rx="25" ry="18" fill="#3A2A1A"/><rect x="26" y="58" width="48" height="12" rx="5" fill="#3A2A1A"/><ellipse cx="42" cy="78" rx="4" ry="4.5" fill="white"/><ellipse cx="58" cy="78" rx="4" ry="4.5" fill="white"/><ellipse cx="42" cy="79" rx="2.5" ry="3" fill="#2D1B1B"/><ellipse cx="58" cy="79" rx="2.5" ry="3" fill="#2D1B1B"/><circle cx="43" cy="78" r="1" fill="white"/><circle cx="59" cy="78" r="1" fill="white"/><ellipse cx="36" cy="85" rx="4" ry="2" fill="#F8BBD0" opacity=".4"/><ellipse cx="64" cy="85" rx="4" ry="2" fill="#F8BBD0" opacity=".4"/><path d="M46 91 Q50 94 54 91" stroke="#C97B7B" stroke-width="1.5" fill="none" stroke-linecap="round"/>`;}
+function svgO(){return`<rect x="38" y="185" width="11" height="56" rx="5" fill="${SK}"/><rect x="51" y="185" width="11" height="56" rx="5" fill="${SK}"/><ellipse cx="43" cy="241" rx="9" ry="5" fill="#666"/><ellipse cx="57" cy="241" rx="9" ry="5" fill="#666"/><rect x="30" y="109" width="40" height="81" rx="10" fill="${SK}"/><rect x="16" y="111" width="13" height="52" rx="6" fill="${SK}"/><rect x="71" y="111" width="13" height="52" rx="6" fill="${SK}"/><rect x="43" y="94" width="14" height="21" rx="5" fill="${SK}"/><ellipse cx="50" cy="77" rx="23" ry="25" fill="${SK}"/><ellipse cx="50" cy="59" rx="25" ry="20" fill="#5C3A8C"/><rect x="26" y="56" width="48" height="15" rx="7" fill="#5C3A8C"/><rect x="24" y="63" width="7" height="25" rx="3" fill="#5C3A8C"/><rect x="69" y="63" width="7" height="25" rx="3" fill="#5C3A8C"/><ellipse cx="42" cy="79" rx="4" ry="4.5" fill="white"/><ellipse cx="58" cy="79" rx="4" ry="4.5" fill="white"/><ellipse cx="42" cy="80" rx="2.5" ry="3" fill="#4A1268"/><ellipse cx="58" cy="80" rx="2.5" ry="3" fill="#4A1268"/><circle cx="43" cy="79" r="1" fill="white"/><circle cx="59" cy="79" r="1" fill="white"/><ellipse cx="36" cy="86" rx="5" ry="3" fill="#E1BEF0" opacity=".7"/><ellipse cx="64" cy="86" rx="5" ry="3" fill="#E1BEF0" opacity=".7"/><path d="M46 91 Q50 95 54 91" stroke="#9C5BB5" stroke-width="1.5" fill="none" stroke-linecap="round"/>`;}
+function svgAI(){return`<rect x="38" y="215" width="10" height="65" rx="5" fill="${SK}"/><rect x="52" y="215" width="10" height="65" rx="5" fill="${SK}"/><ellipse cx="43" cy="280" rx="9" ry="5" fill="#333"/><ellipse cx="57" cy="280" rx="9" ry="5" fill="#333"/><rect x="31" y="125" width="38" height="95" rx="10" fill="${SK}"/><rect x="16" y="127" width="14" height="60" rx="6" fill="${SK}"/><rect x="70" y="127" width="14" height="60" rx="6" fill="${SK}"/><rect x="44" y="108" width="12" height="22" rx="5" fill="${SK}"/><ellipse cx="50" cy="88" rx="22" ry="24" fill="${SK}"/><ellipse cx="50" cy="72" rx="24" ry="20" fill="#2C1810"/><rect x="28" y="68" width="44" height="15" rx="7" fill="#2C1810"/><ellipse cx="42" cy="90" rx="3.5" ry="4" fill="white"/><ellipse cx="58" cy="90" rx="3.5" ry="4" fill="white"/><ellipse cx="42" cy="91" rx="2.2" ry="2.8" fill="#1A237E"/><ellipse cx="58" cy="91" rx="2.2" ry="2.8" fill="#1A237E"/><circle cx="43" cy="90" r=".9" fill="white"/><circle cx="59" cy="90" r=".9" fill="white"/><ellipse cx="36" cy="96" rx="4" ry="2.5" fill="#F8BBD0" opacity=".5"/><ellipse cx="64" cy="96" rx="4" ry="2.5" fill="#F8BBD0" opacity=".5"/><path d="M46 102 Q50 106 54 102" stroke="#E57373" stroke-width="1.5" fill="none" stroke-linecap="round"/><rect x="31" y="140" width="38" height="70" rx="8" fill="${AC}" opacity=".9"/><rect x="31" y="125" width="38" height="25" rx="6" fill="${AC}" opacity=".9"/><rect x="16" y="127" width="14" height="40" rx="6" fill="${AC}" opacity=".85"/><rect x="70" y="127" width="14" height="40" rx="6" fill="${AC}" opacity=".85"/><path d="M44 125 Q50 135 56 125" fill="white" opacity=".8"/>`;}
+function svgFnForGender(g){return g==='m'?svgM():g==='o'?svgO():svgF();}
+
+function tfKey(avId,itemId){return `${avId}|${itemId}`;}
+function resolveTF(avId,itemId){
+  // 优先：当前形象专属；其次：default；最后：默认值
+  const v=layerTF[tfKey(avId,itemId)]||layerTF[tfKey('default',itemId)]||{x:0,y:0,s:1,sx:1,sy:1};
+  return {x:+(v.x||0),y:+(v.y||0),s:Math.max(0.3,Math.min(3,+(v.s||1))),sx:Math.max(0.3,Math.min(3,+(v.sx||1))),sy:Math.max(0.3,Math.min(3,+(v.sy||1)))};
+}
+function saveTF(avId,itemId,tf){
+  layerTF[tfKey(avId,itemId)]=tf;
+  localStorage.setItem('rLayerTF',JSON.stringify(layerTF));
+}
+
+// lyrSVG: render clothing layers on SVG figure, supporting per-avatar transform memory
+function lyrSVG(ls,w,h,avId){
+  return ls.map(l=>{
+    const tf=resolveTF(avId,l.id);
+    const sw=w*tf.s*tf.sx, sh=h*tf.s*tf.sy;
+    if(l.dataUrl){
+      return`<image href="${l.dataUrl}" x="${tf.x}" y="${tf.y}" width="${sw}" height="${sh}" style="image-rendering:pixelated" preserveAspectRatio="none"/>`;
+    }
+    return`<rect x="${8+tf.x}" y="${55+tf.y}" width="${84*tf.s*tf.sx}" height="${145*tf.s*tf.sy}" rx="10" fill="${l.color}" opacity=".55"/>`;
+  }).join('');
+}
+
+function avC(av){
+  if(av.type==='svg')return av.svgData||svgFnForGender(av.gender||'f');
+  return`<image href="${av.dataUrl}" x="0" y="0" width="100" height="${av.h||250}"/>`;
+}
+
+// ═══════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════
+let wardrobe=[];
+let uLayers=[],aiMap={};
+// 衣物在“人物”上的位置/大小记忆：优先 avatarId|itemId，其次 default|itemId
+let layerTF=(()=>{try{return JSON.parse(localStorage.getItem('rLayerTF')||'{}');}catch(e){return {};}})();
+let curTgt='user';
+let fdress='全部',fcloset='全部';
+let seasonFilter='全部',genderFilter='全部';
+let closetSeasonFilter='全部',closetGenderFilter='全部';
+let uAvatars=[
+  {id:'u_svg_f',name:'默认形象',type:'svg',gender:'f',h:250},
+];
+// AI avatars now include apiUrl, apiKey, apiModel for per-AI config
+let aiAvatars=[
+  {id:'ai_svg0',name:'AI助手',type:'svg',gender:'ai',h:290,apiUrl:'',apiKey:'',apiModel:''},
+];
+let curUA='u_svg_f',curDA='ai_svg0';
+let photoAIs=['ai_svg0'],selBg=0;
+let figScales={}; // {figId: scale (0.5 to 2.0)}
+let figPos=(()=>{try{return JSON.parse(localStorage.getItem('rFigPos')||'{}');}catch(e){return {};}})(); // {figId:{left,bottom}}
+let selPhotoFig=null;
+let stamps=[];
+let selStamp=null;
+// gender modal
+let gmTarget='user',gmGender='f';
+let gmImageData=null;
+// edit modal
+let editingItemId=null;
+// AI config modal
+let aiConfigId=null;
+// image import
+let importImageData=null;
+// transform modal
+let tmItemId=null;
+
+// ═══════════════════════════════════════
+// RENDER FIGURES
+// ═══════════════════════════════════════
+function rFigs(){
+  const ua=uAvatars.find(a=>a.id===curUA)||uAvatars[0];
+  const uc=avC(ua)+lyrSVG(uLayers,100,250,curUA);
+  const svu=document.getElementById('sv-u');
+  if(svu)svu.innerHTML=uc;
+  const daAv=aiAvatars.find(a=>a.id===curDA)||aiAvatars[0];
+  const daL=aiMap[curDA]||[];
+  const daC=avC(daAv)+lyrSVG(daL,100,290,curDA);
+  const dc=document.getElementById('d-ai-col');
+  if(dc)dc.innerHTML=`<div class="fl">${daAv.name}</div><div class="fb ab" onclick="sw('avatar')"><svg viewBox="0 0 100 290" width="78" height="218">${daC}</svg></div><div class="ft">点击换形象</div>`;
+  rPhotoFigs();
+}
+
+function rPhotoFigs(){
+  const pw=document.getElementById('photo-figs');if(!pw)return;
+  const ua=uAvatars.find(a=>a.id===curUA)||uAvatars[0];
+  const uc=avC(ua)+lyrSVG(uLayers,100,250,curUA);
+  const userScale=figScales['user']||1;
+  const uw=Math.round(88*userScale),uh=Math.round(220*userScale);
+  const up=figPos['user']||{left:30,bottom:10};
+  let html=`<div class="pfig${selPhotoFig==='user'?' sel':''}" id="pfig-user" style="left:${up.left}px;bottom:${up.bottom}px">
+    <svg viewBox="0 0 100 250" width="${uw}" height="${uh}">${uc}</svg>
+    <div class="pfl" style="color:#C2185B">✦ 我</div>
+    <div class="pfig-scale">
+      <button onclick="scalePhoto('user',-0.1);event.stopPropagation()">－</button>
+      <button onclick="scalePhoto('user',0.1);event.stopPropagation()">＋</button>
+    </div>
+  </div>`;
+  photoAIs.forEach((id,i)=>{
+    const av=aiAvatars.find(a=>a.id===id)||aiAvatars[0];
+    const ls=aiMap[id]||[];
+    const c=avC(av)+lyrSVG(ls,100,290,id);
+    const sc=figScales[id]||1;
+    const fw=Math.round(78*sc),fh=Math.round(218*sc);
+    const dp=figPos[id]||{left:150+i*120,bottom:10};
+    html+=`<div class="pfig${selPhotoFig===id?' sel':''}" id="pfig-${id}" style="left:${dp.left}px;bottom:${dp.bottom}px">
+      <svg viewBox="0 0 100 290" width="${fw}" height="${fh}">${c}</svg>
+      <div class="pfl" style="color:#1565C0">✦ ${av.name}</div>
+      <div class="pfig-scale">
+        <button onclick="scalePhoto('${id}',-0.1);event.stopPropagation()">－</button>
+        <button onclick="scalePhoto('${id}',0.1);event.stopPropagation()">＋</button>
+      </div>
+    </div>`;
+  });
+  pw.innerHTML=html;
+  pw.querySelectorAll('.pfig').forEach(el=>{
+    const id=el.id.replace('pfig-','');
+    makeDraggable(el,id);
+  });
+}
+
+function scalePhoto(id,delta){
+  // 先保存当前位置，避免缩放导致回到默认左侧
+  const el=document.getElementById('pfig-'+id);
+  if(el){
+    figPos[id]={left:parseInt(el.style.left)||0,bottom:parseInt(el.style.bottom)||0};
+    localStorage.setItem('rFigPos',JSON.stringify(figPos));
+  }
+  const cur=figScales[id]||1;
+  figScales[id]=Math.max(0.3,Math.min(3,+(cur+delta).toFixed(1)));
+  rPhotoFigs();
+}
+
+function setSelPhotoFig(id){
+  selPhotoFig=selPhotoFig===id?null:id;
+  const wrap=document.getElementById('photo-figs');
+  if(wrap)wrap.querySelectorAll('.pfig').forEach(x=>x.classList.toggle('sel',selPhotoFig!==null&&x.id===('pfig-'+selPhotoFig)));
+}
+
+function makeDraggable(el,id){
+  let ox=0,oy=0,sx=0,sy=0,dragging=false,hasMoved=false;
+  const start=e=>{
+    if(e.target.tagName==='BUTTON')return;
+    dragging=true;hasMoved=false;
+    const t=e.touches?e.touches[0]:e;
+    sx=t.clientX;sy=t.clientY;
+    ox=parseInt(el.style.left)||0;oy=parseInt(el.style.bottom)||0;
+    e.preventDefault();
+  };
+  const move=e=>{
+    if(!dragging)return;
+    const t=e.touches?e.touches[0]:e;
+    const dx=t.clientX-sx,dy=sy-t.clientY;
+    if(Math.abs(dx)>3||Math.abs(dy)>3){
+      if(!hasMoved){
+        hasMoved=true;
+        // 拖动时强制选中，不 toggle
+        selPhotoFig=id;
+        const wrap=document.getElementById('photo-figs');
+        if(wrap)wrap.querySelectorAll('.pfig').forEach(x=>x.classList.toggle('sel',x.id===('pfig-'+id)));
+      }
+      el.style.left=Math.max(0,ox+dx)+'px';
+      el.style.bottom=Math.max(0,oy+dy)+'px';
+    }
+    e.preventDefault();
+  };
+  const end=()=>{
+    if(!dragging)return;
+    dragging=false;
+    if(hasMoved){
+      figPos[id]={left:parseInt(el.style.left)||0,bottom:parseInt(el.style.bottom)||0};
+      localStorage.setItem('rFigPos',JSON.stringify(figPos));
+    }else{
+      // 纯点击：toggle
+      setSelPhotoFig(id);
+    }
+    hasMoved=false;
+  };
+  el.addEventListener('mousedown',start);
+  el.addEventListener('touchstart',start,{passive:false});
+  document.addEventListener('mousemove',move);
+  document.addEventListener('touchmove',move,{passive:false});
+  document.addEventListener('mouseup',end);
+  document.addEventListener('touchend',end);
+}
+
+// ═══════════════════════════════════════
+// TABS
+// ═══════════════════════════════════════
+function sw(t){
+  document.querySelectorAll('.pg').forEach(p=>p.classList.remove('on'));
+  document.querySelectorAll('.tb').forEach(b=>b.classList.remove('on'));
+  document.getElementById('pg-'+t).classList.add('on');
+  const m={dress:0,closet:1,photo:2,draw:3,avatar:4};
+  document.querySelectorAll('.tb')[m[t]].classList.add('on');
+  if(t==='closet')rCloset();
+  if(t==='photo'){rPhotoAISel();rPhotoFigs();}
+  if(t==='avatar')rAvPage();
+  if(t==='dress'){rAITBtns();rFigs();}
+}
+
+// ═══════════════════════════════════════
+// LAYERS (with nudge)
+// ═══════════════════════════════════════
+function rAITBtns(){
+  const el=document.getElementById('ai-tbtns');if(!el)return;
+  el.innerHTML=aiAvatars.map(av=>`<button class="trb${curDA===av.id?' a':''}" onclick="setTgtAI('${av.id}')">${av.name}</button>`).join('');
+}
+function setTgt(t){
+  curTgt=t;
+  document.getElementById('btn-tu').className='trb u';
+  document.getElementById('ltitle').innerHTML='我的搭配 <span style="font-weight:400;font-size:10px;color:#9B7B9B">拖动调整·▲▼微调位置</span>';
+  rLL();rWQ();
+}
+function setTgtAI(id){
+  curDA=id;curTgt='ai_'+id;
+  document.getElementById('btn-tu').className='trb';
+  rAITBtns();
+  const nm=(aiAvatars.find(a=>a.id===id)||{name:'AI'}).name;
+  document.getElementById('ltitle').innerHTML=nm+'的搭配 <span style="font-weight:400;font-size:10px;color:#9B7B9B">拖动·▲▼调位置</span>';
+  rLL();rWQ();rFigs();
+}
+function gL(){if(curTgt==='user')return uLayers;const id=curTgt.replace('ai_','');if(!aiMap[id])aiMap[id]=[];return aiMap[id];}
+function sL(l){if(curTgt==='user'){uLayers=l;return;}aiMap[curTgt.replace('ai_','')]=l;}
+function curAvId(){return curTgt==='user'?curUA:curTgt.replace('ai_','');}
+let dFrom=null;
+function rLL(){
+  const el=document.getElementById('ll'),ls=gL();
+  if(!ls.length){el.innerHTML='<div class="eh">从下方点击衣物添加～</div>';rFigs();return;}
+  el.innerHTML=[...ls].reverse().map((item,ri)=>{const i=ls.length-1-ri;
+    const tf=resolveTF(curAvId(),item.id);
+    return`<div class="li" draggable="true" ondragstart="dFrom=${i}" ondragover="event.preventDefault();dOver(${i})" ondragend="dFrom=null">
+      <span class="dh">⋮⋮</span>
+      <div class="ld" style="background:${item.color||'#E8A0BF'}"></div>
+      <span class="ln">${item.name}</span>
+      <span class="lc">${item.category}</span>
+      <div class="lnudge">
+        <button class="lnb" onclick="nudgeLyr(${item.id},-5)" title="上移">▲</button>
+        <button class="lnb" onclick="nudgeLyr(${item.id},5)" title="下移">▼</button>
+      </div>
+      <span class="lnv" title="偏移/缩放">y:${tf.y} s:${tf.s.toFixed(1)}</span>
+      <button class="lnb" onclick="openTM(${item.id});event.stopPropagation()" title="调整位置/大小">⚙</button>
+      <button class="lx" onclick="rmLayer(${item.id})">×</button>
+    </div>`;
+  }).join('');
+  rFigs();
+}
+function nudgeLyr(id,delta){
+  const av=curAvId();
+  const tf=resolveTF(av,id);
+  tf.y=Math.max(-160,Math.min(160,(tf.y||0)+delta));
+  saveTF(av,id,tf);
+  rLL();
+}
+function dOver(to){if(dFrom===null||dFrom===to)return;const l=[...gL()];const[it]=l.splice(dFrom,1);l.splice(to,0,it);sL(l);dFrom=to;rLL();rWQ();}
+function addLayer(item){const ls=gL();if(ls.find(l=>l.id===item.id)){rmLayer(item.id);return;}sL([...ls,item]);rLL();rWQ();}
+function rmLayer(id){sL(gL().filter(l=>l.id!==id));rLL();rWQ();}
+function clrLayers(){sL([]);rLL();rWQ();}
+
+// ═══════════════════════════════════════
+// WARDROBE
+// ═══════════════════════════════════════
+function catF(id,gF,sF){const el=document.getElementById(id);if(!el)return;el.innerHTML=['全部',...CATS].map(c=>`<button class="cb${gF()===c?' on':''}" onclick="${sF}('${c}')">${c}</button>`).join('');}
+function renderSeasonFilter(id,getter,setter){const el=document.getElementById(id);if(!el)return;el.innerHTML=['全部',...SEASONS].map(s=>`<button class="cb${getter()===s?' on':''}" onclick="${setter}('${s}')">${s}</button>`).join('');}
+function renderGenderFilter(id,getter,setter){const el=document.getElementById(id);if(!el)return;el.innerHTML=['全部',...GENDERS].map(g=>`<button class="cb${getter()===g?' on':''}" onclick="${setter}('${g}')">${g}</button>`).join('');}
+function sfd(c){fdress=c;rWQ();}
+function setSF(s){seasonFilter=s;rWQ();}
+function setGF(g){genderFilter=g;rWQ();}
+function rWQ(){
+  catF('cf-d',()=>fdress,'sfd');
+  renderSeasonFilter('cf-d-season',()=>seasonFilter,'setSF');
+  renderGenderFilter('cf-d-gender',()=>genderFilter,'setGF');
+  const ls=gL();
+  let items=fdress==='全部'?wardrobe:wardrobe.filter(i=>i.category===fdress);
+  if(seasonFilter!=='全部')items=items.filter(i=>(i.tags||[]).some(t=>t===seasonFilter||t.includes(seasonFilter)));
+  if(genderFilter!=='全部')items=items.filter(i=>(i.tags||[]).some(t=>t===genderFilter));
+  document.getElementById('wq').innerHTML=items.map(item=>{
+    const w=!!ls.find(l=>l.id===item.id);
+    const si=JSON.stringify({id:item.id,name:item.name,category:item.category,tags:item.tags,color:item.color,dataUrl:item.dataUrl||null}).replace(/"/g,'&quot;');
+    const tg=(item.tags||[]).slice(0,3).map(t=>'#'+t).join(' ');
+    return`<div class="ic${w?' w':''}" onclick='addLayer(${si})'><div class="ith" style="background:${item.color}22">${item.dataUrl?`<img src="${item.dataUrl}">`:` <div style="width:30px;height:30px;border-radius:6px;background:${item.color};opacity:.8"></div>`}</div><div class="ii"><div class="in${w?' w':''}">${item.name}</div><div class="icat">${item.category}${tg?` · <span style="font-size:8px">${tg}</span>`:''}</div></div>${w?'<div class="iwb">✓ 已穿</div>':''}</div>`;
+  }).join('');
+}
+
+function sfc(c){fcloset=c;rCloset();}
+function setCSF(s){closetSeasonFilter=s;rCloset();}
+function setCGF(g){closetGenderFilter=g;rCloset();}
+function rCloset(){
+  catF('cf-c',()=>fcloset,'sfc');
+  renderSeasonFilter('cf-c-season',()=>closetSeasonFilter,'setCSF');
+  renderGenderFilter('cf-c-gender',()=>closetGenderFilter,'setCGF');
+  document.getElementById('ccount').textContent=`(${wardrobe.length}件)`;
+  let items=fcloset==='全部'?wardrobe:wardrobe.filter(i=>i.category===fcloset);
+  if(closetSeasonFilter!=='全部')items=items.filter(i=>(i.tags||[]).some(t=>t===closetSeasonFilter||t.includes(closetSeasonFilter)));
+  if(closetGenderFilter!=='全部')items=items.filter(i=>(i.tags||[]).some(t=>t===closetGenderFilter));
+  document.getElementById('cg').innerHTML=items.map(item=>`
+    <div class="cc">
+      <div class="cth" style="background:${item.color}22">
+        ${item.dataUrl?`<img src="${item.dataUrl}" style="width:100%;height:100%;object-fit:contain;image-rendering:pixelated">`:
+        `<div style="width:42px;height:42px;border-radius:7px;background:${item.color}"></div>`}
+      </div>
+      <div class="cb2">
+        <div class="cn">${item.name}</div>
+        <div class="ccat">${item.category}</div>
+        <div class="tr">${item.tags.map(t=>`<span class="tg">#${t}</span>`).join('')}</div>
+      </div>
+      <div class="cact">
+        <button onclick="openEditModal(${item.id})">✏️ 编辑</button>
+        <button onclick="deleteItem(${item.id})" style="color:#E57373">🗑️ 删除</button>
+      </div>
+    </div>`).join('');
+}
+
+// ── CLOSET EDIT / DELETE ──
+function openEditModal(id){
+  const item=wardrobe.find(w=>w.id===id);if(!item)return;
+  editingItemId=id;
+  document.getElementById('em-n').value=item.name;
+  document.getElementById('em-c').value=item.category;
+  document.getElementById('em-t').value=item.tags.join(', ');
+  document.getElementById('em').classList.add('on');
+}
+function closeEditModal(){document.getElementById('em').classList.remove('on');editingItemId=null;}
+function saveEdit(){
+  const item=wardrobe.find(w=>w.id===editingItemId);if(!item)return;
+  item.name=document.getElementById('em-n').value.trim()||item.name;
+  item.category=document.getElementById('em-c').value;
+  item.tags=document.getElementById('em-t').value.split(/[,，\s]+/).filter(Boolean);
+  closeEditModal();rCloset();rWQ();
+  // refresh layer names if in outfit
+  const ls=gL();const li=ls.find(l=>l.id===item.id);
+  if(li){li.name=item.name;li.category=item.category;li.tags=item.tags;rLL();}
+}
+function deleteItem(id){
+  const item=wardrobe.find(w=>w.id===id);if(!item)return;
+  if(!confirm(`删除「${item.name}」？此操作不可撤销。`))return;
+  wardrobe=wardrobe.filter(w=>w.id!==id);
+  // Remove from layers
+  if(curTgt==='user'){uLayers=uLayers.filter(l=>l.id!==id);}
+  else{const aid=curTgt.replace('ai_','');if(aiMap[aid])aiMap[aid]=aiMap[aid].filter(l=>l.id!==id);}
+  rCloset();rWQ();rLL();rFigs();
+}
+
+// ── TRANSFORM (衣物位置/大小记忆) ──
+function openTM(itemId){
+  const item=wardrobe.find(w=>w.id===itemId)||gL().find(w=>w.id===itemId);
+  if(!item)return;
+  tmItemId=itemId;
+  const av=curAvId();
+  const tf=resolveTF(av,itemId);
+  document.getElementById('tm-name').textContent=`「${item.name}」在当前形象上的位置/大小（会记忆）`;
+  document.getElementById('tm-x').value=tf.x;
+  document.getElementById('tm-y').value=tf.y;
+  document.getElementById('tm-s').value=tf.s;
+  document.getElementById('tm-sx').value=tf.sx||1;
+  document.getElementById('tm-sy').value=tf.sy||1;
+  document.getElementById('tm').style.display='flex';
+  tmOnInput();
+}
+function closeTM(){document.getElementById('tm').style.display='none';tmItemId=null;}
+function tmOnInput(){
+  document.getElementById('tm-xv').textContent=document.getElementById('tm-x').value;
+  document.getElementById('tm-yv').textContent=document.getElementById('tm-y').value;
+  document.getElementById('tm-sv').textContent=(+document.getElementById('tm-s').value).toFixed(1);
+  document.getElementById('tm-sxv').textContent=(+document.getElementById('tm-sx').value).toFixed(2);
+  document.getElementById('tm-syv').textContent=(+document.getElementById('tm-sy').value).toFixed(2);
+  // 实时预览：只写入内存，不落盘
+  if(tmItemId==null)return;
+  const av=curAvId();
+  layerTF[tfKey(av,tmItemId)]={
+    x:+document.getElementById('tm-x').value,
+    y:+document.getElementById('tm-y').value,
+    s:+document.getElementById('tm-s').value,
+    sx:+document.getElementById('tm-sx').value,
+    sy:+document.getElementById('tm-sy').value
+  };
+  rFigs();
+  rTMPreview();
+}
+function saveTM(){
+  if(tmItemId==null)return;
+  const av=curAvId();
+  const tf={
+    x:+document.getElementById('tm-x').value,
+    y:+document.getElementById('tm-y').value,
+    s:+document.getElementById('tm-s').value,
+    sx:+document.getElementById('tm-sx').value,
+    sy:+document.getElementById('tm-sy').value
+  };
+  saveTF(av,tmItemId,tf);
+  closeTM();rLL();rFigs();
+  alert('✅ 已保存！下次穿这件衣服会自动用这个位置/大小。');
+}
+
+function rTMPreview(){
+  const host=document.getElementById('tm-prev');if(!host||tmItemId==null)return;
+  const item=wardrobe.find(w=>w.id===tmItemId)||gL().find(w=>w.id===tmItemId);if(!item)return;
+  const avId=curAvId();
+  const isUser=curTgt==='user';
+  const av=isUser?(uAvatars.find(a=>a.id===curUA)||uAvatars[0]):(aiAvatars.find(a=>a.id===avId)||aiAvatars[0]);
+  const h=isUser?250:290;
+  const body=avC(av);
+  const cloth=lyrSVG([item],100,h,avId);
+  const wpx=96,hpx=Math.round((h/100)*96);
+  host.innerHTML=`<svg viewBox="0 0 100 ${h}" width="${wpx}" height="${hpx}">${body}${cloth}</svg>`;
+}
+
+// ── IMAGE IMPORT ──
+function importClosetImage(inp){
+  if(!inp.files[0])return;
+  const fr=new FileReader();
+  fr.onload=e=>{
+    importImageData=e.target.result;
+    const pw=document.getElementById('img-preview-wrap');
+    pw.innerHTML=`<img src="${importImageData}" style="max-width:100%;max-height:100%;object-fit:contain">`;
+    // Pre-fill name from filename
+    document.getElementById('iim-n').value=inp.files[0].name.replace(/\.[^.]+$/,'');
+    document.getElementById('iim-x').value='0';
+    document.getElementById('iim-y').value='0';
+    document.getElementById('iim-s').value='1';
+    // 填充参考形象选项
+    const sel=document.getElementById('iim-av');
+    sel.innerHTML=getIIMAvOptions();
+    // 默认选中：当前换装目标的形象
+    sel.value=(curTgt==='user'?('u:'+curUA):('ai:'+curTgt.replace('ai_','')));
+    document.getElementById('iim').classList.add('on');
+    updateIIMPreview();
+    inp.value='';
+  };
+  fr.readAsDataURL(inp.files[0]);
+}
+function closeImageImport(){document.getElementById('iim').classList.remove('on');importImageData=null;}
+function saveImageImport(){
+  if(!importImageData)return;
+  const name=document.getElementById('iim-n').value.trim()||'导入图片';
+  const cat=document.getElementById('iim-c').value;
+  const tags=document.getElementById('iim-t').value.split(/[,，\s]+/).filter(Boolean);
+  const id=Date.now();
+  const dx=parseFloat(document.getElementById('iim-x').value||'0')||0;
+  const dy=parseFloat(document.getElementById('iim-y').value||'0')||0;
+  const ds=parseFloat(document.getElementById('iim-s').value||'1')||1;
+  const avSel=document.getElementById('iim-av')?.value||'default';
+  // Derive a representative color from the image
+  const tmpImg=new Image();
+  tmpImg.onload=()=>{
+    const oc=document.createElement('canvas');oc.width=1;oc.height=1;
+    const ctx=oc.getContext('2d');ctx.drawImage(tmpImg,0,0,1,1);
+    const d=ctx.getImageData(0,0,1,1).data;
+    const color='#'+[d[0],d[1],d[2]].map(x=>x.toString(16).padStart(2,'0')).join('');
+    wardrobe.push({id,name,category:cat,tags,color,dataUrl:importImageData});
+    // 默认位置/大小：可选“默认(所有形象)”或指定某个形象
+    const keyAv=avSel==='default'?'default':avSel.replace(/^(u:|ai:)/,'');
+    saveTF(keyAv,id,{x:dx,y:dy,s:ds});
+    syncStampsFromWardrobe();
+    closeImageImport();rCloset();
+    alert(`✅ "${name}"已导入衣柜！`);
+  };
+  tmpImg.src=importImageData;
+}
+
+function getIIMAvOptions(){
+  let html=`<option value="default">默认（所有形象）</option>`;
+  html+=`<optgroup label="我的形象">`+uAvatars.map(a=>`<option value="u:${a.id}">${a.name}</option>`).join('')+`</optgroup>`;
+  html+=`<optgroup label="AI形象">`+aiAvatars.map(a=>`<option value="ai:${a.id}">${a.name}</option>`).join('')+`</optgroup>`;
+  return html;
+}
+function getAvatarBySel(v){
+  if(v.startsWith('u:'))return uAvatars.find(a=>a.id===v.slice(2));
+  if(v.startsWith('ai:'))return aiAvatars.find(a=>a.id===v.slice(3));
+  return null;
+}
+function updateIIMPreview(){
+  const host=document.getElementById('iim-ref');if(!host)return;
+  if(!importImageData){host.innerHTML='<span style="font-size:12px;color:#9B7B9B">未选择图片</span>';return;}
+  const avSel=document.getElementById('iim-av')?.value||'default';
+  const av=getAvatarBySel(avSel)||(uAvatars.find(a=>a.id===curUA)||uAvatars[0]);
+  const isAI=avSel.startsWith('ai:');
+  const h=isAI?290:250;
+  const x=parseFloat(document.getElementById('iim-x')?.value||'0')||0;
+  const y=parseFloat(document.getElementById('iim-y')?.value||'0')||0;
+  const s=Math.max(0.3,Math.min(3,parseFloat(document.getElementById('iim-s')?.value||'1')||1));
+  const body=avC(av);
+  const cloth=`<image href="${importImageData}" x="${x}" y="${y}" width="${100*s}" height="${h*s}" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated"/>`;
+  const wpx=96,hpx=Math.round((h/100)*96);
+  host.innerHTML=`<svg viewBox="0 0 100 ${h}" width="${wpx}" height="${hpx}">${body}${cloth}</svg>`;
+}
+
+// ═══════════════════════════════════════
+// PHOTO
+// ═══════════════════════════════════════
+function rPhotoAISel(){
+  document.getElementById('photo-ai-sel').innerHTML=aiAvatars.map(av=>`<button class="pasb${photoAIs.includes(av.id)?' on':''}" onclick="togPhotoAI('${av.id}')">${av.name}</button>`).join('');
+  document.getElementById('bgrid').innerHTML=BGS.map((s,i)=>`<button class="bgb${i===selBg?' on':''}" style="background:${s.b}" onclick="setBg(${i})">${s.n}</button>`).join('');
+}
+function togPhotoAI(id){photoAIs=photoAIs.includes(id)?photoAIs.filter(x=>x!==id):[...photoAIs,id];rPhotoAISel();rPhotoFigs();}
+function setBg(i){selBg=i;document.getElementById('photowrap').style.background=BGS[i].b;document.getElementById('photo-bg').style.display='none';document.querySelectorAll('.bgb').forEach((b,j)=>b.classList.toggle('on',i===j));}
+function upBg(inp){const fr=new FileReader();fr.onload=e=>{const img=document.getElementById('photo-bg');img.src=e.target.result;img.style.display='block';document.getElementById('photowrap').style.background='#000';};fr.readAsDataURL(inp.files[0]);}
+function clrBg(){document.getElementById('photo-bg').style.display='none';setBg(selBg);}
+function savePhoto(){alert('💡 实际集成时用 html2canvas 截图保存，功能已预留～');}
+
+// ═══════════════════════════════════════
+// AVATAR PAGE
+// ═══════════════════════════════════════
+function rAvPage(){
+  document.getElementById('u-ag').innerHTML=uAvatars.map(av=>`
+    <div class="ac${curUA===av.id?' on':''}" onclick="selUA('${av.id}')">
+      <button class="ac-del" onclick="event.stopPropagation();delAvatar('user','${av.id}')" title="删除">×</button>
+      <svg viewBox="0 0 100 250" width="58" height="58" style="overflow:hidden"><g transform="translate(0,-35) scale(.58)">${avC(av)}</g></svg>
+      <div class="an">${av.name}</div>
+    </div>`).join('');
+  document.getElementById('ai-ag').innerHTML=aiAvatars.map(av=>`
+    <div class="ac${curDA===av.id?' on':''}" onclick="selAIA('${av.id}')">
+      <button class="ac-del" onclick="event.stopPropagation();delAvatar('ai','${av.id}')" title="删除">×</button>
+      <button class="ac-cfg" onclick="event.stopPropagation();openAIConfig('${av.id}')" title="配置API">⚙️</button>
+      <svg viewBox="0 0 100 290" width="58" height="58" style="overflow:hidden"><g transform="translate(0,-45) scale(.58)">${avC(av)}</g></svg>
+      <div class="an">${av.name}</div>
+      ${av.apiUrl?'<div style="font-size:8px;color:#90CAF9;margin-top:2px">已配置API</div>':''}
+    </div>`).join('');
+}
+function selUA(id){curUA=id;rAvPage();rFigs();}
+function selAIA(id){curDA=id;rAvPage();rFigs();rAITBtns();}
+function delAvatar(type,id){
+  if(type==='user'){
+    if(uAvatars.length<=1){alert('至少保留一个用户形象～');return;}
+    const av=uAvatars.find(a=>a.id===id);if(!av)return;
+    if(!confirm(`删除用户形象「${av.name}」？`))return;
+    uAvatars=uAvatars.filter(a=>a.id!==id);
+    if(curUA===id)curUA=uAvatars[0].id;
+    rAvPage();rFigs();rPhotoFigs();
+    return;
+  }
+  if(type==='ai'){
+    if(aiAvatars.length<=1){alert('至少保留一个AI形象～');return;}
+    const av=aiAvatars.find(a=>a.id===id);if(!av)return;
+    if(!confirm(`删除AI形象「${av.name}」？（同时会从合拍选择里移除）`))return;
+    aiAvatars=aiAvatars.filter(a=>a.id!==id);
+    // 清理选择与图层
+    delete aiMap[id];
+    photoAIs=photoAIs.filter(x=>x!==id);
+    if(curDA===id)curDA=aiAvatars[0].id;
+    // 如果当前目标正是被删AI，回到用户
+    if(curTgt==='ai_'+id){curTgt='user';}
+    rAvPage();rFigs();rAITBtns();rPhotoAISel();rPhotoFigs();rLL();rWQ();
+  }
+}
+function upUserAv(inp){const fr=new FileReader();fr.onload=e=>{const id='u'+Date.now();uAvatars.push({id,name:inp.files[0].name.replace(/\.[^.]+$/,''),type:'img',dataUrl:e.target.result,h:250});curUA=id;rAvPage();rFigs();};fr.readAsDataURL(inp.files[0]);}
+function upAIAv(inp){const fr=new FileReader();fr.onload=e=>{const id='ai'+Date.now();aiAvatars.push({id,name:inp.files[0].name.replace(/\.[^.]+$/,''),type:'img',dataUrl:e.target.result,h:290,apiUrl:'',apiKey:'',apiModel:''});curDA=id;rAvPage();rFigs();rAITBtns();};fr.readAsDataURL(inp.files[0]);}
+
+// Gender modal
+function openGenderModal(tgt){
+  gmTarget=tgt;gmGender='f';gmImageData=null;
+  document.getElementById('gm-name').value='';
+  const prev=document.getElementById('gm-img-preview');
+  if(prev)prev.innerHTML='<span style="font-size:11px;color:#9B7B9B">点此选择图片</span>';
+  const inp=document.getElementById('gm-img-input');
+  if(inp)inp.value='';
+  ['f','m','o'].forEach(g=>document.getElementById('g-'+g).classList.toggle('on',g===gmGender));
+  document.getElementById('gm').classList.add('on');
+}
+function selGender(g){gmGender=g;['f','m','o'].forEach(x=>document.getElementById('g-'+x).classList.toggle('on',x===g));}
+function closeGM(){document.getElementById('gm').classList.remove('on');gmImageData=null;}
+function previewGMImg(inp){
+  if(!inp.files[0])return;
+  const fr=new FileReader();
+  fr.onload=e=>{
+    gmImageData=e.target.result;
+    const prev=document.getElementById('gm-img-preview');
+    if(prev)prev.innerHTML=`<img src="${gmImageData}" style="max-width:100%;max-height:100%;object-fit:contain">`;
+  };
+  fr.readAsDataURL(inp.files[0]);
+}
+function confirmGM(){
+  const name=document.getElementById('gm-name').value.trim()||({f:'新女生形象',m:'新男生形象',o:'新形象'}[gmGender]);
+  const id=(gmTarget==='user'?'u':'ai')+Date.now();
+  const isUser=gmTarget==='user';
+  let av;
+  if(gmImageData){
+    av={id,name,type:'img',dataUrl:gmImageData,h:isUser?250:290,...(isUser?{}:{apiUrl:'',apiKey:'',apiModel:''})};
+  }else{
+    const svgData=isUser?svgFnForGender(gmGender):svgAI();
+    av={id,name,type:'svg',gender:gmGender,svgData,h:isUser?250:290,...(isUser?{}:{apiUrl:'',apiKey:'',apiModel:''})};
+  }
+  if(isUser){uAvatars.push(av);curUA=id;}
+  else{aiAvatars.push(av);curDA=id;}
+  gmImageData=null;
+  closeGM();rAvPage();rFigs();rAITBtns();
+}
+
+// 放大预览
+function openFigPreview(){
+  const ua=uAvatars.find(a=>a.id===curUA)||uAvatars[0];
+  const uc=avC(ua)+lyrSVG(uLayers,100,250,curUA);
+  const daAv=aiAvatars.find(a=>a.id===curDA)||aiAvatars[0];
+  const daL=aiMap[curDA]||[];
+  const daC=avC(daAv)+lyrSVG(daL,100,290,curDA);
+  document.getElementById('fig-preview-content').innerHTML=
+    `<div style="text-align:center"><div style="font-size:12px;color:#9B7B9B;margin-bottom:8px">✦ 我</div><svg viewBox="0 0 100 250" width="160" height="400">${uc}</svg></div>`+
+    `<div style="text-align:center"><div style="font-size:12px;color:#9B7B9B;margin-bottom:8px">✦ ${daAv.name}</div><svg viewBox="0 0 100 290" width="138" height="400">${daC}</svg></div>`;
+  const m=document.getElementById('fig-preview-modal');
+  m.style.display='flex';
+}
+function closeFigPreview(){document.getElementById('fig-preview-modal').style.display='none';}
+
+// ── AI API CONFIG ──
+function openAIConfig(id){
+  aiConfigId=id;
+  const av=aiAvatars.find(a=>a.id===id);if(!av)return;
+  document.getElementById('acm-name').textContent=`为「${av.name}」配置独立API接口`;
+  document.getElementById('acm-url').value=av.apiUrl||'';
+  document.getElementById('acm-key').value=av.apiKey||'';
+  document.getElementById('acm-model').value=av.apiModel||'';
+  document.getElementById('acm').classList.add('on');
+}
+function closeAIConfig(){document.getElementById('acm').classList.remove('on');aiConfigId=null;}
+function saveAIConfig(){
+  const av=aiAvatars.find(a=>a.id===aiConfigId);if(!av)return;
+  av.apiUrl=document.getElementById('acm-url').value.trim();
+  av.apiKey=document.getElementById('acm-key').value.trim();
+  av.apiModel=document.getElementById('acm-model').value.trim();
+  closeAIConfig();rAvPage();
+  alert(`✅ API配置已保存！${av.apiUrl?'使用自定义接口。':'将使用默认接口。'}`);
+}
+
+// ═══════════════════════════════════════
+// PIXEL CANVAS
+// ═══════════════════════════════════════
+let pix=new Array(ROWS*COLS).fill('');
+let undo=[];
+let curC='#E8A0BF',curTool2='pen';
+let brushSz=1,smLv=4;
+let isDrawing=false;
+let geoT='rect',geoFill=true,polySides=6,polyFill=true;
+let showGuide=true;
+let rawPts=[],lastPts=[];
+// selection
+let selStart=null,selEnd=null,selHasSel=false;
+let selContent=null;
+let selOffset={x:0,y:0};
+let isDragSel=false,selDragStart=null;
+// line/geo/poly
+let shpStart=null,shpSnap=null;
+// lasso
+let lassoPath=[];
+let lassoClosedPath=[]; // stored closed path for redrawing after finLasso
+let lassoPix=null;
+// pending geo (movable before confirm)
+let pendingGeo=null; // {snapPix, relData:[{dc,dr,color}], ox, oy, w, h}
+let pendingGeoDrag=false,pendingGeoDragStart=null;
+
+function gi(c,r){return r*COLS+c;}
+
+// ── SETUP ──
+function setupCvs(){
+  const W=COLS*CELL,H=ROWS*CELL;
+  ['pc','gc','sc2'].forEach(id=>{const c=document.getElementById(id);c.width=W;c.height=H;});
+  const mw=Math.min(window.innerWidth-26,390);
+  const sc=Math.min(1,mw/W);
+  const o=document.getElementById('cvo');
+  o.style.width=(W*sc)+'px';o.style.height=(H*sc)+'px';
+  ['pc','gc','sc2'].forEach(id=>{
+    const c=document.getElementById(id);
+    c.style.width=W+'px';c.style.height=H+'px';
+    c.style.transformOrigin='top left';c.style.transform=`scale(${sc})`;
+    c.style.position='absolute';c.style.top='0';c.style.left='0';
+  });
+  document.getElementById('pc').style.position='relative';
+}
+
+function openCvs(){
+  document.getElementById('df').style.display='none';
+  document.getElementById('cvs-sec').classList.add('on');
+  setupCvs();pix.fill('');undo=[];rawPts=[];lastPts=[];selStart=null;shpStart=null;lassoPath=[];lassoClosedPath=[];lassoPix=null;pendingGeo=null;
+  initPal();setTool('pen');
+  syncStampsFromWardrobe();
+  if(localStorage.getItem('rDraft'))document.getElementById('load-btn').style.display='';
+  dCvs();dGuide();attachCvs();
+}
+function closeCvs(){
+  cancelPendingGeo();
+  document.getElementById('df').style.display='';
+  document.getElementById('cvs-sec').classList.remove('on');
+}
+
+// ── STAMPS FROM WARDROBE ──
+function syncStampsFromWardrobe(){
+  // Add items with dataUrl as stamps (skip duplicates by wardrobeId)
+  wardrobe.filter(w=>w.dataUrl).forEach(item=>{
+    if(!stamps.find(s=>s.wardrobeId===item.id)){
+      const img=new Image();
+      img.onload=()=>{
+        const off=document.createElement('canvas');off.width=COLS;off.height=ROWS;
+        const ctx=off.getContext('2d');ctx.drawImage(img,0,0,COLS,ROWS);
+        const id2=ctx.getImageData(0,0,COLS,ROWS);
+        const data=[];
+        for(let i=0;i<COLS*ROWS;i++){
+          if(id2.data[i*4+3]<10){data.push('');continue;}
+          data.push('#'+[0,1,2].map(k=>id2.data[i*4+k].toString(16).padStart(2,'0')).join(''));
+        }
+        stamps.push({id:Date.now()+Math.random(),wardrobeId:item.id,name:item.name,w:COLS,h:ROWS,data});
+        rStamps();
+      };
+      img.src=item.dataUrl;
+    }
+  });
+  // Add color-swatch stamps for items without dataUrl
+  wardrobe.filter(w=>!w.dataUrl).forEach(item=>{
+    if(!stamps.find(s=>s.wardrobeId===item.id)){
+      // Build a simple colored rectangle stamp (8x12 cells)
+      const sw=8,sh=12;
+      const data=[];
+      for(let r=0;r<sh;r++)for(let c=0;c<sw;c++){
+        const edge=r===0||r===sh-1||c===0||c===sw-1;
+        data.push(edge?'#888':item.color);
+      }
+      stamps.push({id:Date.now()+Math.random(),wardrobeId:item.id,name:item.name,w:sw,h:sh,data});
+    }
+  });
+  rStamps();
+}
+
+// ── EVENTS ──
+function attachCvs(){
+  const cv=document.getElementById('pc');
+  const o=document.getElementById('cvo');
+  function sc(){return COLS*CELL/o.offsetWidth;}
+  function pos(e){
+    const r=o.getBoundingClientRect(),s=sc();
+    const cx=e.touches?e.touches[0].clientX:e.clientX;
+    const cy=e.touches?e.touches[0].clientY:e.clientY;
+    return{col:Math.floor((cx-r.left)*s/CELL),row:Math.floor((cy-r.top)*s/CELL),px:(cx-r.left)*s,py:(cy-r.top)*s};
+  }
+  function posE(e){
+    const r=o.getBoundingClientRect(),s=sc();
+    const cx=e.changedTouches?e.changedTouches[0].clientX:e.clientX;
+    const cy=e.changedTouches?e.changedTouches[0].clientY:e.clientY;
+    return{col:Math.floor((cx-r.left)*s/CELL),row:Math.floor((cy-r.top)*s/CELL),px:(cx-r.left)*s,py:(cy-r.top)*s};
+  }
+
+  cv.onmousedown=cv.ontouchstart=e=>{
+    e.preventDefault();isDrawing=true;const p=pos(e);
+    // Pending geo drag takes priority
+    if(pendingGeo){
+      const inside=p.col>=pendingGeo.ox&&p.col<=(pendingGeo.ox+pendingGeo.w-1)&&p.row>=pendingGeo.oy&&p.row<=(pendingGeo.oy+pendingGeo.h-1);
+      if(inside){pendingGeoDrag=true;pendingGeoDragStart={col:p.col,row:p.row};return;}
+      // 点空白：取消待确认形状
+      cancelPendingGeo();isDrawing=false;return;
+    }
+    if(curTool2==='eye'){doEye(p.col,p.row);return;}
+    if(curTool2==='stamp'){doStamp(p.col,p.row);isDrawing=false;return;}
+    if(curTool2==='fill'){pushU();doFill(p.col,p.row,curC);dCvs();return;}
+    if(curTool2==='sel'||curTool2==='csel'){
+      if(selHasSel&&!inSel(p.col,p.row)){selHasSel=false;selContent=null;lassoPix=null;lassoClosedPath=[];dSel();isDrawing=false;return;}
+      if(selHasSel&&inSel(p.col,p.row)){isDragSel=true;selDragStart={col:p.col,row:p.row};selContent=getSelPixels();return;}
+      selStart={...p};selEnd={...p};selHasSel=false;selContent=null;lassoPix=null;lassoClosedPath=[];return;
+    }
+    if(curTool2==='lasso'){
+      // 允许对已完成的套索选区进行拖动移动
+      if(selHasSel&&lassoPix&&lassoPix.size>0&&inSel(p.col,p.row)){
+        isDragSel=true;selDragStart={col:p.col,row:p.row};selContent=getSelPixels();return;
+      }
+      if(selHasSel&&(!lassoPix||lassoPix.size===0)&&!inSel(p.col,p.row)){selHasSel=false;selContent=null;lassoPix=null;lassoClosedPath=[];dSel();isDrawing=false;return;}
+      lassoPath=[p];lassoPix=null;lassoClosedPath=[];return;
+    }
+    if(curTool2==='line'||curTool2==='geo'||curTool2==='poly'){shpStart={...p};shpSnap=[...pix];return;}
+    pushU();rawPts=[p];lastPts=[];paintSm(p);
+  };
+
+  cv.onmousemove=cv.ontouchmove=e=>{
+    e.preventDefault();if(!isDrawing)return;const p=pos(e);
+    // Pending geo move
+    if(pendingGeo&&pendingGeoDrag){movePendingGeo(p.col,p.row);return;}
+    if(curTool2==='stamp'){return;} // 印章改为“点一下放置”
+    if(curTool2==='sel'||curTool2==='csel'){
+      if(isDragSel){moveSel(p.col,p.row);return;}
+      selEnd={...p};dSel();return;
+    }
+    if(curTool2==='lasso'){lassoPath.push(p);dLasso();return;}
+    if(curTool2==='line'&&shpStart){prvLine(shpStart,p);return;}
+    if(curTool2==='geo'&&shpStart){prvGeo(shpStart,p);return;}
+    if(curTool2==='poly'&&shpStart){prvPoly(shpStart,p);return;}
+    if(curTool2==='pen'||curTool2==='curve'||curTool2==='eraser'){rawPts.push(p);paintSm(p);}
+  };
+
+  cv.onmouseup=cv.ontouchend=e=>{
+    if(!isDrawing){isDrawing=false;return;}isDrawing=false;
+    const p=posE(e);
+    // End pending geo drag
+    if(pendingGeoDrag){pendingGeoDrag=false;pendingGeoDragStart=null;return;}
+    if(isDragSel){isDragSel=false;return;}
+    if(curTool2==='sel'||curTool2==='csel'){
+      selHasSel=true;
+      if(curTool2==='csel')buildCircleMask();
+      dSel();return;
+    }
+    if(curTool2==='lasso'){finLasso();return;}
+    if((curTool2==='geo')&&shpStart){
+      // Build pending geo instead of committing directly
+      const x0=Math.round(shpStart.px/CELL),y0=Math.round(shpStart.py/CELL);
+      const x1=Math.round(p.px/CELL),y1=Math.round(p.py/CELL);
+      buildPendingGeo(x0,y0,x1,y1);
+      shpStart=null;shpSnap=null;return;
+    }
+    if((curTool2==='poly')&&shpStart){
+      // polygon: build pending geo to allow dragging before confirm
+      const snap=[...shpSnap];
+      pix=[...snap];
+      dPoly(shpStart,p);
+      const tmp=[...pix];
+      pix=[...snap];
+      buildPendingFromDiff(snap,tmp);
+      shpStart=null;shpSnap=null;return;
+    }
+    if((curTool2==='line')&&shpStart){
+      pushU();pix=[...shpSnap];
+      if(curTool2==='line')bres(Math.round(shpStart.px/CELL),Math.round(shpStart.py/CELL),Math.round(p.px/CELL),Math.round(p.py/CELL));
+      dCvs();shpStart=null;shpSnap=null;
+    }
+    rawPts=[];lastPts=[];
+  };
+  cv.onmouseleave=()=>{if(isDrawing&&['pen','curve','eraser'].includes(curTool2)){isDrawing=false;rawPts=[];}};
+}
+
+function inSel(col,row){
+  if(!selStart||!selEnd)return false;
+  // Lasso: use pixel mask
+  if(lassoPix&&lassoPix.size>0)return lassoPix.has(gi(col,row));
+  const b=getBounds();if(!b)return false;
+  return col>=b.c0&&col<=b.c1&&row>=b.r0&&row<=b.r1;
+}
+
+function buildCircleMask(){
+  // 将“圆形选区”真正变成 mask，避免拖动时把矩形框范围都当成选区
+  if(!selStart||!selEnd)return;
+  const b=getBounds();if(!b)return;
+  const cx=(selStart.px+selEnd.px)/2,cy=(selStart.py+selEnd.py)/2;
+  const r=Math.sqrt((selEnd.px-selStart.px)**2+(selEnd.py-selStart.py)**2)/2;
+  const set=new Set();
+  for(let rr=b.r0;rr<=b.r1;rr++)for(let cc=b.c0;cc<=b.c1;cc++){
+    const px=(cc+0.5)*CELL,py=(rr+0.5)*CELL;
+    const dx=px-cx,dy=py-cy;
+    if((dx*dx+dy*dy)<=r*r)set.add(gi(cc,rr));
+  }
+  lassoPix=set;
+  lassoClosedPath=[]; // 圆形选区不需要路径
+}
+
+// ── PENDING GEO (movable before confirm) ──
+function buildPendingGeo(x0,y0,x1,y1){
+  // Save snapshot (before geo)
+  const snapPix=[...shpSnap||pix];
+  // Compute geo pixels into a temp array
+  const tmpPix=[...snapPix];
+  const savedPix=pix;
+  pix=tmpPix;
+  dGeo(x0,y0,x1,y1);
+  // Extract relative data
+  const mnX=Math.min(x0,x1),mxX=Math.max(x0,x1);
+  const mnY=Math.min(y0,y1),mxY=Math.max(y0,y1);
+  const relData=[];
+  for(let r=Math.max(0,mnY);r<=Math.min(ROWS-1,mxY);r++)
+    for(let c=Math.max(0,mnX);c<=Math.min(COLS-1,mxX);c++){
+      const v=pix[gi(c,r)];
+      if(v&&v!==snapPix[gi(c,r)])relData.push({dc:c-mnX,dr:r-mnY,color:v});
+    }
+  pix=[...snapPix]; // restore
+  pendingGeo={snapPix,relData,ox:mnX,oy:mnY,w:mxX-mnX+1,h:mxY-mnY+1};
+  document.getElementById('geo-pending-bar').classList.add('on');
+  drawPendingGeoOnSc2();
+  dCvs();
+}
+
+function buildPendingFromDiff(snapPix,tmpPix){
+  // 从 tmpPix 与 snapPix 的差异中提取一个可移动的 pendingGeo（用于多边形等）
+  let mnC=COLS, mnR=ROWS, mxC=-1, mxR=-1;
+  const diffs=[];
+  for(let i=0;i<COLS*ROWS;i++){
+    const v=tmpPix[i];
+    if(v && v!==snapPix[i]){
+      const c=i%COLS,r=Math.floor(i/COLS);
+      diffs.push({c,r,color:v});
+      if(c<mnC)mnC=c;if(r<mnR)mnR=r;if(c>mxC)mxC=c;if(r>mxR)mxR=r;
+    }
+  }
+  if(!diffs.length)return;
+  const relData=diffs.map(d=>({dc:d.c-mnC,dr:d.r-mnR,color:d.color}));
+  pendingGeo={snapPix:[...snapPix],relData,ox:mnC,oy:mnR,w:mxC-mnC+1,h:mxR-mnR+1};
+  document.getElementById('geo-pending-bar').classList.add('on');
+  drawPendingGeoOnSc2();
+  dCvs();
+}
+function drawPendingGeoOnSc2(){
+  if(!pendingGeo)return;
+  const sc2el=document.getElementById('sc2');
+  const ctx=sc2el.getContext('2d');
+  ctx.clearRect(0,0,sc2el.width,sc2el.height);
+  pendingGeo.relData.forEach(({dc,dr,color})=>{
+    const c=pendingGeo.ox+dc,r=pendingGeo.oy+dr;
+    if(c>=0&&c<COLS&&r>=0&&r<ROWS){ctx.fillStyle=color;ctx.fillRect(c*CELL,r*CELL,CELL,CELL);}
+  });
+  // Draw selection border
+  ctx.strokeStyle='#1565C0';ctx.lineWidth=2;ctx.setLineDash([4,3]);
+  ctx.strokeRect(pendingGeo.ox*CELL,pendingGeo.oy*CELL,pendingGeo.w*CELL,pendingGeo.h*CELL);
+  ctx.setLineDash([]);
+}
+function movePendingGeo(col,row){
+  if(!pendingGeo||!pendingGeoDragStart)return;
+  const dc=col-pendingGeoDragStart.col,dr=row-pendingGeoDragStart.row;
+  if(dc===0&&dr===0)return;
+  pendingGeo.ox=Math.max(0,Math.min(COLS-pendingGeo.w,pendingGeo.ox+dc));
+  pendingGeo.oy=Math.max(0,Math.min(ROWS-pendingGeo.h,pendingGeo.oy+dr));
+  pendingGeoDragStart={col,row};
+  drawPendingGeoOnSc2();
+}
+function confirmPendingGeo(){
+  if(!pendingGeo)return;
+  pushU();
+  pix=[...pendingGeo.snapPix];
+  pendingGeo.relData.forEach(({dc,dr,color})=>{
+    const c=pendingGeo.ox+dc,r=pendingGeo.oy+dr;
+    if(c>=0&&c<COLS&&r>=0&&r<ROWS)pix[gi(c,r)]=color;
+  });
+  pendingGeo=null;pendingGeoDrag=false;
+  document.getElementById('geo-pending-bar').classList.remove('on');
+  const sc2el=document.getElementById('sc2');sc2el.getContext('2d').clearRect(0,0,sc2el.width,sc2el.height);
+  dCvs();
+}
+function cancelPendingGeo(){
+  if(!pendingGeo)return;
+  pendingGeo=null;pendingGeoDrag=false;
+  document.getElementById('geo-pending-bar').classList.remove('on');
+  const sc2el=document.getElementById('sc2');if(sc2el)sc2el.getContext('2d').clearRect(0,0,sc2el.width,sc2el.height);
+  dCvs();
+}
+
+// ── SMOOTH PAINT ──
+function paintSm(p){
+  const isCurve=curTool2==='curve';
+  const sl=isCurve?0.92:smLv/10;
+  if(rawPts.length<2){paintAt(p.col,p.row);dCvs();return;}
+  let sm=[rawPts[0]];
+  for(let i=0;i<rawPts.length-1;i++){
+    const a=rawPts[i],b=rawPts[i+1];
+    sm.push({col:Math.round(a.col*(1-sl)+b.col*sl),row:Math.round(a.row*(1-sl)+b.row*sl)});
+    sm.push({col:Math.round(a.col*sl+b.col*(1-sl)),row:Math.round(a.row*sl+b.row*(1-sl))});
+  }
+  sm.push(rawPts[rawPts.length-1]);
+  if(isCurve){for(let pass=0;pass<3;pass++){let ns=[sm[0]];for(let i=0;i<sm.length-1;i++){const a=sm[i],b2=sm[i+1];ns.push({col:Math.round(a.col*.75+b2.col*.25),row:Math.round(a.row*.75+b2.row*.25)});ns.push({col:Math.round(a.col*.25+b2.col*.75),row:Math.round(a.row*.25+b2.row*.75)});}sm=ns;}}
+  const start=Math.max(0,lastPts.length-1);
+  for(let i=start;i<sm.length;i++)paintAt(sm[i].col,sm[i].row);
+  lastPts=sm;dCvs();
+}
+function paintAt(col,row){
+  const h=Math.floor(brushSz/2);
+  for(let dr=-h;dr<brushSz-h;dr++)for(let dc=-h;dc<brushSz-h;dc++){
+    const c=col+dc,r=row+dr;
+    if(c>=0&&c<COLS&&r>=0&&r<ROWS)pix[gi(c,r)]=curTool2==='eraser'?'':curC;
+  }
+}
+function doEye(col,row){if(col<0||col>=COLS||row<0||row>=ROWS)return;const c=pix[gi(col,row)];if(c){pickC(c);setTool('pen');}}
+function doFill(col,row,fc){
+  if(col<0||col>=COLS||row<0||row>=ROWS)return;
+  const tgt=pix[gi(col,row)];if(tgt===fc)return;
+  const stk=[[col,row]];
+  while(stk.length){const[c,r]=stk.pop();if(c<0||c>=COLS||r<0||r>=ROWS)continue;if(pix[gi(c,r)]!==tgt)continue;pix[gi(c,r)]=fc;stk.push([c+1,r],[c-1,r],[c,r+1],[c,r-1]);}
+}
+
+// ── LINE ──
+function prvLine(a,b){pix=[...shpSnap];bres(Math.round(a.px/CELL),Math.round(a.py/CELL),Math.round(b.px/CELL),Math.round(b.py/CELL));dCvs();}
+function bres(x0,y0,x1,y1){
+  const h=Math.floor(brushSz/2);
+  let dx=Math.abs(x1-x0),dy=Math.abs(y1-y0),sx=x0<x1?1:-1,sy=y0<y1?1:-1,err=dx-dy;
+  while(true){for(let dr=-h;dr<brushSz-h;dr++)for(let dc=-h;dc<brushSz-h;dc++){const c=x0+dc,r=y0+dr;if(c>=0&&c<COLS&&r>=0&&r<ROWS)pix[gi(c,r)]=curC;}if(x0===x1&&y0===y1)break;const e2=2*err;if(e2>-dy){err-=dy;x0+=sx;}if(e2<dx){err+=dx;y0+=sy;}}
+}
+
+// ── GEO ──
+function prvGeo(a,b){pix=[...shpSnap];dGeo(Math.round(a.px/CELL),Math.round(a.py/CELL),Math.round(b.px/CELL),Math.round(b.py/CELL));dCvs();}
+function dGeo(x0,y0,x1,y1){
+  if(geoT==='tri'){
+    const mx=(x0+x1)/2;
+    drawPoly2([[Math.round(mx),y0],[x0,y1],[x1,y1]],geoFill);return;
+  }
+  const mnX=Math.min(x0,x1),mxX=Math.max(x0,x1),mnY=Math.min(y0,y1),mxY=Math.max(y0,y1);
+  if(geoT==='rect'){for(let r=mnY;r<=mxY;r++)for(let c=mnX;c<=mxX;c++)if(geoFill||(r===mnY||r===mxY||c===mnX||c===mxX))if(c>=0&&c<COLS&&r>=0&&r<ROWS)pix[gi(c,r)]=curC;}
+  else{const cx=(x0+x1)/2,cy=(y0+y1)/2;const rx=geoT==='circle'?Math.min(Math.abs(x1-x0),Math.abs(y1-y0))/2:Math.abs(x1-x0)/2;const ry=geoT==='circle'?rx:Math.abs(y1-y0)/2;for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){const ddx=(c-cx)/Math.max(rx,.1),ddy=(r-cy)/Math.max(ry,.1),d=ddx*ddx+ddy*ddy;if(geoFill?d<=1:Math.abs(Math.sqrt(d)-1)<0.65)pix[gi(c,r)]=curC;}}
+}
+
+// ── POLYGON ──
+function prvPoly(a,b){pix=[...shpSnap];dPoly(a,b);dCvs();}
+function dPoly(a,b){
+  const cx=Math.round(a.px/CELL),cy=Math.round(a.py/CELL);
+  const ex=Math.round(b.px/CELL),ey=Math.round(b.py/CELL);
+  const r=Math.sqrt((ex-cx)**2+(ey-cy)**2);
+  const startAngle=Math.atan2(ey-cy,ex-cx);
+  const n=polySides;
+  const pts=[];
+  for(let i=0;i<n;i++){const angle=startAngle+i*(2*Math.PI/n);pts.push([Math.round(cx+r*Math.cos(angle)),Math.round(cy+r*Math.sin(angle))]);}
+  drawPoly2(pts,polyFill);
+}
+function drawPoly2(pts,fill){
+  for(let i=0;i<pts.length;i++){const a=pts[i],b2=pts[(i+1)%pts.length];bres(a[0],a[1],b2[0],b2[1]);}
+  if(fill){
+    const minY=Math.min(...pts.map(p=>p[1]));const maxY=Math.max(...pts.map(p=>p[1]));
+    for(let y=minY;y<=maxY;y++){
+      const xs=[];
+      for(let i=0;i<pts.length;i++){const a=pts[i],b2=pts[(i+1)%pts.length];if((a[1]<=y&&b2[1]>y)||(b2[1]<=y&&a[1]>y)){xs.push(Math.round(a[0]+(y-a[1])*(b2[0]-a[0])/(b2[1]-a[1])));}}
+      xs.sort((a,b2)=>a-b2);
+      for(let k=0;k<xs.length-1;k+=2){for(let x=xs[k];x<=xs[k+1];x++){if(x>=0&&x<COLS&&y>=0&&y<ROWS)pix[gi(x,y)]=curC;}}
+    }
+  }
+}
+
+// ── SELECTION ──
+function dSel(){
+  const sc2el=document.getElementById('sc2');
+  const ctx=sc2el.getContext('2d');ctx.clearRect(0,0,sc2el.width,sc2el.height);
+  // If lasso is active, redraw the lasso outline
+  if(lassoPix&&lassoClosedPath.length>=2){
+    ctx.strokeStyle='#F48FB1';ctx.lineWidth=1.5;ctx.setLineDash([4,3]);
+    ctx.beginPath();ctx.moveTo(lassoClosedPath[0].px,lassoClosedPath[0].py);
+    lassoClosedPath.forEach(p=>ctx.lineTo(p.px,p.py));
+    ctx.closePath();ctx.stroke();
+    ctx.fillStyle='rgba(244,143,177,.08)';ctx.fill();
+    ctx.setLineDash([]);return;
+  }
+  if(!selStart||!selEnd)return;
+  if(curTool2==='csel'){
+    const cx=(selStart.px+selEnd.px)/2,cy=(selStart.py+selEnd.py)/2;
+    const r=Math.sqrt((selEnd.px-selStart.px)**2+(selEnd.py-selStart.py)**2)/2;
+    ctx.strokeStyle='#F48FB1';ctx.lineWidth=1.5;ctx.setLineDash([4,3]);
+    ctx.beginPath();ctx.ellipse(cx,cy,r,r,0,0,Math.PI*2);ctx.stroke();
+    ctx.fillStyle='rgba(244,143,177,.1)';ctx.fill();
+    ctx.setLineDash([]);
+  }else{
+    const x=Math.min(selStart.px,selEnd.px),y=Math.min(selStart.py,selEnd.py);
+    const w=Math.abs(selEnd.px-selStart.px),h2=Math.abs(selEnd.py-selStart.py);
+    ctx.strokeStyle='#F48FB1';ctx.lineWidth=1.5;ctx.setLineDash([4,3]);ctx.strokeRect(x,y,w,h2);
+    ctx.fillStyle='rgba(244,143,177,.1)';ctx.fillRect(x,y,w,h2);
+    ctx.setLineDash([]);
+  }
+}
+function dLasso(){
+  const sc2el=document.getElementById('sc2');
+  const ctx=sc2el.getContext('2d');ctx.clearRect(0,0,sc2el.width,sc2el.height);
+  if(lassoPath.length<2)return;
+  ctx.strokeStyle='#F48FB1';ctx.lineWidth=1.5;ctx.setLineDash([4,3]);
+  ctx.beginPath();ctx.moveTo(lassoPath[0].px,lassoPath[0].py);
+  lassoPath.forEach(p=>ctx.lineTo(p.px,p.py));ctx.stroke();
+  ctx.setLineDash([]);
+}
+function finLasso(){
+  const sc2el=document.getElementById('sc2');
+  const ctx=sc2el.getContext('2d');ctx.clearRect(0,0,sc2el.width,sc2el.height);
+  if(lassoPath.length<3){lassoPath=[];return;}
+  // Store closed path for future redraws
+  lassoClosedPath=[...lassoPath];
+  // Build pixel mask via offscreen canvas
+  const off=document.createElement('canvas');off.width=COLS*CELL;off.height=ROWS*CELL;
+  const oc=off.getContext('2d');
+  oc.fillStyle='red';oc.beginPath();
+  oc.moveTo(lassoPath[0].px,lassoPath[0].py);
+  lassoPath.forEach(p=>oc.lineTo(p.px,p.py));
+  oc.closePath();oc.fill();
+  const imgd=oc.getImageData(0,0,COLS*CELL,ROWS*CELL);
+  lassoPix=new Set();
+  for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+    const px2=Math.floor(c*CELL+CELL/2),py2=Math.floor(r*CELL+CELL/2);
+    const idx=(py2*COLS*CELL+px2)*4;
+    if(imgd.data[idx]>0)lassoPix.add(gi(c,r));
+  }
+  selHasSel=true;
+  // Draw the closed lasso outline on sc2
+  ctx.strokeStyle='#F48FB1';ctx.lineWidth=1.5;ctx.setLineDash([4,3]);
+  ctx.beginPath();ctx.moveTo(lassoClosedPath[0].px,lassoClosedPath[0].py);
+  lassoClosedPath.forEach(p=>ctx.lineTo(p.px,p.py));
+  ctx.closePath();ctx.stroke();
+  ctx.fillStyle='rgba(244,143,177,.08)';ctx.fill();
+  ctx.setLineDash([]);
+  // Update selStart/selEnd for bounds (needed for move)
+  if(lassoPix.size>0){
+    const cols2=[...lassoPix].map(i=>i%COLS),rows2=[...lassoPix].map(i=>Math.floor(i/COLS));
+    selStart={px:Math.min(...cols2)*CELL,py:Math.min(...rows2)*CELL};
+    selEnd={px:(Math.max(...cols2)+1)*CELL,py:(Math.max(...rows2)+1)*CELL};
+  }
+  lassoPath=[];
+}
+function getBounds(){
+  if(!selStart||!selEnd)return null;
+  return{c0:Math.max(0,Math.min(Math.floor(selStart.px/CELL),Math.floor(selEnd.px/CELL))),r0:Math.max(0,Math.min(Math.floor(selStart.py/CELL),Math.floor(selEnd.py/CELL))),c1:Math.min(COLS-1,Math.max(Math.floor(selStart.px/CELL),Math.floor(selEnd.px/CELL))),r1:Math.min(ROWS-1,Math.max(Math.floor(selStart.py/CELL),Math.floor(selEnd.py/CELL)))};
+}
+function getSelPixels(){
+  const b=getBounds();if(!b)return{b,data:[]};
+  const data=[];
+  for(let r=b.r0;r<=b.r1;r++)for(let c=b.c0;c<=b.c1;c++){
+    const inLasso=lassoPix?lassoPix.has(gi(c,r)):true;
+    data.push({c,r,v:inLasso?pix[gi(c,r)]:'',inSel:inLasso});
+  }
+  return{b,data};
+}
+function moveSel(col,row){
+  if(!selDragStart||!selContent)return;
+  const dc=col-selDragStart.col,dr=row-selDragStart.row;
+  if(dc===0&&dr===0)return;
+  // 用快照方式移动，避免误删其它区域
+  const snap=[...pix];
+  const next=[...snap];
+  selContent.data.forEach(({c,r,inSel,v})=>{if(inSel&&v)next[gi(c,r)]='';});
+  selContent.data.forEach(({c,r,v,inSel})=>{
+    if(!inSel||!v)return;
+    const nc=c+dc,nr=r+dr;
+    if(nc>=0&&nc<COLS&&nr>=0&&nr<ROWS)next[gi(nc,nr)]=v;
+  });
+  pix=next;
+  const b=selContent.b;
+  selStart={px:(b.c0+dc)*CELL,py:(b.r0+dr)*CELL};
+  selEnd={px:(b.c1+1+dc)*CELL,py:(b.r1+1+dr)*CELL};
+  selDragStart={col,row};
+  selContent={b:{c0:b.c0+dc,r0:b.r0+dr,c1:b.c1+dc,r1:b.r1+dr},data:selContent.data.map(d=>({...d,c:d.c+dc,r:d.r+dr}))};
+  // Update lasso path offset if active
+  if(lassoClosedPath.length){lassoClosedPath=lassoClosedPath.map(p=>({px:p.px+dc*CELL,py:p.py+dr*CELL}));}
+  if(lassoPix){const np=new Set();lassoPix.forEach(idx=>{const c2=idx%COLS,r2=Math.floor(idx/COLS);const nc=c2+dc,nr=r2+dr;if(nc>=0&&nc<COLS&&nr>=0&&nr<ROWS)np.add(gi(nc,nr));});lassoPix=np;}
+  dCvs();dSel();
+}
+function selFlipH(){const{b,data}=getSelPixels();if(!b)return;pushU();data.forEach(({c,r,inSel})=>{if(inSel)pix[gi(c,r)]='';});data.filter(d=>d.inSel).forEach(({c,r,v})=>{const nc=b.c0+(b.c1-c);if(nc>=0&&nc<COLS)pix[gi(nc,r)]=v;});dCvs();}
+function selFlipV(){const{b,data}=getSelPixels();if(!b)return;pushU();data.forEach(({c,r,inSel})=>{if(inSel)pix[gi(c,r)]='';});data.filter(d=>d.inSel).forEach(({c,r,v})=>{const nr=b.r0+(b.r1-r);if(nr>=0&&nr<ROWS)pix[gi(c,nr)]=v;});dCvs();}
+function selCopy(){
+  const{b,data}=getSelPixels();if(!b)return;
+  const selPix=data.filter(d=>d.inSel&&d.v);
+  if(!selPix.length)return;
+  // 找到不会覆盖其它像素的偏移
+  let off=2;
+  for(let tries=0;tries<10;tries++){
+    let hit=false;
+    for(const p of selPix){
+      const nc=p.c+off,nr=p.r+off;
+      if(nc<0||nc>=COLS||nr<0||nr>=ROWS)continue;
+      if(pix[gi(nc,nr)]){hit=true;break;}
+    }
+    if(!hit)break;
+    off+=2;
+  }
+  pushU();
+  selPix.forEach(({c,r,v})=>{
+    const nc=c+off,nr=r+off;
+    if(nc>=0&&nc<COLS&&nr>=0&&nr<ROWS)pix[gi(nc,nr)]=v;
+  });
+  // 复制出来的内容成为新的选区（可继续拖动/缩放/再复制）
+  selStart={px:(b.c0+off)*CELL,py:(b.r0+off)*CELL};
+  selEnd={px:(b.c1+1+off)*CELL,py:(b.r1+1+off)*CELL};
+  selHasSel=true;
+  if(lassoPix){
+    const np=new Set();lassoPix.forEach(idx=>{const c2=idx%COLS,r2=Math.floor(idx/COLS);const nc=c2+off,nr=r2+off;if(nc>=0&&nc<COLS&&nr>=0&&nr<ROWS)np.add(gi(nc,nr));});lassoPix=np;
+  }
+  if(lassoClosedPath.length){lassoClosedPath=lassoClosedPath.map(p=>({px:p.px+off*CELL,py:p.py+off*CELL}));}
+  selContent=getSelPixels();
+  dCvs();dSel();
+}
+
+function selScale(f){
+  if(!selHasSel)return;
+  const {b,data}=getSelPixels();if(!b)return;
+  const selPix=data.filter(d=>d.inSel&&d.v);
+  if(!selPix.length)return;
+  pushU();
+  // 清除原选区
+  selPix.forEach(({c,r})=>pix[gi(c,r)]='');
+  const w=b.c1-b.c0+1,h=b.r1-b.r0+1;
+  const nw=Math.max(1,Math.round(w*f)),nh=Math.max(1,Math.round(h*f));
+  // 最近邻缩放
+  for(let y=0;y<nh;y++)for(let x=0;x<nw;x++){
+    const oc=b.c0+Math.floor(x/f);
+    const or=b.r0+Math.floor(y/f);
+    const p=selPix.find(v=>v.c===oc&&v.r===or);
+    if(p&&p.v){
+      const nc=b.c0+x,nr=b.r0+y;
+      if(nc>=0&&nc<COLS&&nr>=0&&nr<ROWS)pix[gi(nc,nr)]=p.v;
+    }
+  }
+  // 套索缩放较复杂：先降级为矩形选区，保证可继续移动/复制
+  lassoPix=null;lassoClosedPath=[];
+  selStart={px:(b.c0)*CELL,py:(b.r0)*CELL};
+  selEnd={px:(b.c0+nw)*CELL,py:(b.r0+nh)*CELL};
+  selHasSel=true;
+  selContent=getSelPixels();
+  dCvs();dSel();
+}
+
+function selScalePrompt(){
+  const v=prompt('输入缩放倍数（例如 1.2 / 0.8 / 2 ）：','1.2');
+  if(v==null)return;
+  const f=parseFloat(v);
+  if(!isFinite(f)||f<=0){alert('请输入有效数字');return;}
+  selScale(f);
+}
+function selToStamp(){
+  const{b,data}=getSelPixels();if(!b)return;
+  const w=b.c1-b.c0+1,h=b.r1-b.r0+1;
+  const sdata=[];
+  for(let r=b.r0;r<=b.r1;r++)for(let c=b.c0;c<=b.c1;c++){const d=data.find(x=>x.c===c&&x.r===r);sdata.push(d&&d.inSel?d.v:'');}
+  const name=prompt('印章名称：','印章')||'印章';
+  stamps.push({id:Date.now(),name,w,h,data:sdata});rStamps();setTool('stamp');
+}
+function selClear(){const{b,data}=getSelPixels();if(!b)return;pushU();data.filter(d=>d.inSel).forEach(({c,r})=>pix[gi(c,r)]='');dCvs();}
+
+// ── STAMP ──
+function doStamp(col,row){
+  if(!selStamp)return;
+  const s=stamps.find(x=>String(x.id)===String(selStamp));if(!s)return;
+  pushU();
+  for(let dr=0;dr<s.h;dr++)for(let dc=0;dc<s.w;dc++){
+    const c=col+dc,r=row+dr;
+    if(c>=0&&c<COLS&&r>=0&&r<ROWS){
+      const v=s.data[dr*s.w+dc];
+      if(v)pix[gi(c,r)]=v;
+    }
+  }
+  // 放置后自动进入“选区”，可拖动/复制/缩放（更像图层操作）
+  lassoPix=null;lassoClosedPath=[];
+  const c0=Math.max(0,col),r0=Math.max(0,row);
+  const c1=Math.min(COLS-1,col+s.w-1),r1=Math.min(ROWS-1,row+s.h-1);
+  selStart={px:c0*CELL,py:r0*CELL};
+  selEnd={px:(c1+1)*CELL,py:(r1+1)*CELL};
+  selHasSel=true;
+  selContent=getSelPixels();
+  setTool('sel');
+  dCvs();dSel();
+}
+function rStamps(){
+  const el=document.getElementById('strow');if(!el)return;
+  if(!stamps.length){el.innerHTML='<span style="font-size:11px;color:#9B7B9B">衣柜衣物自动载入为印章，或框选后存印章</span>';return;}
+  el.innerHTML=stamps.map(s=>{
+    const sc2v=Math.min(42/s.w,42/s.h);
+    return`<div class="sti" title="${s.name}">
+      <canvas id="stcv-${s.id}" width="${Math.ceil(s.w*sc2v)}" height="${Math.ceil(s.h*sc2v)}" class="stcv${String(selStamp)===String(s.id)?' on':''}" onclick="selStamp='${s.id}';setTool('stamp')"></canvas>
+      <div class="stl">${s.name}</div>
+    </div>`;
+  }).join('');
+  stamps.forEach(s=>{
+    const cv=document.getElementById('stcv-'+s.id);if(!cv)return;
+    const ctx=cv.getContext('2d');const sc2v=Math.min(42/s.w,42/s.h);
+    for(let r=0;r<s.h;r++)for(let c=0;c<s.w;c++){const v=s.data[r*s.w+c];if(!v)continue;ctx.fillStyle=v;ctx.fillRect(Math.floor(c*sc2v),Math.floor(r*sc2v),Math.ceil(sc2v),Math.ceil(sc2v));}
+  });
+}
+
+// ── DRAW CANVAS ──
+function dCvs(){
+  const cv=document.getElementById('pc');const ctx=cv.getContext('2d');ctx.clearRect(0,0,cv.width,cv.height);
+  // Hair zone tint
+  ctx.fillStyle='rgba(255,240,248,.4)';ctx.fillRect(0,0,cv.width,HAIR_ROWS*CELL);
+  for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){ctx.fillStyle=(r+c)%2===0?'#F9F9F9':'#EFEFEF';ctx.fillRect(c*CELL,r*CELL,CELL,CELL);}
+  pix.forEach((c,i)=>{if(!c)return;const col=i%COLS,row=Math.floor(i/COLS);ctx.fillStyle=c;ctx.fillRect(col*CELL,row*CELL,CELL,CELL);});
+  ctx.strokeStyle='rgba(200,180,210,.18)';ctx.lineWidth=.5;
+  for(let c=0;c<=COLS;c++){ctx.beginPath();ctx.moveTo(c*CELL,0);ctx.lineTo(c*CELL,ROWS*CELL);ctx.stroke();}
+  for(let r=0;r<=ROWS;r++){ctx.beginPath();ctx.moveTo(0,r*CELL);ctx.lineTo(COLS*CELL,r*CELL);ctx.stroke();}
+  // Hair zone border
+  ctx.strokeStyle='rgba(244,143,177,.3)';ctx.lineWidth=1.5;ctx.setLineDash([4,3]);
+  ctx.beginPath();ctx.moveTo(0,HAIR_ROWS*CELL);ctx.lineTo(COLS*CELL,HAIR_ROWS*CELL);ctx.stroke();
+  ctx.setLineDash([]);
+  // Hair zone label
+  ctx.fillStyle='rgba(244,143,177,.5)';ctx.font='10px sans-serif';ctx.fillText('↑ 发型区',3,HAIR_ROWS*CELL-3);
+}
+
+// ── GUIDE: Human silhouette ──
+function dGuide(){
+  const g=document.getElementById('gc');if(!g)return;
+  const ctx=g.getContext('2d');ctx.clearRect(0,0,g.width,g.height);
+  if(!showGuide)return;
+  const C=CELL;
+  // Center line
+  ctx.strokeStyle='rgba(144,202,249,.4)';ctx.lineWidth=1;ctx.setLineDash([3,2]);
+  ctx.beginPath();ctx.moveTo(24*C,0);ctx.lineTo(24*C,ROWS*C);ctx.stroke();
+  ctx.setLineDash([]);
+  // Draw a simple human silhouette
+  // Body parts in cell units (body starts at row HAIR_ROWS = 16)
+  const B=HAIR_ROWS; // body start row
+  // Head
+  ctx.strokeStyle='rgba(244,143,177,.6)';ctx.lineWidth=1.2;ctx.setLineDash([2,2]);
+  ctx.beginPath();ctx.ellipse(24*C,(B+10)*C,7*C,10*C,0,0,Math.PI*2);ctx.stroke();
+  // Neck
+  ctx.beginPath();ctx.moveTo(22*C,(B+20)*C);ctx.lineTo(22*C,(B+23)*C);ctx.moveTo(26*C,(B+20)*C);ctx.lineTo(26*C,(B+23)*C);ctx.stroke();
+  // Shoulders
+  ctx.beginPath();ctx.moveTo(14*C,(B+24)*C);ctx.lineTo(34*C,(B+24)*C);ctx.stroke();
+  // Torso
+  ctx.beginPath();ctx.moveTo(14*C,(B+24)*C);ctx.lineTo(17*C,(B+38)*C);ctx.moveTo(34*C,(B+24)*C);ctx.lineTo(31*C,(B+38)*C);ctx.stroke();
+  // Waist
+  ctx.beginPath();ctx.moveTo(17*C,(B+38)*C);ctx.lineTo(31*C,(B+38)*C);ctx.stroke();
+  // Hips
+  ctx.beginPath();ctx.moveTo(15*C,(B+43)*C);ctx.lineTo(33*C,(B+43)*C);ctx.stroke();
+  // Legs
+  ctx.beginPath();ctx.moveTo(17*C,(B+43)*C);ctx.lineTo(19*C,(B+62)*C);ctx.moveTo(31*C,(B+43)*C);ctx.lineTo(29*C,(B+62)*C);ctx.stroke();
+  // Arms
+  ctx.beginPath();ctx.moveTo(14*C,(B+24)*C);ctx.lineTo(10*C,(B+42)*C);ctx.moveTo(34*C,(B+24)*C);ctx.lineTo(38*C,(B+42)*C);ctx.stroke();
+  // Labels
+  ctx.setLineDash([]);ctx.fillStyle='rgba(244,143,177,.65)';ctx.font='7px sans-serif';
+  ctx.fillText('头',(24+7.5)*C,(B+10)*C+3);
+  ctx.fillText('肩',(34.5)*C,(B+24)*C+3);
+  ctx.fillText('腰',(31.5)*C,(B+38)*C+3);
+  ctx.fillText('臀',(33.5)*C,(B+43)*C+3);
+}
+function togGuide(){showGuide=!showGuide;document.getElementById('tg-guide').classList.toggle('on',showGuide);dGuide();}
+
+// ── UNDO/BLUR/CLEAR ──
+function pushU(){undo.push([...pix]);if(undo.length>40)undo.shift();}
+function doUndo(){
+  if(pendingGeo){cancelPendingGeo();return;}
+  if(!undo.length)return;pix=undo.pop();dCvs();
+}
+function doBlur(){
+  pushU();const nx=[...pix];
+  for(let r=1;r<ROWS-1;r++)for(let c=1;c<COLS-1;c++){
+    const ns=[pix[gi(c,r)],pix[gi(c-1,r)],pix[gi(c+1,r)],pix[gi(c,r-1)],pix[gi(c,r+1)]].filter(Boolean);
+    if(!ns.length)continue;let rr=0,gg=0,bb=0;ns.forEach(h=>{rr+=parseInt(h.slice(1,3),16);gg+=parseInt(h.slice(3,5),16);bb+=parseInt(h.slice(5,7),16);});
+    const n=ns.length;nx[gi(c,r)]='#'+[rr,gg,bb].map(x=>Math.round(x/n).toString(16).padStart(2,'0')).join('');
+  }
+  pix=nx;dCvs();
+}
+function doClear(){if(confirm('清空画布？')){pushU();pix.fill('');cancelPendingGeo();dCvs();}}
+
+// ── DRAFT ──
+function saveDraft(){localStorage.setItem('rDraft',JSON.stringify({pix,rows:ROWS,n:document.getElementById('inp-n').value,c:document.getElementById('inp-c').value,t:document.getElementById('inp-t').value}));alert('✅ 草稿已暂存！');}
+function loadDraft(){
+  const d=localStorage.getItem('rDraft');if(!d)return;const o=JSON.parse(d);
+  // Handle old 64-row drafts
+  if(o.rows&&o.rows!==ROWS){
+    pix=new Array(ROWS*COLS).fill('');
+    const oldRows=o.rows||64;
+    o.pix.forEach((c,i)=>{
+      const oc=i%COLS,or=Math.floor(i/COLS);
+      // Map old rows (no hair zone) to new rows (with hair zone)
+      const nr=or+HAIR_ROWS;
+      if(nr<ROWS)pix[gi(oc,nr)]=c;
+    });
+  }else{pix=o.pix;}
+  if(o.n)document.getElementById('inp-n').value=o.n;
+  if(o.c)document.getElementById('inp-c').value=o.c;
+  if(o.t)document.getElementById('inp-t').value=o.t;
+  dCvs();alert('📂 草稿已加载！');
+}
+
+// ── SAVE ──
+function saveCvs(){
+  if(pendingGeo)confirmPendingGeo();
+  const name=document.getElementById('inp-n').value.trim()||'自制衣物';
+  const cat=document.getElementById('inp-c').value;
+  const tags=document.getElementById('inp-t').value.split(/[,，\s]+/).filter(Boolean);
+  const off=document.createElement('canvas');off.width=COLS;off.height=ROWS;
+  const ctx=off.getContext('2d');
+  pix.forEach((c,i)=>{if(!c)return;ctx.fillStyle=c;ctx.fillRect(i%COLS,Math.floor(i/COLS),1,1);});
+  const dataUrl=off.toDataURL('image/png');
+  const filled=pix.filter(Boolean);
+  const color=filled.length?filled[Math.floor(filled.length/2)]:'#E8A0BF';
+  const id=Date.now();
+  wardrobe.push({id,name,category:cat,tags,color,dataUrl});
+  syncStampsFromWardrobe();
+  document.getElementById('inp-n').value='';document.getElementById('inp-t').value='';
+  localStorage.removeItem('rDraft');closeCvs();
+  alert(`✅ "${name}"已保存到衣柜！`);
+}
+
+// ── TOOLS ──
+function setTool(t){
+  // Confirm pending geo when switching away from geo
+  if(pendingGeo&&t!=='geo')confirmPendingGeo();
+  curTool2=t;
+  document.querySelectorAll('.tb2').forEach(b=>b.classList.remove('on'));
+  const el=document.getElementById('t-'+t);if(el)el.classList.add('on');
+  const cursors={pen:'crosshair',curve:'crosshair',eraser:'cell',fill:'copy',line:'crosshair',geo:'crosshair',poly:'crosshair',sel:'crosshair',csel:'crosshair',lasso:'crosshair',eye:'zoom-in',stamp:'copy'};
+  const cv=document.getElementById('pc');if(cv)cv.style.cursor=cursors[t]||'crosshair';
+  document.getElementById('geo-r').style.display=t==='geo'?'':'none';
+  document.getElementById('poly-r').style.display=t==='poly'?'':'none';
+  document.getElementById('sel-r').style.display=['sel','csel','lasso'].includes(t)?'':'none';
+  document.getElementById('stamp-r').style.display=t==='stamp'?'':'none';
+  if(t==='stamp')rStamps();
+  if(!['sel','csel','lasso'].includes(t)){
+    selHasSel=false;selContent=null;lassoPix=null;lassoClosedPath=[];
+    const sc2el=document.getElementById('sc2');
+    if(sc2el&&!pendingGeo)sc2el.getContext('2d').clearRect(0,0,sc2el.width,sc2el.height);
+  }
+}
+function setGeo(g){geoT=g;['rect','tri','ellipse','circle'].forEach(x=>document.getElementById('g-'+x).classList.toggle('on',x===g));}
+function togGeoFill(){geoFill=!geoFill;document.getElementById('g-fill').textContent='填充:'+(geoFill?'开':'关');}
+function togPolyFill(){polyFill=!polyFill;document.getElementById('p-fill').textContent='填充:'+(polyFill?'开':'关');}
+
+// ── PALETTE ──
+function initPal(){
+  const el=document.getElementById('cp');
+  el.innerHTML=PC.map(c=>`<div class="sw${c===curC?' on':''}" style="background:${c}" onclick="pickC('${c}')"></div>`).join('');
+  document.getElementById('cc2').value=curC;
+}
+function pickC(c){curC=c;if(curTool2==='eye')setTool('pen');document.querySelectorAll('.sw').forEach(s=>s.classList.toggle('on',r2h(s.style.background)===c||s.style.background===c));document.getElementById('cc2').value=c;}
+function r2h(rgb){const m=rgb.match(/\d+/g);if(!m)return rgb;return'#'+m.slice(0,3).map(x=>parseInt(x).toString(16).padStart(2,'0')).join('');}
+
+// ═══════════════════════════════════════
+// AI SEARCH
+// ═══════════════════════════════════════
+async function askAI(){
+  const btn=document.getElementById('aibtn');btn.disabled=true;btn.textContent='AI思考中…';
+  document.getElementById('aic').classList.remove('on');
+  const items=wardrobe.map(i=>`${i.name}(${i.category},${i.tags.join('/')})`).join('、');
+  const mood=document.getElementById('ai-mood')?.value||'';
+  const temp=document.getElementById('ai-temp')?.value.trim()||'';
+  const season=document.getElementById('ai-season')?.value||'';
+  const city=document.getElementById('ai-city')?.value.trim()||'';
+  const color=document.getElementById('ai-color')?.value.trim()||'';
+  const want=document.getElementById('ai-want')?.value.trim()||'';
+  const cond=[
+    mood?`心情/风格偏好：${mood}`:'',
+    temp?`今晚温度范围：${temp}`:'',
+    season?`季节：${season}`:'',
+    city?`城市：${city}`:'',
+    color?`希望主色/偏好颜色：${color}`:'',
+    want?`希望包含单品或元素：${want}`:''
+  ].filter(Boolean).join('；');
+  const prompt2=`你是温柔可爱的时尚搭配助手。衣柜：${items}。${cond?`条件：${cond}。`:''}请选3-5件推荐搭配，说明从里到外的图层顺序（用 → 表示），再用一句可爱的话评价。格式：搭配：[衣物1→衣物2→...] 评价：...`;
+  // Use the current AI's API config
+  const curAI=aiAvatars.find(a=>a.id===curDA)||aiAvatars[0];
+  const apiUrl=curAI.apiUrl||'';
+  const apiKey=curAI.apiKey||'';
+  const apiModel=curAI.apiModel||'';
+  if(!apiUrl&&!apiKey){
+    document.getElementById('aic').textContent='⚙️ 请先在「形象」页面为AI助手配置API地址和密钥～';
+    document.getElementById('aic').classList.add('on');
+    document.getElementById('airr').style.display='';
+    btn.disabled=false;btn.textContent='🤖 让AI帮我搭配';return;
+  }
+  try{
+    // Try OpenAI-compatible format first; adapt based on URL
+    const isAnthropic=apiUrl.includes('anthropic.com');
+    let res;
+    if(isAnthropic){
+      res=await fetch(apiUrl,{method:'POST',headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01'},body:JSON.stringify({model:apiModel||'claude-3-5-sonnet-20241022',max_tokens:400,messages:[{role:'user',content:prompt2}]})});
+      const data=await res.json();
+      const text=data.content?.[0]?.text||'AI暂时连不上～';
+      showAIResult(text);
+    }else{
+      res=await fetch(apiUrl,{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${apiKey}`},body:JSON.stringify({model:apiModel||'gpt-4o',messages:[{role:'user',content:prompt2}],max_tokens:400})});
+      const data=await res.json();
+      const text=data.choices?.[0]?.message?.content||data.error?.message||'AI暂时连不上～';
+      showAIResult(text);
+    }
+  }catch(e){
+    document.getElementById('aic').textContent='⚠️ AI连接失败，请检查API配置';document.getElementById('aic').classList.add('on');
+    document.getElementById('airr').style.display='';
+  }
+  btn.disabled=false;btn.textContent='🤖 让AI帮我搭配';
+}
+function showAIResult(text){
+  document.getElementById('aic').textContent=text;document.getElementById('aic').classList.add('on');document.getElementById('airr').style.display='';
+  const match=text.match(/搭配[：:]\s*\[([^\]]+)\]/);
+  if(match){
+    const names=match[1].split(/[→,，]+/).map(s=>s.trim());
+    const found=names.map(n=>wardrobe.find(w=>w.name.includes(n)||n.includes(w.name))).filter(Boolean);
+    if(found.length){uLayers=found;rLL();rWQ();}
+  }
+}
+
+// ═══════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════
+rFigs();rLL();rWQ();rPhotoAISel();rAITBtns();
+syncStampsFromWardrobe();
+</script>
+</body>
+</html>

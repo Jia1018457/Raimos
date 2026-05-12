@@ -184,9 +184,7 @@ function renderContacts() {
     const div = document.createElement('div'); div.className = 'contact-card';
     const avHTML = c.avatar?.startsWith('data:') ? `<img src="${c.avatar}">` : c.avatar || '🤖';
     div.innerHTML = `
-      <div class="contact-av" style="position:relative">${typeof avHTML === 'string' && avHTML.startsWith('<') ? avHTML : `<span>${avHTML}</span>`}
-        <span class="contact-status-badge">${(c.status || '').split(' ')[0] || ''}</span>
-      </div>
+      <div class="contact-av">${typeof avHTML === 'string' && avHTML.startsWith('<') ? avHTML : `<span>${avHTML}</span>`}</div>
       <div class="contact-info">
         <div class="contact-name">${esc(c.name)}</div>
         <div class="contact-model">🤖 ${c.model || 'gpt-4o'}</div>
@@ -241,8 +239,18 @@ function openContactModal(editId) {
   setCmSection('appear', c, ['xAiBubble','xChatBg']);
   if (c?.xAiBubble !== null && c?.xAiBubble !== undefined) { const el=$i('cm-x-ai-bubble'); if(el)el.value=c.xAiBubble||'#ffffff'; }
   if (c?.xChatBg !== null && c?.xChatBg !== undefined) { const el=$i('cm-x-chat-bg'); if(el)el.value=c.xChatBg||'#fdf6f0'; }
-  setCmSection('imggen', c, ['xImgGenModel']);
-  if (c?.xImgGenModel !== null && c?.xImgGenModel !== undefined) { const el=$i('cm-x-imggen'); if(el)el.value=c.xImgGenModel||S.settings.imgGenModel; }
+  setCmSection('imggen', c, ['xImgGenModel','xImgGenCustomModel','xImgGenApiUrl','xImgGenApiKey']);
+  if (c?.xImgGenModel !== null && c?.xImgGenModel !== undefined) {
+    const el=$i('cm-imggen-model');
+    if(el){
+      const knownModels=['openai/dall-e-3','stabilityai/stable-diffusion-xl-base-1.0'];
+      el.value=knownModels.includes(c.xImgGenModel)?c.xImgGenModel:'custom';
+    }
+  }
+  const cmm=$i('cm-x-imggen-custom-model'); if(cmm)cmm.value=c?.xImgGenCustomModel||'';
+  const cmu=$i('cm-x-imggen-api-url'); if(cmu)cmu.value=c?.xImgGenApiUrl||'';
+  const cmk=$i('cm-x-imggen-api-key'); if(cmk)cmk.value=c?.xImgGenApiKey||'';
+  onImgGenChange('cm');
   // Proactive section
   setCmSection('proactive', c, ['xProactive','xProMax','xProStart','xProEnd']);
   if (c?.xProactive !== null && c?.xProactive !== undefined) { const el=$i('cm-x-proactive'); if(el)el.checked=!!c.xProactive; }
@@ -333,7 +341,10 @@ async function saveContact() {
     xAiBubble: getCmSection('appear') ? getV('cm-x-ai-bubble','#ffffff') : null,
     xChatBg: getCmSection('appear') ? getV('cm-x-chat-bg','#fdf6f0') : null,
     // Image gen section
-    xImgGenModel: getCmSection('imggen') ? getV('cm-x-imggen') : null,
+    xImgGenModel: getCmSection('imggen') ? (()=>{ const v=getV('cm-imggen-model'); return v==='custom'?(getV('cm-x-imggen-custom-model')||'openai/dall-e-3'):v; })() : null,
+    xImgGenCustomModel: getCmSection('imggen') ? getV('cm-x-imggen-custom-model') : null,
+    xImgGenApiUrl: getCmSection('imggen') ? getV('cm-x-imggen-api-url') : null,
+    xImgGenApiKey: getCmSection('imggen') ? getV('cm-x-imggen-api-key') : null,
     // Proactive section
     xProactive: getCmSection('proactive') ? getB2('cm-x-proactive') : null,
     xProMax: getCmSection('proactive') ? parseInt(getV('cm-x-pro-max','3')) : null,
@@ -1781,7 +1792,7 @@ function buildSettingsUI() {
   const wrap = $i('settings-wrap'); if (!wrap) return;
   const s = S.settings;
   wrap.innerHTML = `
-    <div class="s-section"><h3>🔑 API 配置（全局默认）</h3>
+    <div class="s-section" hidden><h3>🔑 API 配置（全局默认）</h3>
       <div class="s-row"><label>API Key</label><input type="password" id="s-key" value="${s.apiKey||''}" placeholder="sk-or-… 助手未填时使用此Key"/></div>
       <div class="s-row"><label>API 地址</label><input type="text" id="s-apiurl" value="${s.apiUrl||''}" placeholder="留空用 OpenRouter，助手未填时使用"/></div>
       <div class="s-row"><label>默认模型</label><input type="text" id="s-model" value="${s.model||'openai/gpt-4o'}" placeholder="openai/gpt-4o"/></div>
@@ -1789,7 +1800,7 @@ function buildSettingsUI() {
       <div class="s-row"><label>Tavily Key (搜索)</label><input type="password" id="s-tavily" value="${s.tavilyKey||''}" placeholder="可选，联网搜索"/></div>
       <div class="s-row"><label>Unsplash Key (图片)</label><input type="password" id="s-unsplash" value="${s.unsplashKey||''}" placeholder="可选，朋友圈搜图"/></div>
     </div>
-    <div class="s-section"><h3>☁️ 云同步</h3>
+    <div class="s-section" hidden><h3>☁️ 云同步</h3>
       <div style="padding:4px 0 10px;font-size:12px;color:var(--text3)">登录后可把助手、对话、记忆同步到云端，换设备也能用。</div>
       <div style="display:flex;gap:7px;flex-wrap:wrap;">
         <button class="btn-p" onclick="openAuthModal()">🔐 登录 / 注册</button>
@@ -1798,7 +1809,7 @@ function buildSettingsUI() {
       </div>
       <div id="auth-info" style="margin-top:8px;font-size:12px;color:var(--text3)"></div>
     </div>
-    <div class="s-section"><h3>🗣️ 语音</h3>
+    <div class="s-section" hidden><h3>🗣️ 语音</h3>
       <div class="s-row"><label>TTS 模式</label><select id="s-tts-mode" onchange="onTtsModeChange()"><option value="browser">浏览器 TTS (免费)</option><option value="custom">自定义 TTS 接口</option></select></div>
       <div class="s-row" id="r-bvoice"><label>浏览器声音</label><select id="s-bvoice"></select></div>
       <div id="r-custom-tts" style="display:none">
@@ -1809,7 +1820,7 @@ function buildSettingsUI() {
       <div class="s-row"><label>语音回复模式</label><select id="s-voice-reply"><option value="text">只显示文字</option><option value="both">文字+语音</option><option value="voice">只显示语音</option></select></div>
       <div class="s-row"><label>自动朗读回复</label><label class="toggle"><input type="checkbox" id="s-auto-tts" ${s.autoTts?'checked':''}><span class="tslider"></span></label></div>
     </div>
-    <div class="s-section"><h3>🤖 对话参数</h3>
+    <div class="s-section" hidden><h3>🤖 对话参数</h3>
       <div class="s-row"><label>流式输出</label><label class="toggle"><input type="checkbox" id="s-stream" ${s.stream!==false?'checked':''}><span class="tslider"></span></label></div>
       <div class="s-row"><label>显示Token用量</label><label class="toggle"><input type="checkbox" id="s-show-token" ${s.showToken?'checked':''}><span class="tslider"></span></label></div>
       <div class="s-row"><label>显示思考过程</label><label class="toggle"><input type="checkbox" id="s-show-think" ${s.showThink!==false?'checked':''}><span class="tslider"></span></label></div>
@@ -1818,7 +1829,7 @@ function buildSettingsUI() {
       <div class="s-row"><label>图片压缩尺寸</label><input type="range" id="s-imgsize" min="256" max="2048" step="128" value="${s.imgSize||800}" oninput="$i('s-imgsize-v').textContent=this.value+'px'"><span class="rval" id="s-imgsize-v">${s.imgSize||800}px</span></div>
       <div class="s-row"><label>摘要阈值</label><input type="number" id="s-sumthresh" value="${s.sumThresh||40}" min="10" max="200" style="max-width:80px"/><span style="font-size:11px;color:var(--text3)">条后自动摘要</span></div>
     </div>
-    <div class="s-section"><h3>🎨 外观</h3>
+    <div class="s-section" hidden><h3>🎨 外观</h3>
       <div class="s-row"><label>主题</label>
         <select id="s-theme" onchange="S.settings.theme=this.value;applyTheme();saveSetting('theme',this.value)">
           <option value="light">☀️ 明亮</option>
@@ -1834,12 +1845,12 @@ function buildSettingsUI() {
       <div class="s-row"><label>显示我的头像</label><label class="toggle"><input type="checkbox" id="s-show-user-av" ${s.showUserAvatar!==false?'checked':''}><span class="tslider"></span></label></div>
       <div class="s-row"><label>显示 AI 头像</label><label class="toggle"><input type="checkbox" id="s-show-ai-av" ${s.showAiAvatar!==false?'checked':''}><span class="tslider"></span></label></div>
     </div>
-    <div class="s-section"><h3>🐾 主动消息</h3>
+    <div class="s-section" hidden><h3>🐾 主动消息</h3>
       <div class="s-row"><label>启用</label><label class="toggle"><input type="checkbox" id="s-proactive" ${s.proactive?'checked':''}><span class="tslider"></span></label></div>
       <div class="s-row"><label>每天最多</label><input type="number" id="s-pro-max" value="${s.proMax||3}" min="1" max="20" style="max-width:60px"/> 次</div>
       <div class="s-row"><label>活跃时段</label><input type="number" id="s-pro-start" value="${s.proStart??8}" min="0" max="23" style="max-width:55px"/><span style="color:var(--text3);font-size:11px">:00 ~</span><input type="number" id="s-pro-end" value="${s.proEnd??22}" min="0" max="23" style="max-width:55px"/><span style="color:var(--text3);font-size:11px">:00</span></div>
     </div>
-    <div class="s-section"><h3>🌸 朋友圈（全局默认）</h3>
+    <div class="s-section" hidden><h3>🌸 朋友圈（全局默认）</h3>
       <div style="font-size:11px;color:var(--text3);margin-bottom:8px">各助手可在扩展设置中单独覆盖</div>
       <div class="s-row"><label>启用朋友圈</label><label class="toggle"><input type="checkbox" id="s-moments-enabled" ${s.momentsEnabled?'checked':''}><span class="tslider"></span></label></div>
       <div class="s-row"><label>AI 自动发圈</label><label class="toggle"><input type="checkbox" id="s-auto-post" ${s.autoPost?'checked':''}><span class="tslider"></span></label></div>
@@ -1864,7 +1875,7 @@ function buildSettingsUI() {
         <label><input type="checkbox" id="s-imgsrc-generate" ${(s.imageSources||'').includes('generate')?'checked':''}> 生成图片</label>
       </div></div>
     </div>
-    <div class="s-section"><h3>🎲 图片生成</h3>
+    <div class="s-section" hidden><h3>🎲 图片生成</h3>
       <div class="s-row"><label>生图模型</label>
         <select id="s-imggen-model" onchange="onImgGenChange('s')">
           <option value="openai/dall-e-3">DALL-E 3</option>
@@ -1878,7 +1889,7 @@ function buildSettingsUI() {
         <div class="s-row"><label>API Key</label><input type="password" id="s-imggen-api-key" value="${s.imgGenApiKey||''}" placeholder="留空继承全局"/></div>
       </div>
     </div>
-    <div class="s-section"><h3>💾 数据管理</h3>
+    <div class="s-section" hidden><h3>💾 数据管理</h3>
       <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:9px">
         <button class="btn-p" onclick="exportData('json')">📤 导出 JSON</button>
         <button class="btn-p" onclick="exportData('txt')">📄 导出 TXT</button>

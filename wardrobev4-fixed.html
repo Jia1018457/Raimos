@@ -1361,7 +1361,9 @@ function attachCvs(){
       const handle=nearResizeHandle(p.px,p.py,sc());
       if(handle){
         isResizeSel=true;resizeHandle=handle;
-        resizeOrigSel={b:getBounds(),selStart:{...selStart},selEnd:{...selEnd}};
+        const _rb=getBounds();
+        const _rd=getSelPixels();
+        resizeOrigSel={b:_rb,selStart:{...selStart},selEnd:{...selEnd},content:_rd.data.filter(d=>d.inSel&&d.v)};
         return;
       }
     }
@@ -1746,9 +1748,8 @@ function _applyResizeHandle(col,row){
 function _drawResizePreview(ob,nb){
   const sc2el=document.getElementById('sc2');
   const ctx=sc2el.getContext('2d');ctx.clearRect(0,0,sc2el.width,sc2el.height);
-  // Draw scaled preview pixels (half-opacity)
-  const{data}=getSelPixels();
-  const selPix=data.filter(d=>d.inSel&&d.v);
+  // Use pixels saved at resize-start (pix is still at original position during drag)
+  const selPix=resizeOrigSel.content||[];
   const ow=ob.c1-ob.c0+1,oh=ob.r1-ob.r0+1;
   const nw=nb.c1-nb.c0+1,nh=nb.r1-nb.r0+1;
   ctx.globalAlpha=0.55;
@@ -1770,11 +1771,11 @@ function _commitResize(){
   const nb=getBounds();if(!nb)return;
   const ob=resizeOrigSel.b;
   if(ob.c0===nb.c0&&ob.r0===nb.r0&&ob.c1===nb.c1&&ob.r1===nb.r1)return;
-  const{data}=getSelPixels();
-  const selPix=data.filter(d=>d.inSel&&d.v);
+  // Use pixel snapshot saved at resize-start (not getSelPixels which reads from new bounds)
+  const selPix=resizeOrigSel.content||[];
   if(!selPix.length)return;
   pushU();
-  // Clear original area
+  // Clear ORIGINAL pixel positions (not new bounds)
   selPix.forEach(({c,r})=>pix[gi(c,r)]='');
   const ow=ob.c1-ob.c0+1,oh=ob.r1-ob.r0+1;
   const nw=nb.c1-nb.c0+1,nh=nb.r1-nb.r0+1;

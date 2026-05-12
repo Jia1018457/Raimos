@@ -2611,23 +2611,50 @@ function applyCompanionCharPosition() {
 
 function companionInitDrag() {
   const char = $i('comp-char'); if (!char) return;
-  let dragging = false, startX = 0, startY = 0, origLeft = 0, origBottom = 0;
+  let dragging = false, resizing = false;
+  let startX = 0, startY = 0, origLeft = 0, origBottom = 0;
+  let origCharWidth = 0, origStagePx = 0;
 
   const getStageRect = () => ($i('comp-stage') || char.parentElement).getBoundingClientRect();
 
+  const _isResizeCorner = (e) => {
+    const touch = e.touches?.[0] || e;
+    const rect = char.getBoundingClientRect();
+    const rx = (touch.clientX - rect.left) / rect.width;
+    const ry = (touch.clientY - rect.top) / rect.height;
+    return rx > 0.72 && ry > 0.72; // bottom-right ~28% corner
+  };
+
   const onDown = e => {
-    dragging = true;
-    char.classList.add('dragging');
     const touch = e.touches?.[0] || e;
     startX = touch.clientX; startY = touch.clientY;
-    const r = getStageRect();
-    origLeft = (parseFloat(char.style.left) || cs(S.settings.companionCharLeft, 3)) / 100 * r.width;
-    origBottom = (parseFloat(char.style.bottom) || cs(S.settings.companionCharBottom, 4)) / 100 * r.height;
+    if (_isResizeCorner(e)) {
+      resizing = true;
+      origCharWidth = char.offsetWidth;
+      origStagePx = getStageRect().width;
+      char.style.cursor = 'nwse-resize';
+    } else {
+      dragging = true;
+      char.classList.add('dragging');
+      const r = getStageRect();
+      origLeft = (parseFloat(char.style.left) || cs(S.settings.companionCharLeft, 3)) / 100 * r.width;
+      origBottom = (parseFloat(char.style.bottom) || cs(S.settings.companionCharBottom, 4)) / 100 * r.height;
+    }
     e.preventDefault();
   };
   const onMove = e => {
-    if (!dragging) return;
     const touch = e.touches?.[0] || e;
+    if (resizing) {
+      const dx = touch.clientX - startX;
+      const newPx = Math.max(40, origCharWidth + dx);
+      const pct = Math.max(10, Math.min(200, Math.round(newPx / origStagePx * 100)));
+      char.style.width = pct + '%';
+      char.style.maxWidth = 'none';
+      const slider = $i('comp-char-size'); if (slider) slider.value = String(pct);
+      const lv = $i('comp-char-size-val'); if (lv) lv.textContent = pct + '%';
+      e.preventDefault(); return;
+    }
+    if (!dragging) return;
     const dx = touch.clientX - startX, dy = touch.clientY - startY;
     const r = getStageRect();
     const newLeft = Math.max(0, Math.min(80, (origLeft + dx) / r.width * 100));
@@ -2637,6 +2664,14 @@ function companionInitDrag() {
     e.preventDefault();
   };
   const onUp = async () => {
+    if (resizing) {
+      resizing = false;
+      char.style.cursor = '';
+      const pct = Math.max(10, Math.min(200, Math.round(char.offsetWidth / getStageRect().width * 100)));
+      S.settings.companionCharSize = pct;
+      await saveSetting('companionCharSize', pct);
+      return;
+    }
     if (!dragging) return;
     dragging = false;
     char.classList.remove('dragging');

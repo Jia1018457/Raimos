@@ -321,6 +321,8 @@ body{font-family:'Nunito','Noto Sans SC',sans-serif;background:var(--bg);color:v
   cursor:grab;touch-action:none;user-select:none;z-index:2;
 }
 #comp-char.dragging{cursor:grabbing;}
+#comp-char::after{content:'⤡';position:absolute;bottom:2px;right:4px;font-size:13px;color:rgba(233,30,99,.7);pointer-events:none;opacity:0;transition:opacity .2s;line-height:1;}
+#comp-char:hover::after{opacity:1;}
 #comp-char .comp-emoji{font-size:84px;filter:drop-shadow(0 10px 18px rgba(0,0,0,.12));pointer-events:none;}
 #comp-char img,#comp-char video{width:100%;height:100%;object-fit:contain;filter:drop-shadow(0 10px 18px rgba(0,0,0,.12));pointer-events:none;}
 #comp-hud{position:absolute;right:12px;top:12px;display:flex;flex-direction:column;gap:6px;align-items:flex-end;z-index:3;}

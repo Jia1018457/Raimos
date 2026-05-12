@@ -116,6 +116,21 @@ async function loadFile(id) {
 async function delFile(id) { await dbDel('files', id); }
 async function getAllFiles() { return dbGetAll('files'); }
 
+// Media blob helpers (for audio/video/image assets too large for dataUrl)
+async function saveMediaBlob(id, blob, meta = {}) {
+  await dbPut('files', { id, blob, ...meta, ts: Date.now() });
+  return id;
+}
+async function loadMediaBlob(id) {
+  const row = await dbGet('files', id);
+  return row ? (row.blob || null) : null;
+}
+async function loadMediaUrl(id) {
+  const blob = await loadMediaBlob(id);
+  if (!blob) return null;
+  try { return URL.createObjectURL(blob); } catch(e) { return null; }
+}
+
 // Storage size estimate
 async function estimateUsage() {
   if (navigator.storage && navigator.storage.estimate) {

@@ -45,6 +45,28 @@ let S = {
     userBubble:'#ff8fab', aiBubble:'#ffffff',
     theme:'light', chatBg:'#fdf6f0', chatBgImg:'', bgOpacity:1, fontSize:14,
     welcomeIcon:'🐻', welcomeTitle:'你好呀！', welcomeSub:'点左上角 ＋ 新建对话，或先去⚙️设置里填 OpenRouter API Key 哦～',
+
+    // ── 陪伴系统 ──
+    companionScene:'学习',
+    companionSceneCustom:'',
+    companionContactId:'',
+    companionFreqMin:10,
+    companionCharType:'builtin',
+    companionCharBuiltin:'😊',
+    companionCharMediaId:'',
+    companionBgType:'builtin',
+    companionBgBuiltin:'bg1',
+    companionBgMediaId:'',
+    companionBgFit:'cover',
+    companionMusicMediaId:'',
+    companionMusicLoop:true,
+    companionMusicVol:0.6,
+    companionTimerMode:'pomodoro',
+    companionCountdownMin:25,
+    companionPomoFocus:25,
+    companionPomoBreak:5,
+    companionCharLeft:3,    // % from left edge of stage
+    companionCharBottom:4,  // % from bottom edge of stage
   },
   _momentTimers: {},
   _imgSearchTarget: 'compose',
@@ -53,6 +75,24 @@ let S = {
   _newGifData: null, _newAnimType: 'gif', _editingKwAnimId: null,
   _animTimeout: null, _animRaf: null,
   _statusTimers: {},
+
+  // Companion runtime (not persisted to storage)
+  _companion: {
+    running:false,
+    mode:'pomodoro',
+    phase:'focus',
+    elapsedSec:0,
+    remainingSec:0,
+    tickTimer:null,
+    speechTimer:null,
+    isSpeaking:false,
+    bubbleTimer:null,
+    bgObjUrl:null,
+    charObjUrl:null,
+    musicObjUrl:null,
+    uploadTarget:null,
+    immersive:false,
+  },
 };
 
 // ── MODELS ──
@@ -101,6 +141,7 @@ async function init() {
   renderContacts();
   renderMemories();
   renderMoments();
+  initCompanion();
   initEmoji();
   initVoices();
   initScrollObs();
@@ -170,6 +211,7 @@ function switchPage(id) {
   if (id === 'memory-page') renderMemories();
   if (id === 'contacts-page') renderContacts();
   if (id === 'moments-page') renderMoments();
+  if (id === 'companion-page') renderCompanionPage();
   if (id === 'settings-page') { buildSettingsUI(); updateStorageInfo(); }
 }
 
@@ -2375,4 +2417,432 @@ async function restoreFromCloud() {
   } catch(e) {
     toast('❌ 恢复失败：' + e.message);
   }
+}
+
+// ══════════════════════════════════════════════════════
+//  COMPANION / 陪伴系统
+// ══════════════════════════════════════════════════════
+
+function initCompanion() {
+  if (!$i('companion-page')) return;
+
+  if (!$i('comp-audio')) {
+    const a = document.createElement('audio');
+    a.id = 'comp-audio'; a.preload = 'auto'; a.style.display = 'none';
+    document.body.appendChild(a);
+  }
+
+  const bind = (id, key, parser) => {
+    const el = $i(id); if (!el) return;
+    const apply = async () => {
+      const v = parser ? parser(el) : el.value;
+      S.settings[key] = v;
+      await saveSetting(key, v);
+      if (key === 'companionFreqMin' && S._companion.running) companionSetupSpeechTimer();
+      if (key === 'companionMusicLoop' || key === 'companionMusicVol') applyCompanionMusicSettings();
+      if (key === 'companionBgFit') applyCompanionBgFit();
+      if (key !== 'companionMusicLoop' && key !== 'companionMusicVol' && key !== 'companionBgFit') void renderCompanionStage();
+    };
+    el.addEventListener('change', apply);
+    el.addEventListener('input', () => { if (el.type === 'range' || el.type === 'number') apply(); });
+  };
+
+  bind('comp-scene', 'companionScene');
+  bind('comp-scene-custom', 'companionSceneCustom', el => (el.value || '').trim());
+  bind('comp-contact', 'companionContactId');
+  bind('comp-freq', 'companionFreqMin', el => Math.max(0, parseInt(el.value || '0', 10) || 0));
+  bind('comp-char-type', 'companionCharType');
+  bind('comp-char-builtin', 'companionCharBuiltin');
+  bind('comp-bg-type', 'companionBgType');
+  bind('comp-bg-builtin', 'companionBgBuiltin');
+  bind('comp-bg-fit', 'companionBgFit');
+  bind('comp-music-loop', 'companionMusicLoop', el => !!el.checked);
+  bind('comp-music-vol', 'companionMusicVol', el => Math.max(0, Math.min(1, parseFloat(el.value || '0.6'))));
+  bind('comp-timer-mode', 'companionTimerMode');
+  bind('comp-countdown-min', 'companionCountdownMin', el => Math.max(1, parseInt(el.value || '25', 10) || 25));
+  bind('comp-pomo-focus', 'companionPomoFocus', el => Math.max(1, parseInt(el.value || '25', 10) || 25));
+  bind('comp-pomo-break', 'companionPomoBreak', el => Math.max(1, parseInt(el.value || '5', 10) || 5));
+
+  renderCompanionContactOptions();
+  syncCompanionUIFromSettings();
+  renderCompanionPage();
+  companionInitDrag();
+}
+
+function renderCompanionPage() {
+  if (!$i('companion-page')) return;
+  renderCompanionContactOptions();
+  syncCompanionUIFromSettings();
+  updateCompanionTimerModeUI();
+  updateCompanionStartBtn();
+  updateCompanionTimerText();
+  void renderCompanionStage();
+  applyCompanionMusicSettings();
+  void applyCompanionMusicSrc();
+}
+
+function renderCompanionContactOptions() {
+  const sel = $i('comp-contact'); if (!sel) return;
+  const cur = sel.value || S.settings.companionContactId || '';
+  sel.innerHTML = '';
+  const o0 = document.createElement('option'); o0.value = ''; o0.textContent = '（使用全局模型）'; sel.appendChild(o0);
+  Object.values(S._contacts || {}).forEach(c => {
+    const o = document.createElement('option'); o.value = c.id;
+    o.textContent = `${c.avatar || '🤖'} ${c.name || 'AI 助手'}`; sel.appendChild(o);
+  });
+  sel.value = cur;
+}
+
+function syncCompanionUIFromSettings() {
+  const s = S.settings;
+  const setV = (id, v) => { const el = $i(id); if (el && el.value !== String(v ?? '')) el.value = String(v ?? ''); };
+  setV('comp-scene', s.companionScene || '学习');
+  setV('comp-scene-custom', s.companionSceneCustom || '');
+  setV('comp-contact', s.companionContactId || '');
+  setV('comp-freq', s.companionFreqMin ?? 10);
+  setV('comp-char-type', s.companionCharType || 'builtin');
+  setV('comp-char-builtin', s.companionCharBuiltin || '😊');
+  const charIsUpload = (s.companionCharType || 'builtin') === 'upload';
+  $i('comp-char-builtin-row') && ($i('comp-char-builtin-row').style.display = charIsUpload ? 'none' : '');
+  $i('comp-char-upload-row') && ($i('comp-char-upload-row').style.display = charIsUpload ? '' : 'none');
+  setV('comp-bg-type', s.companionBgType || 'builtin');
+  setV('comp-bg-builtin', s.companionBgBuiltin || 'bg1');
+  const bgIsUpload = (s.companionBgType || 'builtin') === 'upload';
+  $i('comp-bg-builtin-row') && ($i('comp-bg-builtin-row').style.display = bgIsUpload ? 'none' : '');
+  $i('comp-bg-upload-row') && ($i('comp-bg-upload-row').style.display = bgIsUpload ? '' : 'none');
+  setV('comp-bg-fit', s.companionBgFit || 'cover');
+  const loop = $i('comp-music-loop'); if (loop) loop.checked = !!s.companionMusicLoop;
+  const vol = $i('comp-music-vol'); if (vol) vol.value = String(cs(s.companionMusicVol, 0.6));
+  setV('comp-timer-mode', s.companionTimerMode || 'pomodoro');
+  setV('comp-countdown-min', s.companionCountdownMin ?? 25);
+  setV('comp-pomo-focus', s.companionPomoFocus ?? 25);
+  setV('comp-pomo-break', s.companionPomoBreak ?? 5);
+}
+
+function updateCompanionTimerModeUI() {
+  const mode = S.settings.companionTimerMode || 'pomodoro';
+  const cd = $i('comp-countdown-row'), pr = $i('comp-pomo-row');
+  if (cd) cd.style.display = (mode === 'countdown') ? 'flex' : 'none';
+  if (pr) pr.style.display = (mode === 'pomodoro') ? 'flex' : 'none';
+}
+
+async function renderCompanionStage() {
+  await applyCompanionBackground();
+  await applyCompanionCharacter();
+  applyCompanionCharPosition();
+  applyCompanionBgFit();
+}
+
+async function applyCompanionBackground() {
+  const wrap = $i('comp-bg'); if (!wrap) return;
+  const s = S.settings;
+  if (S._companion.bgObjUrl) { try { URL.revokeObjectURL(S._companion.bgObjUrl); } catch(e) {} S._companion.bgObjUrl = null; }
+  wrap.innerHTML = '';
+  if ((s.companionBgType || 'builtin') === 'upload' && s.companionBgMediaId) {
+    const url = await loadMediaUrl(s.companionBgMediaId);
+    if (!url) { wrap.style.background = 'linear-gradient(135deg,#ffe6ef,#fff4ea)'; return; }
+    S._companion.bgObjUrl = url;
+    const blob = await loadMediaBlob(s.companionBgMediaId);
+    const isVideo = blob?.type?.startsWith('video/');
+    const el = isVideo ? document.createElement('video') : document.createElement('img');
+    el.src = url;
+    if (isVideo) { el.autoplay = true; el.loop = true; el.muted = true; el.playsInline = true; }
+    wrap.appendChild(el);
+    wrap.style.background = 'none';
+    return;
+  }
+  const map = {
+    bg1:'linear-gradient(135deg,#ffe6ef,#fff4ea)',
+    bg2:'linear-gradient(135deg,#d7f3ff,#fff4ea)',
+    bg3:'linear-gradient(135deg,#d6fff0,#fff4ea)',
+    bg4:'linear-gradient(135deg,#2a1f35,#1a1220)',
+    bg5:'linear-gradient(135deg,#ffe8cc,#fff4ea)',
+  };
+  wrap.style.background = map[s.companionBgBuiltin || 'bg1'] || map.bg1;
+}
+
+function applyCompanionBgFit() {
+  const wrap = $i('comp-bg'); if (!wrap) return;
+  const fit = S.settings.companionBgFit || 'cover';
+  wrap.classList.toggle('fit-contain', fit === 'contain');
+}
+
+async function applyCompanionCharacter() {
+  const wrap = $i('comp-char'); if (!wrap) return;
+  const s = S.settings;
+  if (S._companion.charObjUrl) { try { URL.revokeObjectURL(S._companion.charObjUrl); } catch(e) {} S._companion.charObjUrl = null; }
+  wrap.innerHTML = '';
+  if ((s.companionCharType || 'builtin') === 'upload' && s.companionCharMediaId) {
+    const url = await loadMediaUrl(s.companionCharMediaId);
+    if (!url) { wrap.innerHTML = '<div class="comp-emoji">😊</div>'; return; }
+    S._companion.charObjUrl = url;
+    const blob = await loadMediaBlob(s.companionCharMediaId);
+    const isVideo = blob?.type?.startsWith('video/');
+    const el = isVideo ? document.createElement('video') : document.createElement('img');
+    el.src = url;
+    if (isVideo) { el.autoplay = true; el.loop = true; el.muted = true; el.playsInline = true; }
+    wrap.appendChild(el);
+    return;
+  }
+  const span = document.createElement('div'); span.className = 'comp-emoji';
+  span.textContent = s.companionCharBuiltin || '😊'; wrap.appendChild(span);
+}
+
+function applyCompanionCharPosition() {
+  const wrap = $i('comp-char'); if (!wrap) return;
+  const left = cs(S.settings.companionCharLeft, 3);
+  const bottom = cs(S.settings.companionCharBottom, 4);
+  wrap.style.left = left + '%';
+  wrap.style.bottom = bottom + '%';
+}
+
+function companionInitDrag() {
+  const char = $i('comp-char'); if (!char) return;
+  let dragging = false, startX = 0, startY = 0, origLeft = 0, origBottom = 0;
+
+  const getStageRect = () => ($i('comp-stage') || char.parentElement).getBoundingClientRect();
+
+  const onDown = e => {
+    dragging = true;
+    char.classList.add('dragging');
+    const touch = e.touches?.[0] || e;
+    startX = touch.clientX; startY = touch.clientY;
+    const r = getStageRect();
+    origLeft = (parseFloat(char.style.left) || cs(S.settings.companionCharLeft, 3)) / 100 * r.width;
+    origBottom = (parseFloat(char.style.bottom) || cs(S.settings.companionCharBottom, 4)) / 100 * r.height;
+    e.preventDefault();
+  };
+  const onMove = e => {
+    if (!dragging) return;
+    const touch = e.touches?.[0] || e;
+    const dx = touch.clientX - startX, dy = touch.clientY - startY;
+    const r = getStageRect();
+    const newLeft = Math.max(0, Math.min(80, (origLeft + dx) / r.width * 100));
+    const newBottom = Math.max(0, Math.min(80, (origBottom - dy) / r.height * 100));
+    char.style.left = newLeft + '%';
+    char.style.bottom = newBottom + '%';
+    e.preventDefault();
+  };
+  const onUp = async () => {
+    if (!dragging) return;
+    dragging = false;
+    char.classList.remove('dragging');
+    const left = parseFloat(char.style.left) || 3;
+    const bottom = parseFloat(char.style.bottom) || 4;
+    S.settings.companionCharLeft = left;
+    S.settings.companionCharBottom = bottom;
+    await saveSetting('companionCharLeft', left);
+    await saveSetting('companionCharBottom', bottom);
+  };
+
+  char.addEventListener('mousedown', onDown);
+  char.addEventListener('touchstart', onDown, { passive:false });
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('touchmove', onMove, { passive:false });
+  document.addEventListener('mouseup', onUp);
+  document.addEventListener('touchend', onUp);
+}
+
+function applyCompanionMusicSettings() {
+  const a = $i('comp-audio'); if (!a) return;
+  a.loop = !!S.settings.companionMusicLoop;
+  a.volume = Math.max(0, Math.min(1, parseFloat(cs(S.settings.companionMusicVol, 0.6))));
+}
+
+async function applyCompanionMusicSrc() {
+  const a = $i('comp-audio'); if (!a) return;
+  if (S._companion.musicObjUrl) { try { URL.revokeObjectURL(S._companion.musicObjUrl); } catch(e) {} S._companion.musicObjUrl = null; }
+  const id = S.settings.companionMusicMediaId;
+  if (!id) { a.pause(); a.removeAttribute('src'); a.load(); return; }
+  const url = await loadMediaUrl(id); if (!url) return;
+  S._companion.musicObjUrl = url;
+  a.src = url; a.load();
+  if (S._companion.running) { try { await a.play(); } catch(e) {} }
+}
+
+function companionPickMedia(target) {
+  S._companion.uploadTarget = target;
+  const input = $i('companion-media-file'); if (!input) return;
+  input.accept = target === 'music' ? 'audio/*' : 'image/*,video/*';
+  input.value = ''; input.click();
+}
+
+async function handleCompanionMedia(input) {
+  const file = input?.files?.[0]; if (!file) return;
+  const target = S._companion.uploadTarget; if (!target) return;
+  const id = `comp_${target}_${uid()}`;
+  await saveMediaBlob(id, file, { name:file.name, mime:file.type, kind:target });
+  if (target === 'char') {
+    S.settings.companionCharType = 'upload'; S.settings.companionCharMediaId = id;
+    await saveSetting('companionCharType', 'upload'); await saveSetting('companionCharMediaId', id);
+  } else if (target === 'bg') {
+    S.settings.companionBgType = 'upload'; S.settings.companionBgMediaId = id;
+    await saveSetting('companionBgType', 'upload'); await saveSetting('companionBgMediaId', id);
+  } else if (target === 'music') {
+    S.settings.companionMusicMediaId = id; await saveSetting('companionMusicMediaId', id);
+  }
+  toast('✅ 已保存素材');
+  renderCompanionPage();
+  if (target === 'music') await applyCompanionMusicSrc();
+}
+
+function fmtSec(sec) {
+  sec = Math.max(0, Math.floor(sec || 0));
+  const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
+  if (h > 0) return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+}
+
+function updateCompanionTimerText() {
+  const el = $i('comp-timer'); if (!el) return;
+  const mode = S.settings.companionTimerMode || 'pomodoro';
+  const icon = '<span style="margin-right:5px;opacity:.7">⏰</span>';
+  if (mode === 'countup') {
+    el.innerHTML = icon + fmtSec(S._companion.elapsedSec);
+  } else {
+    const preview = mode === 'countdown'
+      ? (parseInt(S.settings.companionCountdownMin || 25, 10) || 25) * 60
+      : (parseInt(S._companion.phase === 'break' ? S.settings.companionPomoBreak : S.settings.companionPomoFocus, 10) || 25) * 60;
+    el.innerHTML = icon + fmtSec(S._companion.remainingSec || (S._companion.running ? 0 : preview));
+  }
+  const ph = $i('comp-phase'); if (!ph) return;
+  if (mode === 'pomodoro') {
+    ph.style.display = '';
+    ph.textContent = S._companion.phase === 'break' ? '☕ 休息中' : '🎯 专注中';
+  } else {
+    ph.style.display = 'none';
+  }
+}
+
+function updateCompanionStartBtn() {
+  const running = S._companion.running;
+  const b = $i('comp-btn-start'); if (b) b.textContent = running ? '⏸ 暂停' : '▶︎ 开始';
+  const b2 = $i('comp-imm-start'); if (b2) b2.textContent = running ? '⏸' : '▶︎';
+}
+
+function companionToggleRun() {
+  if (S._companion.running) companionPause(); else companionStart();
+  updateCompanionStartBtn();
+}
+
+function companionStart() {
+  const s = S.settings, mode = s.companionTimerMode || 'pomodoro';
+  S._companion.mode = mode; S._companion.running = true;
+  if (mode === 'countup') {
+    if (!S._companion.elapsedSec) S._companion.elapsedSec = 0;
+  } else if (mode === 'countdown') {
+    if (!S._companion.remainingSec) S._companion.remainingSec = (parseInt(s.companionCountdownMin || 25, 10) || 25) * 60;
+  } else {
+    if (!S._companion.phase) S._companion.phase = 'focus';
+    if (!S._companion.remainingSec) {
+      const mins = S._companion.phase === 'break' ? (s.companionPomoBreak || 5) : (s.companionPomoFocus || 25);
+      S._companion.remainingSec = (parseInt(mins, 10) || 1) * 60;
+    }
+  }
+  if (S._companion.tickTimer) clearInterval(S._companion.tickTimer);
+  S._companion.tickTimer = setInterval(() => {
+    const m = S.settings.companionTimerMode || 'pomodoro';
+    if (m === 'countup') {
+      S._companion.elapsedSec++;
+    } else {
+      S._companion.remainingSec = Math.max(0, (S._companion.remainingSec || 0) - 1);
+      if (S._companion.remainingSec <= 0) {
+        if (m === 'pomodoro') {
+          S._companion.phase = S._companion.phase === 'break' ? 'focus' : 'break';
+          const mins = S._companion.phase === 'break' ? (S.settings.companionPomoBreak || 5) : (S.settings.companionPomoFocus || 25);
+          S._companion.remainingSec = (parseInt(mins, 10) || 1) * 60;
+          companionShowBubble(S._companion.phase === 'break' ? '到点啦，起来休息一下～' : '休息结束，我们继续专注吧～');
+        } else {
+          companionPause(); companionShowBubble('时间到啦！辛苦了～');
+        }
+      }
+    }
+    updateCompanionTimerText();
+  }, 1000);
+  companionSetupSpeechTimer();
+  applyCompanionMusicSettings();
+  void applyCompanionMusicSrc();
+}
+
+function companionPause() {
+  S._companion.running = false;
+  if (S._companion.tickTimer) { clearInterval(S._companion.tickTimer); S._companion.tickTimer = null; }
+  if (S._companion.speechTimer) { clearInterval(S._companion.speechTimer); S._companion.speechTimer = null; }
+  const a = $i('comp-audio'); if (a) a.pause();
+  updateCompanionStartBtn();
+}
+
+function companionReset() {
+  companionPause();
+  S._companion.phase = 'focus'; S._companion.elapsedSec = 0; S._companion.remainingSec = 0;
+  updateCompanionTimerText(); companionHideBubble();
+}
+
+function companionSetupSpeechTimer() {
+  if (S._companion.speechTimer) { clearInterval(S._companion.speechTimer); S._companion.speechTimer = null; }
+  const freq = Math.max(0, parseInt(S.settings.companionFreqMin || 0, 10) || 0);
+  if (!freq) return;
+  S._companion.speechTimer = setInterval(() => {
+    if (S._companion.running) companionSpeakNow();
+  }, freq * 60 * 1000);
+}
+
+function companionShowBubble(text) {
+  const b = $i('comp-bubble'); if (!b) return;
+  b.textContent = text || ''; b.style.display = text ? '' : 'none';
+  if (S._companion.bubbleTimer) clearTimeout(S._companion.bubbleTimer);
+  if (text) S._companion.bubbleTimer = setTimeout(() => companionHideBubble(), 9000);
+}
+function companionHideBubble() {
+  const b = $i('comp-bubble'); if (!b) return;
+  b.style.display = 'none'; b.textContent = '';
+}
+
+async function companionSpeakNow() {
+  if (S._companion.isSpeaking) return;
+  S._companion.isSpeaking = true;
+  try {
+    const text = await callCompanionAI();
+    if (text) { companionShowBubble(text); if (S.settings.autoTts) speakText(text); }
+  } finally { S._companion.isSpeaking = false; }
+}
+
+async function callCompanionAI() {
+  const s = S.settings;
+  const contact = s.companionContactId ? S._contacts[s.companionContactId] : null;
+  const useKey = contact?.apiKey || s.apiKey;
+  const useUrl = contact?.apiUrl || s.apiUrl || 'https://openrouter.ai/api/v1/chat/completions';
+  if (!useKey) { toast('请先在设置里填写 API Key！'); return ''; }
+  const aiName = cs(contact?.name, s.aiName) || '小可';
+  const scene = (s.companionSceneCustom || '').trim() || s.companionScene || '陪伴';
+  const mode = s.companionTimerMode || 'pomodoro';
+  const status = mode === 'countup'
+    ? `已用时 ${fmtSec(S._companion.elapsedSec)}`
+    : mode === 'countdown'
+      ? `剩余 ${fmtSec(S._companion.remainingSec)}`
+      : `${S._companion.phase === 'break' ? '休息' : '专注'}剩余 ${fmtSec(S._companion.remainingSec)}`;
+  const sys = `你是${aiName}，${cs(contact?.system, s.systemPrompt) || '可爱温柔的AI助手'}。你正在以"陪伴模式"陪用户进行：${scene}。请用中文输出1-2句简短自然的话（不要列点、不超过40字/句），像真实朋友一样。`;
+  const userMsg = `当前状态：${status}。请给用户一句陪伴/鼓励/提醒。`;
+  try {
+    const res = await fetch(useUrl, {
+      method:'POST',
+      headers:{'Authorization':`Bearer ${useKey}`,'Content-Type':'application/json','HTTP-Referer':'https://raimos.app','X-Title':'Raimos'},
+      body:JSON.stringify({ model:contact?.model || s.model || 'openai/gpt-4o-mini', messages:[{role:'system',content:sys},{role:'user',content:userMsg}], temperature:contact?.temp ?? parseFloat(s.temp ?? 0.85), stream:false, max_tokens:120 }),
+    });
+    if (!res.ok) { const e = await res.json().catch(() => ({error:{message:'Error'}})); throw new Error(e.error?.message || res.statusText); }
+    const d = await res.json();
+    return (d.choices?.[0]?.message?.content || '').trim();
+  } catch(e) { toast(`❌ 陪伴说话失败：${e.message}`); return ''; }
+}
+
+// ── Fullscreen Immersive Mode ──
+function companionEnterImmersive() {
+  S._companion.immersive = true;
+  document.body.classList.add('comp-immersive');
+  updateCompanionStartBtn();
+}
+function companionExitImmersive() {
+  S._companion.immersive = false;
+  document.body.classList.remove('comp-immersive');
+  updateCompanionStartBtn();
 }

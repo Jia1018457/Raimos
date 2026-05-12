@@ -20,6 +20,7 @@
   <button class="nav-tab active" data-page="chat-page" onclick="switchPage('chat-page')" title="聊天">💬</button>
   <button class="nav-tab" data-page="contacts-page" onclick="switchPage('contacts-page')" title="AI联系人">👥</button>
   <button class="nav-tab" data-page="moments-page" onclick="switchPage('moments-page')" title="朋友圈">🌸</button>
+  <button class="nav-tab" data-page="companion-page" onclick="switchPage('companion-page')" title="陪伴">💗</button>
   <button class="nav-tab" data-page="memory-page" onclick="switchPage('memory-page')" title="记忆库">🧠</button>
   <button class="nav-tab" data-page="settings-page" onclick="switchPage('settings-page')" title="设置">⚙️</button>
   <div class="nav-spacer"></div>
@@ -136,6 +137,177 @@
     </div>
   </div>
   <div class="moments-feed" id="moments-feed"></div>
+</div>
+
+<!-- ── COMPANION PAGE ── -->
+<div class="page" id="companion-page">
+  <div class="page-header" id="comp-page-header">
+    <h2>💗 陪伴</h2>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+      <button class="btn-s" onclick="companionSpeakNow()">💬 说一句</button>
+      <button class="btn-p" id="comp-btn-start" onclick="companionToggleRun()">▶︎ 开始</button>
+      <button class="btn-s" onclick="companionReset()">↺ 重置</button>
+      <button class="btn-s" onclick="companionEnterImmersive()" title="全屏沉浸模式">⛶ 全屏</button>
+    </div>
+  </div>
+
+  <div id="comp-wrap">
+    <div id="comp-stage">
+      <div id="comp-bg"></div>
+      <div id="comp-char"></div>
+      <div id="comp-hud">
+        <div id="comp-timer">00:00</div>
+        <div id="comp-phase" style="display:none"></div>
+      </div>
+      <div id="comp-bubble" style="display:none"></div>
+      <!-- Immersive-mode floating controls (hidden in normal mode) -->
+      <div id="comp-imm-bar">
+        <button class="comp-imm-btn" onclick="companionExitImmersive()" title="退出全屏">✕ 退出</button>
+        <button class="comp-imm-btn" onclick="companionSpeakNow()">💬</button>
+        <button class="comp-imm-btn" id="comp-imm-start" onclick="companionToggleRun()">▶︎</button>
+        <button class="comp-imm-btn" onclick="companionReset()">↺</button>
+      </div>
+    </div>
+
+    <div id="comp-panel">
+      <div class="comp-sec">
+        <div class="comp-sec-title">场景</div>
+        <div class="comp-grid">
+          <div class="comp-row">
+            <label>类型</label>
+            <select id="comp-scene">
+              <option value="学习">学习</option>
+              <option value="吃饭">吃饭</option>
+              <option value="过生日">过生日</option>
+              <option value="运动">运动</option>
+              <option value="自由">自由</option>
+            </select>
+          </div>
+          <div class="comp-row">
+            <label>自定义</label>
+            <input id="comp-scene-custom" placeholder="例如：陪伴写论文/背单词…" />
+          </div>
+          <div class="comp-row">
+            <label>AI 助手</label>
+            <select id="comp-contact"></select>
+          </div>
+          <div class="comp-row">
+            <label>对话频率</label>
+            <input id="comp-freq" type="number" min="0" step="1" placeholder="分钟/次（0=不说话）" />
+          </div>
+        </div>
+      </div>
+
+      <div class="comp-sec">
+        <div class="comp-sec-title">人物</div>
+        <div class="comp-grid">
+          <div class="comp-row">
+            <label>来源</label>
+            <select id="comp-char-type">
+              <option value="builtin">内置</option>
+              <option value="upload">本地上传</option>
+            </select>
+          </div>
+          <div class="comp-row" id="comp-char-builtin-row">
+            <label>选择</label>
+            <select id="comp-char-builtin">
+              <option value="😊">😊</option>
+              <option value="🐱">🐱</option>
+              <option value="🐻">🐻</option>
+              <option value="🐰">🐰</option>
+              <option value="🐼">🐼</option>
+              <option value="🦊">🦊</option>
+              <option value="🤖">🤖</option>
+              <option value="🧸">🧸</option>
+            </select>
+          </div>
+          <div class="comp-row" id="comp-char-upload-row" style="display:none">
+            <label>上传</label>
+            <button class="btn-s" onclick="companionPickMedia('char')">上传图片/视频</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="comp-sec">
+        <div class="comp-sec-title">背景</div>
+        <div class="comp-grid">
+          <div class="comp-row">
+            <label>来源</label>
+            <select id="comp-bg-type">
+              <option value="builtin">内置</option>
+              <option value="upload">本地上传</option>
+            </select>
+          </div>
+          <div class="comp-row" id="comp-bg-builtin-row">
+            <label>选择</label>
+            <select id="comp-bg-builtin">
+              <option value="bg1">奶油粉</option>
+              <option value="bg2">晴空蓝</option>
+              <option value="bg3">薄荷绿</option>
+              <option value="bg4">夜色紫</option>
+              <option value="bg5">温暖橘</option>
+            </select>
+          </div>
+          <div class="comp-row" id="comp-bg-upload-row" style="display:none">
+            <label>上传</label>
+            <button class="btn-s" onclick="companionPickMedia('bg')">上传图片/视频</button>
+          </div>
+          <div class="comp-row">
+            <label>适配模式</label>
+            <select id="comp-bg-fit">
+              <option value="cover">铺满（裁切）</option>
+              <option value="contain">完整显示</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="comp-sec">
+        <div class="comp-sec-title">音乐</div>
+        <div class="comp-grid">
+          <div class="comp-row">
+            <label>音频</label>
+            <button class="btn-s" onclick="companionPickMedia('music')">上传音频</button>
+          </div>
+          <div class="comp-row">
+            <label>循环</label>
+            <input id="comp-music-loop" type="checkbox" checked />
+          </div>
+          <div class="comp-row">
+            <label>音量</label>
+            <input id="comp-music-vol" type="range" min="0" max="1" step="0.01" value="0.6" />
+          </div>
+        </div>
+      </div>
+
+      <div class="comp-sec">
+        <div class="comp-sec-title">计时</div>
+        <div class="comp-grid">
+          <div class="comp-row">
+            <label>模式</label>
+            <select id="comp-timer-mode">
+              <option value="countup">正计时</option>
+              <option value="countdown">倒计时</option>
+              <option value="pomodoro">番茄时钟</option>
+            </select>
+          </div>
+          <div class="comp-row" id="comp-countdown-row" style="display:none">
+            <label>时长(分钟)</label>
+            <input id="comp-countdown-min" type="number" min="1" step="1" value="25" />
+          </div>
+          <div class="comp-row" id="comp-pomo-row" style="display:none">
+            <label>专注/休息</label>
+            <div style="display:flex;gap:6px;align-items:center;flex:1;">
+              <input id="comp-pomo-focus" type="number" min="1" step="1" value="25" style="width:70px" />
+              <span style="color:var(--text3);font-size:12px;">/</span>
+              <input id="comp-pomo-break" type="number" min="1" step="1" value="5" style="width:70px" />
+              <span style="color:var(--text3);font-size:12px;">分钟</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- ── MEMORY PAGE ── -->
@@ -644,6 +816,7 @@
 
 <input type="file" id="file-upload" accept="image/*,application/pdf,.txt,.md,.doc,.docx" multiple style="display:none" onchange="handleFiles(this)"/>
 <input type="file" id="compose-pic-file" accept="image/*" multiple style="display:none" onchange="handleComposePic(this)"/>
+<input type="file" id="companion-media-file" accept="image/*,video/*,audio/*" style="display:none" onchange="handleCompanionMedia(this)"/>
 
 <!-- ★ Firebase SDK -->
 <script type="module">

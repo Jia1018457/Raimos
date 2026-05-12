@@ -1678,7 +1678,8 @@ function _selHandlePos(b){
 function nearResizeHandle(px,py,scale){
   if(!selHasSel)return null;
   const b=getBounds();if(!b)return null;
-  const threshold=8/scale; // 8 canvas-pixels → cell units
+  // Hit area = ~16 display pixels; convert to canvas pixels
+  const threshold=Math.max(CELL*2, 16*scale);
   const handles=_selHandlePos(b);
   for(const h of handles){
     if(Math.abs(px-h.cx)<threshold&&Math.abs(py-h.cy)<threshold)return h.name;
@@ -1719,17 +1720,18 @@ function dSel(){
 function _drawSelHandles(ctx){
   const b=getBounds();if(!b)return;
   const handles=_selHandlePos(b);
+  const r=CELL*0.85; // visual radius ≈ 7 canvas px
   handles.forEach(({cx,cy})=>{
-    ctx.fillStyle='white';ctx.strokeStyle='#F48FB1';ctx.lineWidth=1.5;
-    ctx.beginPath();ctx.arc(cx,cy,4,0,Math.PI*2);ctx.fill();ctx.stroke();
+    ctx.shadowColor='rgba(0,0,0,.3)';ctx.shadowBlur=4;
+    ctx.fillStyle='white';ctx.strokeStyle='#E91E63';ctx.lineWidth=2;
+    ctx.beginPath();ctx.arc(cx,cy,r,0,Math.PI*2);ctx.fill();ctx.stroke();
+    ctx.shadowBlur=0;
   });
 }
 function _applyResizeHandle(col,row){
-  // Adjust selStart/selEnd based on which handle is being dragged
   const ob=resizeOrigSel.b;
   const h=resizeHandle;
   let c0=ob.c0,r0=ob.r0,c1=ob.c1,r1=ob.r1;
-  // Constrain to canvas
   const cCol=Math.max(0,Math.min(COLS-1,col));
   const cRow=Math.max(0,Math.min(ROWS-1,row));
   if(h==='nw'||h==='n'||h==='ne'){r0=Math.min(cRow,r1-1);}
@@ -1738,6 +1740,30 @@ function _applyResizeHandle(col,row){
   if(h==='ne'||h==='e'||h==='se'){c1=Math.max(cCol,c0+1);}
   selStart={px:c0*CELL,py:r0*CELL};
   selEnd={px:(c1+1)*CELL,py:(r1+1)*CELL};
+  // Live pixel preview on sc2 (semi-transparent scaled content)
+  _drawResizePreview(ob,{c0,r0,c1,r1});
+}
+function _drawResizePreview(ob,nb){
+  const sc2el=document.getElementById('sc2');
+  const ctx=sc2el.getContext('2d');ctx.clearRect(0,0,sc2el.width,sc2el.height);
+  // Draw scaled preview pixels (half-opacity)
+  const{data}=getSelPixels();
+  const selPix=data.filter(d=>d.inSel&&d.v);
+  const ow=ob.c1-ob.c0+1,oh=ob.r1-ob.r0+1;
+  const nw=nb.c1-nb.c0+1,nh=nb.r1-nb.r0+1;
+  ctx.globalAlpha=0.55;
+  for(let y=0;y<nh;y++)for(let x=0;x<nw;x++){
+    const oc=ob.c0+Math.round(x/nw*(ow-1));
+    const or=ob.r0+Math.round(y/nh*(oh-1));
+    const found=selPix.find(v=>v.c===oc&&v.r===or);
+    if(found&&found.v){ctx.fillStyle=found.v;ctx.fillRect((nb.c0+x)*CELL,(nb.r0+y)*CELL,CELL,CELL);}
+  }
+  ctx.globalAlpha=1;
+  // Draw selection rect + handles
+  const x=nb.c0*CELL,y=nb.r0*CELL,w=(nw)*CELL,h2=(nh)*CELL;
+  ctx.strokeStyle='#F48FB1';ctx.lineWidth=1.5;ctx.setLineDash([4,3]);
+  ctx.strokeRect(x,y,w,h2);ctx.setLineDash([]);
+  _drawSelHandles(ctx);
 }
 function _commitResize(){
   // Scale the pixel content from original bounds to new bounds
@@ -1855,20 +1881,19 @@ function selCopy(){
   const{b,data}=getSelPixels();if(!b)return;
   const selPix=data.filter(d=>d.inSel&&d.v);
   if(!selPix.length)return;
-  // Place copy with fixed 3-cell diagonal offset; use pushU so it's undoable
   const off=3;
   pushU();
   selPix.forEach(({c,r,v})=>{
     const nc=c+off,nr=r+off;
     if(nc>=0&&nc<COLS&&nr>=0&&nr<ROWS)pix[gi(nc,nr)]=v;
   });
-  // 复制出来的内容成为新的选区（可继续拖动/缩放/再复制）
-  lassoPix=null;lassoClosedPath=[]; // 降级为矩形选区，保证可移动
+  // 切换到矩形选区工具，确保复制内容立即可拖动/缩放
+  setTool('sel');
+  lassoPix=null;lassoClosedPath=[];
   selStart={px:(b.c0+off)*CELL,py:(b.r0+off)*CELL};
   selEnd={px:(b.c1+1+off)*CELL,py:(b.r1+1+off)*CELL};
   selHasSel=true;
   selContent=getSelPixels();
-  // Build background so user can immediately drag the copy
   selBackground=[...pix];
   selContent.data.forEach(({c,r,inSel,v})=>{if(inSel&&v)selBackground[gi(c,r)]='';});
   dCvs();dSel();

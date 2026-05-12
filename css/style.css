@@ -316,7 +316,7 @@ body{font-family:'Nunito','Noto Sans SC',sans-serif;background:var(--bg);color:v
 #comp-bg img,#comp-bg video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;}
 #comp-bg.fit-contain img,#comp-bg.fit-contain video{object-fit:contain;}
 #comp-char{
-  position:absolute;left:3%;bottom:4%;width:40%;max-width:320px;min-width:120px;
+  position:absolute;left:3%;bottom:4%;width:40%;max-width:none;min-width:80px;
   aspect-ratio:1/1;display:flex;align-items:flex-end;justify-content:flex-start;
   cursor:grab;touch-action:none;user-select:none;z-index:2;
 }

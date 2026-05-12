@@ -2513,10 +2513,11 @@ function syncCompanionUIFromSettings() {
   $i('comp-char-upload-row') && ($i('comp-char-upload-row').style.display = charIsUpload ? '' : 'none');
   // Size slider
   const szSlider = $i('comp-char-size');
-  const szVal = Math.max(20, Math.min(100, parseInt(s.companionCharSize ?? 40, 10) || 40));
+  const szVal = Math.max(10, Math.min(200, parseInt(s.companionCharSize ?? 40, 10) || 40));
   if (szSlider) szSlider.value = String(szVal);
   const szLabel = $i('comp-char-size-val'); if (szLabel) szLabel.textContent = szVal + '%';
-  const char = $i('comp-char'); if (char) char.style.width = szVal + '%';
+  const char = $i('comp-char');
+  if (char) { char.style.width = szVal + '%'; char.style.maxWidth = 'none'; }
   setV('comp-bg-type', s.companionBgType || 'builtin');
   setV('comp-bg-builtin', s.companionBgBuiltin || 'bg1');
   const bgIsUpload = (s.companionBgType || 'builtin') === 'upload';
@@ -2850,8 +2851,9 @@ async function callCompanionAI() {
 // ── Character Size ──
 function companionApplyCharSize(val) {
   const char = $i('comp-char'); if (!char) return;
-  const pct = Math.max(20, Math.min(100, +val));
+  const pct = Math.max(10, Math.min(200, +val));
   char.style.width = pct + '%';
+  char.style.maxWidth = 'none'; // override CSS cap so enlarging works
   const lv = $i('comp-char-size-val'); if (lv) lv.textContent = pct + '%';
   S.settings.companionCharSize = pct;
   saveSetting('companionCharSize', pct);

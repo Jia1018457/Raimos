@@ -187,6 +187,17 @@ body{font-family:'PingFang SC','Hiragino Sans',sans-serif;background:#FFF5F9;col
 #img-preview-wrap img{max-width:100%;max-height:100%;object-fit:contain;}
 .img-tip{font-size:11px;color:#9B7B9B;background:#FFF8E1;border-radius:7px;padding:6px 9px;margin-bottom:10px;}
 @media(max-width:480px){.wg{grid-template-columns:repeat(auto-fill,minmax(70px,1fr));}.tb2{width:27px;height:27px;font-size:12px;}}
+/* interactive dress figure */
+#sv-u,#sv-ai{display:block;touch-action:none;cursor:default;}
+.li.sel-hi{border-color:#F48FB1 !important;background:#FFF0F5 !important;}
+.li.sel-hi .ln{color:#F48FB1;}
+.fig-int-hint{font-size:10px;color:#B9A0B9;text-align:center;margin-top:3px;}
+/* dual-image display */
+.dual-img-wrap{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin:8px 0;}
+.dual-img-slot{border:1.5px dashed #F0D0E0;border-radius:9px;overflow:hidden;background:#FAF5FC;min-height:80px;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;transition:border-color .15s;}
+.dual-img-slot:hover{border-color:#F48FB1;}
+.dual-img-slot img{width:100%;height:80px;object-fit:contain;}
+.dual-img-label{font-size:10px;color:#9B7B9B;padding:4px 6px;text-align:center;line-height:1.4;}
 </style>
 </head>
 <body>
@@ -205,8 +216,8 @@ body{font-family:'PingFang SC','Hiragino Sans',sans-serif;background:#FFF5F9;col
     <div id="figs">
       <div class="fc">
         <div class="fl">我的形象</div>
-        <div class="fb ub" onclick="sw('avatar')"><svg id="sv-u" viewBox="0 0 100 250" width="90" height="225"></svg></div>
-        <div class="ft">点击换形象</div>
+        <div class="fb ub" id="sv-u-wrap" onclick="if(event.target===this||event.target.tagName==='DIV')sw('avatar')"><svg id="sv-u" viewBox="0 0 100 250" width="100" height="250"></svg></div>
+        <div class="ft fig-int-hint">点人物换形象 · 点衣服选中拖拽</div>
       </div>
       <div id="d-ai-col" class="fc"></div>
     </div>
@@ -478,6 +489,24 @@ body{font-family:'PingFang SC','Hiragino Sans',sans-serif;background:#FFF5F9;col
       </select>
     </div>
     <div class="fr"><label class="flb">标签（逗号分隔）</label><input class="fi" id="em-t" placeholder="例：蓝色, lolita"></div>
+    <div class="fr">
+      <label class="flb">更换图片</label>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+        <label style="cursor:pointer">
+          <div class="dual-img-slot" style="height:56px">
+            <span style="font-size:10px;color:#9B7B9B;padding:4px">🔄 换实穿图</span>
+          </div>
+          <input type="file" accept="image/*" id="em-wear-inp" style="display:none" onchange="onEMWearChange(this)">
+        </label>
+        <label style="cursor:pointer">
+          <div class="dual-img-slot" style="height:56px">
+            <span style="font-size:10px;color:#9B7B9B;padding:4px">🖼️ 换展示图</span>
+          </div>
+          <input type="file" accept="image/*" id="em-disp-inp" style="display:none" onchange="onEMDispChange(this)">
+        </label>
+      </div>
+      <div id="em-img-status" style="font-size:10px;color:#F48FB1;margin-top:4px;min-height:14px"></div>
+    </div>
     <div style="display:flex;gap:8px;margin-top:4px">
       <button class="bs" onclick="closeEditModal()" style="flex:1">取消</button>
       <button class="bp" onclick="saveEdit()" style="flex:1">保存</button>
@@ -538,12 +567,24 @@ body{font-family:'PingFang SC','Hiragino Sans',sans-serif;background:#FFF5F9;col
 <div id="iim">
   <div id="iimc">
     <h2>🖼️ 导入图片到衣柜</h2>
-    <div class="img-tip">💡 推荐使用透明背景PNG，建议正方形。导入后图片将以原比例保存，在换装时与人物等比缩放显示。</div>
-    <div id="img-preview-wrap"><span style="color:#9B7B9B;font-size:12px">预览</span></div>
-    <div class="fr">
-      <label class="flb">参考形象（用于调位置/大小）</label>
-      <select class="fi" id="iim-av" onchange="updateIIMPreview()"></select>
-      <div id="iim-ref" style="display:flex;justify-content:center;align-items:center;background:#FAFAFA;border:1.5px solid #F0D0E0;border-radius:12px;padding:8px;margin-top:8px;min-height:160px"></div>
+    <div class="img-tip">💡 两张图片各有用途：实穿图用于换装叠加（推荐透明背景PNG），展示图用于衣柜缩略图（可以是普通照片）。导入后在换装界面直接拖拽即可调整位置大小。</div>
+    <div class="dual-img-wrap">
+      <div>
+        <div style="font-size:11px;font-weight:600;margin-bottom:4px">实穿叠加图 <span style="color:#E57373">*必选</span></div>
+        <div class="dual-img-slot" id="iim-wear-slot" onclick="document.getElementById('iim-wear-inp').click()">
+          <div id="iim-wear-preview" style="width:100%;height:80px;display:flex;align-items:center;justify-content:center"><span style="font-size:10px;color:#9B7B9B">点击上传</span></div>
+        </div>
+        <div class="dual-img-label">穿在人物上的图层<br>（透明背景更自然）</div>
+        <input type="file" accept="image/*" id="iim-wear-inp" style="display:none" onchange="onIIMWearChange(this)">
+      </div>
+      <div>
+        <div style="font-size:11px;font-weight:600;margin-bottom:4px">衣柜展示图 <span style="color:#9B7B9B">可选</span></div>
+        <div class="dual-img-slot" id="iim-disp-slot" onclick="document.getElementById('iim-disp-inp').click()">
+          <div id="iim-disp-preview" style="width:100%;height:80px;display:flex;align-items:center;justify-content:center"><span style="font-size:10px;color:#9B7B9B">点击上传</span></div>
+        </div>
+        <div class="dual-img-label">衣柜里的缩略图<br>（不填则同左图）</div>
+        <input type="file" accept="image/*" id="iim-disp-inp" style="display:none" onchange="onIIMDispChange(this)">
+      </div>
     </div>
     <div class="fr"><label class="flb">衣物名称</label><input class="fi" id="iim-n" placeholder="例：AI生成蓝色礼服"></div>
     <div class="fr">
@@ -556,15 +597,6 @@ body{font-family:'PingFang SC','Hiragino Sans',sans-serif;background:#FFF5F9;col
       </select>
     </div>
     <div class="fr"><label class="flb">标签</label><input class="fi" id="iim-t" placeholder="ai生成, 蓝色 等"></div>
-    <div class="fr">
-      <label class="flb">穿上时的默认位置/大小（可选，之后也能再调并记忆）</label>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
-        <input class="fi" id="iim-x" type="number" step="1" placeholder="X偏移(建议 -40~40)" oninput="updateIIMPreview()">
-        <input class="fi" id="iim-y" type="number" step="1" placeholder="Y偏移(建议 -120~120)" oninput="updateIIMPreview()">
-      </div>
-      <input class="fi" id="iim-s" type="number" step="0.1" placeholder="缩放(建议 0.5~2.0)" oninput="updateIIMPreview()">
-      <div style="font-size:10px;color:#9B7B9B;margin-top:4px">偏移单位为人物SVG坐标（大概等同像素感），缩放=1 为默认。</div>
-    </div>
     <div style="display:flex;gap:8px">
       <button class="bs" onclick="closeImageImport()" style="flex:1">取消</button>
       <button class="bp" onclick="saveImageImport()" style="flex:1">✅ 导入衣柜</button>
@@ -620,6 +652,133 @@ function lyrSVG(ls,w,h,avId){
   }).join('');
 }
 
+// lyrSVGDress: same as lyrSVG but adds selection handles for interactive dress editing
+function lyrSVGDress(ls,w,h,avId){
+  return ls.map(l=>{
+    const tf=resolveTF(avId,l.id);
+    const sw=w*tf.s*tf.sx, sh=h*tf.s*tf.sy;
+    let body,bx,by,bw,bh;
+    if(l.dataUrl){
+      body=`<image href="${l.dataUrl}" x="${tf.x}" y="${tf.y}" width="${sw}" height="${sh}" style="image-rendering:pixelated" preserveAspectRatio="none"/>`;
+      bx=tf.x;by=tf.y;bw=sw;bh=sh;
+    }else{
+      bx=8+tf.x;by=55+tf.y;bw=84*tf.s*tf.sx;bh=145*tf.s*tf.sy;
+      body=`<rect x="${bx}" y="${by}" width="${bw}" height="${bh}" rx="10" fill="${l.color}" opacity=".55"/>`;
+    }
+    const sel=(l.id===selLayerId);
+    let handles='';
+    if(sel){
+      handles+=`<rect x="${bx-1}" y="${by-1}" width="${bw+2}" height="${bh+2}" fill="none" stroke="#F48FB1" stroke-width="1.5" stroke-dasharray="4,2.5" pointer-events="none"/>`;
+      const r=4.5;
+      [[bx,by,'c-tl'],[bx+bw,by,'c-tr'],[bx,by+bh,'c-bl'],[bx+bw,by+bh,'c-br']].forEach(([cx,cy,m])=>{
+        handles+=`<circle cx="${cx}" cy="${cy}" r="${r}" fill="white" stroke="#F48FB1" stroke-width="1.5" data-mode="${m}" data-lid="${l.id}" style="cursor:nwse-resize;pointer-events:all"/>`;
+      });
+      [[bx+bw/2,by,'e-t'],[bx+bw/2,by+bh,'e-b'],[bx,by+bh/2,'e-l'],[bx+bw,by+bh/2,'e-r']].forEach(([cx,cy,m])=>{
+        const isLR=m==='e-l'||m==='e-r';
+        handles+=`<rect x="${cx-3.5}" y="${cy-3.5}" width="7" height="7" rx="1.5" fill="white" stroke="#F48FB1" stroke-width="1.5" data-mode="${m}" data-lid="${l.id}" style="cursor:${isLR?'ew':'ns'}-resize;pointer-events:all"/>`;
+      });
+    }
+    const cur=sel?'move':'pointer';
+    const hit=`<rect x="${bx}" y="${by}" width="${Math.max(bw,1)}" height="${Math.max(bh,1)}" fill="transparent" data-lid="${l.id}" style="cursor:${cur};pointer-events:all"/>`;
+    return`<g>${body}${handles}${hit}</g>`;
+  }).join('');
+}
+
+// ─── Figure Interaction (drag/resize clothing directly on figure) ───
+const figInteract={dragging:false,svgId:null,hVal:250,tgt:'user',mode:null,itemId:null,startSVG:null,startTF:null,startSW:0,startSH:0};
+let figDocInit=false;
+
+function ensureFigDocListeners(){
+  if(figDocInit)return;figDocInit=true;
+  document.addEventListener('mousemove',onFigMove);
+  document.addEventListener('touchmove',e=>{if(figInteract.dragging){onFigMove(e);e.preventDefault();}},{passive:false});
+  document.addEventListener('mouseup',onFigUp);
+  document.addEventListener('touchend',onFigUp);
+}
+
+function figTGTAvId(tgt){return tgt==='user'?curUA:tgt.replace('ai_','');}
+
+function onFigDown(e,svgId,hVal,tgt){
+  const target=e.target;
+  const mode=target.getAttribute('data-mode');
+  const lid=parseInt(target.getAttribute('data-lid')||'0');
+  if(!lid){
+    if(selLayerId!==null){selLayerId=null;rFigs();rLL();}
+    return;
+  }
+  e.stopPropagation();e.preventDefault();
+  const avId=figTGTAvId(tgt);
+  const tf=resolveTF(avId,lid);
+  if(selLayerId!==lid){selLayerId=lid;rFigs();rLL();}
+  figInteract.dragging=true;figInteract.svgId=svgId;figInteract.hVal=hVal;figInteract.tgt=tgt;
+  figInteract.mode=mode||'move';figInteract.itemId=lid;
+  const svg=document.getElementById(svgId);
+  const t=e.touches?e.touches[0]:e;
+  const pt=svg.createSVGPoint();pt.x=t.clientX;pt.y=t.clientY;
+  const sp=pt.matrixTransform(svg.getScreenCTM().inverse());
+  figInteract.startSVG={x:sp.x,y:sp.y};
+  figInteract.startTF={...tf};
+  figInteract.startSW=100*tf.s*tf.sx;
+  figInteract.startSH=hVal*tf.s*tf.sy;
+}
+
+function onFigMove(e){
+  if(!figInteract.dragging)return;
+  const svg=document.getElementById(figInteract.svgId);if(!svg)return;
+  const t=e.touches?e.touches[0]:e;
+  const pt=svg.createSVGPoint();pt.x=t.clientX;pt.y=t.clientY;
+  const sp=pt.matrixTransform(svg.getScreenCTM().inverse());
+  const dx=sp.x-figInteract.startSVG.x, dy=sp.y-figInteract.startSVG.y;
+  const avId=figTGTAvId(figInteract.tgt);
+  const st=figInteract.startTF, sw0=figInteract.startSW, sh0=figInteract.startSH, hv=figInteract.hVal;
+  let tf={...st};
+  const mode=figInteract.mode;
+  if(mode==='move'){
+    tf.x=st.x+dx;tf.y=st.y+dy;
+  }else if(mode.startsWith('c-')){
+    const isL=mode==='c-tl'||mode==='c-bl', isT=mode==='c-tl'||mode==='c-tr';
+    const dw=isL?-dx:dx, dh=isT?-dy:dy;
+    const newSW=Math.max(8,sw0+dw), newSH=Math.max(8,sh0+dh);
+    const sf=((newSW/sw0)+(newSH/sh0))/2;
+    tf.s=Math.max(0.04,st.s*sf);
+    const aSW=100*tf.s*st.sx, aSH=hv*tf.s*st.sy;
+    if(isT)tf.y=st.y+(sh0-aSH);
+    if(isL)tf.x=st.x+(sw0-aSW);
+  }else if(mode==='e-l'||mode==='e-r'){
+    const dw=mode==='e-l'?-dx:dx;
+    const newSW=Math.max(8,sw0+dw);
+    tf.sx=Math.max(0.04,newSW/(100*st.s));
+    if(mode==='e-l')tf.x=st.x+(sw0-newSW);
+  }else if(mode==='e-t'||mode==='e-b'){
+    const dh=mode==='e-t'?-dy:dy;
+    const newSH=Math.max(8,sh0+dh);
+    tf.sy=Math.max(0.04,newSH/(hv*st.s));
+    if(mode==='e-t')tf.y=st.y+(sh0-newSH);
+  }
+  layerTF[tfKey(avId,figInteract.itemId)]=tf;
+  rFigs();
+}
+
+function onFigUp(){
+  if(!figInteract.dragging)return;
+  figInteract.dragging=false;
+  const avId=figTGTAvId(figInteract.tgt);
+  const tf=layerTF[tfKey(avId,figInteract.itemId)];
+  if(tf)saveTF(avId,figInteract.itemId,tf);
+  rLL();
+}
+
+function initFigInteract(svgId,hVal,tgt){
+  const svg=document.getElementById(svgId);if(!svg)return;
+  ensureFigDocListeners();
+  if(svg._figDown)svg.removeEventListener('mousedown',svg._figDown);
+  if(svg._figTS)svg.removeEventListener('touchstart',svg._figTS);
+  svg._figDown=e=>onFigDown(e,svgId,hVal,tgt);
+  svg._figTS=e=>onFigDown(e,svgId,hVal,tgt);
+  svg.addEventListener('mousedown',svg._figDown);
+  svg.addEventListener('touchstart',svg._figTS,{passive:false});
+}
+
 function avC(av){
   if(av.type==='svg')return av.svgData||svgFnForGender(av.gender||'f');
   return`<image href="${av.dataUrl}" x="0" y="0" width="100" height="${av.h||250}"/>`;
@@ -662,20 +821,30 @@ let aiConfigId=null;
 let importImageData=null;
 // transform modal
 let tmItemId=null;
+// interactive dress figure
+let selLayerId=null;
+// image import
+let importDisplayData=null; // optional display/closet thumbnail image
+// edit modal pending image changes
+let emPendingWear=null,emPendingDisp=null;
 
 // ═══════════════════════════════════════
 // RENDER FIGURES
 // ═══════════════════════════════════════
 function rFigs(){
   const ua=uAvatars.find(a=>a.id===curUA)||uAvatars[0];
-  const uc=avC(ua)+lyrSVG(uLayers,100,250,curUA);
+  const uc=avC(ua)+lyrSVGDress(uLayers,100,250,curUA);
   const svu=document.getElementById('sv-u');
-  if(svu)svu.innerHTML=uc;
+  if(svu){svu.innerHTML=uc;initFigInteract('sv-u',250,'user');}
   const daAv=aiAvatars.find(a=>a.id===curDA)||aiAvatars[0];
   const daL=aiMap[curDA]||[];
-  const daC=avC(daAv)+lyrSVG(daL,100,290,curDA);
+  const daC=avC(daAv)+lyrSVGDress(daL,100,290,curDA);
   const dc=document.getElementById('d-ai-col');
-  if(dc)dc.innerHTML=`<div class="fl">${daAv.name}</div><div class="fb ab" onclick="sw('avatar')"><svg viewBox="0 0 100 290" width="78" height="218">${daC}</svg></div><div class="ft">点击换形象</div>`;
+  if(dc){
+    dc.innerHTML=`<div class="fl">${daAv.name}</div><div class="fb ab" id="sv-ai-wrap" onclick="if(event.target===this||event.target.tagName==='DIV')sw('avatar')"><svg id="sv-ai" viewBox="0 0 100 290" width="87" height="252"></svg></div><div class="ft fig-int-hint">点衣服选中拖拽</div>`;
+    const svAI=document.getElementById('sv-ai');
+    if(svAI){svAI.innerHTML=daC;initFigInteract('sv-ai',290,'ai_'+curDA);}
+  }
   rPhotoFigs();
 }
 
@@ -827,21 +996,26 @@ function rLL(){
   if(!ls.length){el.innerHTML='<div class="eh">从下方点击衣物添加～</div>';rFigs();return;}
   el.innerHTML=[...ls].reverse().map((item,ri)=>{const i=ls.length-1-ri;
     const tf=resolveTF(curAvId(),item.id);
-    return`<div class="li" draggable="true" ondragstart="dFrom=${i}" ondragover="event.preventDefault();dOver(${i})" ondragend="dFrom=null">
+    const isSel=item.id===selLayerId;
+    return`<div class="li${isSel?' sel-hi':''}" draggable="true" ondragstart="dFrom=${i}" ondragover="event.preventDefault();dOver(${i})" ondragend="dFrom=null" onclick="selLyr(${item.id})" style="cursor:pointer">
       <span class="dh">⋮⋮</span>
       <div class="ld" style="background:${item.color||'#E8A0BF'}"></div>
       <span class="ln">${item.name}</span>
       <span class="lc">${item.category}</span>
       <div class="lnudge">
-        <button class="lnb" onclick="nudgeLyr(${item.id},-5)" title="上移">▲</button>
-        <button class="lnb" onclick="nudgeLyr(${item.id},5)" title="下移">▼</button>
+        <button class="lnb" onclick="nudgeLyr(${item.id},-5);event.stopPropagation()" title="上移">▲</button>
+        <button class="lnb" onclick="nudgeLyr(${item.id},5);event.stopPropagation()" title="下移">▼</button>
       </div>
       <span class="lnv" title="偏移/缩放">y:${tf.y} s:${tf.s.toFixed(1)}</span>
       <button class="lnb" onclick="openTM(${item.id});event.stopPropagation()" title="调整位置/大小">⚙</button>
-      <button class="lx" onclick="rmLayer(${item.id})">×</button>
+      <button class="lx" onclick="rmLayer(${item.id});event.stopPropagation()">×</button>
     </div>`;
   }).join('');
   rFigs();
+}
+function selLyr(id){
+  selLayerId=(selLayerId===id?null:id);
+  rLL();
 }
 function nudgeLyr(id,delta){
   const av=curAvId();
@@ -891,7 +1065,9 @@ function rWQ(){
     const w=!!ls.find(l=>l.id===item.id);
     const si=JSON.stringify({id:item.id,name:item.name,category:item.category,tags:item.tags,color:item.color,dataUrl:item.dataUrl||null}).replace(/"/g,'&quot;');
     const tg=(item.tags||[]).slice(0,3).map(t=>'#'+t).join(' ');
-    return`<div class="ic${w?' w':''}" onclick='addLayer(${si})'><div class="ith" style="background:${item.color}22">${item.dataUrl?`<img src="${item.dataUrl}">`:` <div style="width:30px;height:30px;border-radius:6px;background:${item.color};opacity:.8"></div>`}</div><div class="ii"><div class="in${w?' w':''}">${item.name}</div><div class="icat">${item.category}${tg?` · <span style="font-size:8px">${tg}</span>`:''}</div></div>${w?'<div class="iwb">✓ 已穿</div>':''}</div>`;
+    const thumb=item.displayUrl||item.dataUrl;
+    const imgRender=item.displayUrl?'auto':'pixelated';
+    return`<div class="ic${w?' w':''}" onclick='addLayer(${si})'><div class="ith" style="background:${item.color}22">${thumb?`<img src="${thumb}" style="image-rendering:${imgRender}">`:` <div style="width:30px;height:30px;border-radius:6px;background:${item.color};opacity:.8"></div>`}</div><div class="ii"><div class="in${w?' w':''}">${item.name}</div><div class="icat">${item.category}${tg?` · <span style="font-size:8px">${tg}</span>`:''}</div></div>${w?'<div class="iwb">✓ 已穿</div>':''}</div>`;
   }).join('');
 }
 
@@ -908,10 +1084,10 @@ function rCloset(){
   let items=wardrobe.filter(i=>catMatch(i.category,fcloset,fclosetSub));
   if(closetSeasonFilter!=='全部')items=items.filter(i=>(i.tags||[]).some(t=>t===closetSeasonFilter||t.includes(closetSeasonFilter)));
   if(closetGenderFilter!=='全部')items=items.filter(i=>(i.tags||[]).some(t=>t===closetGenderFilter));
-  document.getElementById('cg').innerHTML=items.map(item=>`
+  document.getElementById('cg').innerHTML=items.map(item=>{const thumb=item.displayUrl||item.dataUrl;return`
     <div class="cc">
       <div class="cth" style="background:${item.color}22">
-        ${item.dataUrl?`<img src="${item.dataUrl}" style="width:100%;height:100%;object-fit:contain;image-rendering:pixelated">`:
+        ${thumb?`<img src="${thumb}" style="width:100%;height:100%;object-fit:contain;image-rendering:${item.displayUrl?'auto':'pixelated'}">`:
         `<div style="width:42px;height:42px;border-radius:7px;background:${item.color}"></div>`}
       </div>
       <div class="cb2">
@@ -923,28 +1099,52 @@ function rCloset(){
         <button onclick="openEditModal(${item.id})">✏️ 编辑</button>
         <button onclick="deleteItem(${item.id})" style="color:#E57373">🗑️ 删除</button>
       </div>
-    </div>`).join('');
+    </div>`}).join('');
 }
 
 // ── CLOSET EDIT / DELETE ──
 function openEditModal(id){
   const item=wardrobe.find(w=>w.id===id);if(!item)return;
-  editingItemId=id;
+  editingItemId=id;emPendingWear=null;emPendingDisp=null;
   document.getElementById('em-n').value=item.name;
   document.getElementById('em-c').value=item.category;
   document.getElementById('em-t').value=item.tags.join(', ');
+  const st=document.getElementById('em-img-status');if(st)st.textContent='';
+  document.getElementById('em-wear-inp').value='';
+  document.getElementById('em-disp-inp').value='';
   document.getElementById('em').classList.add('on');
 }
-function closeEditModal(){document.getElementById('em').classList.remove('on');editingItemId=null;}
+function closeEditModal(){document.getElementById('em').classList.remove('on');editingItemId=null;emPendingWear=null;emPendingDisp=null;}
+function onEMWearChange(inp){
+  if(!inp.files[0])return;
+  const fr=new FileReader();
+  fr.onload=e=>{
+    emPendingWear=e.target.result;
+    const st=document.getElementById('em-img-status');if(st)st.textContent='✅ 实穿图已更换（保存后生效）';
+    inp.value='';
+  };
+  fr.readAsDataURL(inp.files[0]);
+}
+function onEMDispChange(inp){
+  if(!inp.files[0])return;
+  const fr=new FileReader();
+  fr.onload=e=>{
+    emPendingDisp=e.target.result;
+    const st=document.getElementById('em-img-status');if(st)st.textContent=(st.textContent||'')+'  ✅ 展示图已更换';
+    inp.value='';
+  };
+  fr.readAsDataURL(inp.files[0]);
+}
 function saveEdit(){
   const item=wardrobe.find(w=>w.id===editingItemId);if(!item)return;
   item.name=document.getElementById('em-n').value.trim()||item.name;
   item.category=document.getElementById('em-c').value;
   item.tags=document.getElementById('em-t').value.split(/[,，\s]+/).filter(Boolean);
+  if(emPendingWear){item.dataUrl=emPendingWear;syncStampsFromWardrobe();}
+  if(emPendingDisp)item.displayUrl=emPendingDisp;
   closeEditModal();rCloset();rWQ();
-  // refresh layer names if in outfit
   const ls=gL();const li=ls.find(l=>l.id===item.id);
-  if(li){li.name=item.name;li.category=item.category;li.tags=item.tags;rLL();}
+  if(li){li.name=item.name;li.category=item.category;li.tags=item.tags;if(emPendingWear)li.dataUrl=emPendingWear;rLL();}
 }
 function deleteItem(id){
   const item=wardrobe.find(w=>w.id===id);if(!item)return;
@@ -1021,40 +1221,53 @@ function rTMPreview(){
 }
 
 // ── IMAGE IMPORT ──
-function importClosetImage(inp){
+function onIIMWearChange(inp){
   if(!inp.files[0])return;
   const fr=new FileReader();
   fr.onload=e=>{
     importImageData=e.target.result;
-    const pw=document.getElementById('img-preview-wrap');
-    pw.innerHTML=`<img src="${importImageData}" style="max-width:100%;max-height:100%;object-fit:contain">`;
-    // Pre-fill name from filename
-    document.getElementById('iim-n').value=inp.files[0].name.replace(/\.[^.]+$/,'');
-    document.getElementById('iim-x').value='0';
-    document.getElementById('iim-y').value='0';
-    document.getElementById('iim-s').value='1';
-    // 填充参考形象选项
-    const sel=document.getElementById('iim-av');
-    sel.innerHTML=getIIMAvOptions();
-    // 默认选中：当前换装目标的形象
-    sel.value=(curTgt==='user'?('u:'+curUA):('ai:'+curTgt.replace('ai_','')));
-    document.getElementById('iim').classList.add('on');
-    updateIIMPreview();
+    const prev=document.getElementById('iim-wear-preview');
+    prev.innerHTML=`<img src=”${importImageData}” style=”width:100%;height:80px;object-fit:contain”>`;
+    // Pre-fill name from filename if empty
+    const nm=document.getElementById('iim-n');
+    if(!nm.value)nm.value=inp.files[0].name.replace(/\.[^.]+$/,'');
     inp.value='';
   };
   fr.readAsDataURL(inp.files[0]);
 }
-function closeImageImport(){document.getElementById('iim').classList.remove('on');importImageData=null;}
+function onIIMDispChange(inp){
+  if(!inp.files[0])return;
+  const fr=new FileReader();
+  fr.onload=e=>{
+    importDisplayData=e.target.result;
+    const prev=document.getElementById('iim-disp-preview');
+    prev.innerHTML=`<img src=”${importDisplayData}” style=”width:100%;height:80px;object-fit:contain”>`;
+    inp.value='';
+  };
+  fr.readAsDataURL(inp.files[0]);
+}
+function importClosetImage(inp){
+  if(!inp.files[0])return;
+  // Legacy: triggered from closet header button, opens modal and sets wear image
+  const fr=new FileReader();
+  fr.onload=e=>{
+    importImageData=e.target.result;
+    importDisplayData=null;
+    document.getElementById('iim-wear-preview').innerHTML=`<img src=”${importImageData}” style=”width:100%;height:80px;object-fit:contain”>`;
+    document.getElementById('iim-disp-preview').innerHTML='<span style=”font-size:10px;color:#9B7B9B”>点击上传</span>';
+    document.getElementById('iim-n').value=inp.files[0].name.replace(/\.[^.]+$/,'');
+    document.getElementById('iim').classList.add('on');
+    inp.value='';
+  };
+  fr.readAsDataURL(inp.files[0]);
+}
+function closeImageImport(){document.getElementById('iim').classList.remove('on');importImageData=null;importDisplayData=null;}
 function saveImageImport(){
-  if(!importImageData)return;
+  if(!importImageData){alert('请先上传实穿叠加图！');return;}
   const name=document.getElementById('iim-n').value.trim()||'导入图片';
   const cat=document.getElementById('iim-c').value;
   const tags=document.getElementById('iim-t').value.split(/[,，\s]+/).filter(Boolean);
   const id=Date.now();
-  const dx=parseFloat(document.getElementById('iim-x').value||'0')||0;
-  const dy=parseFloat(document.getElementById('iim-y').value||'0')||0;
-  const ds=parseFloat(document.getElementById('iim-s').value||'1')||1;
-  const avSel=document.getElementById('iim-av')?.value||'default';
   // Derive a representative color from the image
   const tmpImg=new Image();
   tmpImg.onload=()=>{
@@ -1062,43 +1275,16 @@ function saveImageImport(){
     const ctx=oc.getContext('2d');ctx.drawImage(tmpImg,0,0,1,1);
     const d=ctx.getImageData(0,0,1,1).data;
     const color='#'+[d[0],d[1],d[2]].map(x=>x.toString(16).padStart(2,'0')).join('');
-    wardrobe.push({id,name,category:cat,tags,color,dataUrl:importImageData});
-    // 默认位置/大小：可选“默认(所有形象)”或指定某个形象
-    const keyAv=avSel==='default'?'default':avSel.replace(/^(u:|ai:)/,'');
-    saveTF(keyAv,id,{x:dx,y:dy,s:ds});
+    const item={id,name,category:cat,tags,color,dataUrl:importImageData};
+    if(importDisplayData)item.displayUrl=importDisplayData;
+    wardrobe.push(item);
     syncStampsFromWardrobe();
     closeImageImport();rCloset();
-    alert(`✅ "${name}"已导入衣柜！`);
+    alert(`✅ “${name}”已导入衣柜！在换装界面点击衣服后可直接拖拽调整位置和大小～`);
   };
   tmpImg.src=importImageData;
 }
 
-function getIIMAvOptions(){
-  let html=`<option value="default">默认（所有形象）</option>`;
-  html+=`<optgroup label="我的形象">`+uAvatars.map(a=>`<option value="u:${a.id}">${a.name}</option>`).join('')+`</optgroup>`;
-  html+=`<optgroup label="AI形象">`+aiAvatars.map(a=>`<option value="ai:${a.id}">${a.name}</option>`).join('')+`</optgroup>`;
-  return html;
-}
-function getAvatarBySel(v){
-  if(v.startsWith('u:'))return uAvatars.find(a=>a.id===v.slice(2));
-  if(v.startsWith('ai:'))return aiAvatars.find(a=>a.id===v.slice(3));
-  return null;
-}
-function updateIIMPreview(){
-  const host=document.getElementById('iim-ref');if(!host)return;
-  if(!importImageData){host.innerHTML='<span style="font-size:12px;color:#9B7B9B">未选择图片</span>';return;}
-  const avSel=document.getElementById('iim-av')?.value||'default';
-  const av=getAvatarBySel(avSel)||(uAvatars.find(a=>a.id===curUA)||uAvatars[0]);
-  const isAI=avSel.startsWith('ai:');
-  const h=isAI?290:250;
-  const x=parseFloat(document.getElementById('iim-x')?.value||'0')||0;
-  const y=parseFloat(document.getElementById('iim-y')?.value||'0')||0;
-  const s=Math.max(0.3,Math.min(3,parseFloat(document.getElementById('iim-s')?.value||'1')||1));
-  const body=avC(av);
-  const cloth=`<image href="${importImageData}" x="${x}" y="${y}" width="${100*s}" height="${h*s}" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated"/>`;
-  const wpx=96,hpx=Math.round((h/100)*96);
-  host.innerHTML=`<svg viewBox="0 0 100 ${h}" width="${wpx}" height="${hpx}">${body}${cloth}</svg>`;
-}
 
 // ═══════════════════════════════════════
 // PHOTO

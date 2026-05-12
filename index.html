@@ -23,7 +23,6 @@
   <button class="nav-tab" data-page="memory-page" onclick="switchPage('memory-page')" title="记忆库">🧠</button>
   <button class="nav-tab" data-page="settings-page" onclick="switchPage('settings-page')" title="设置">⚙️</button>
   <div class="nav-spacer"></div>
-  <button class="nav-tab" onclick="toggleTheme()" id="theme-btn" title="切换主题">🌙</button>
   <button class="nav-tab" id="nav-user-av" onclick="openUserModal()" title="我的账号" style="font-size:22px">😊</button>
 </div>
 
@@ -34,7 +33,7 @@
 <div id="sidebar">
   <div id="sidebar-header">
     <button id="btn-sidebar-close" onclick="closeSidebar()" style="display:none;background:none;border:none;font-size:18px;cursor:pointer;color:var(--text2);padding:4px;">✕</button>
-    <div class="app-title">✦ Raimos</div>
+    <div class="app-title" onclick="openWelcomeFromLogo();closeSidebar();" style="cursor:pointer;" title="回到欢迎页">✦ Raimos</div>
     <button id="btn-new-chat" title="新建对话">＋</button>
   </div>
 <div id="sidebar-search"><input placeholder="🔍 搜索对话…" oninput="filterChats(this.value)" autocomplete="off"></div>
@@ -58,11 +57,7 @@
       <div class="hdr-name" id="hdr-name" onclick="renameChat()">选择或新建对话</div>
       <div class="hdr-status"><div class="status-pulse"></div><span class="hdr-status-emoji" id="hdr-status-emoji"></span><span id="hdr-status-text">在线</span></div>
     </div>
-    <button class="hbtn" id="btn-online" onclick="toggleOnline()" title="联网搜索">🌐</button>
-    <button class="hbtn" id="btn-imggen" onclick="toggleImgGen()" title="图片生成">🎨</button>
-    <button class="hbtn" id="btn-minimap" onclick="toggleMinimap()" title="迷你地图">🗺️</button>
     <button class="hbtn" onclick="openCtxMenu(event)" title="更多">⋯</button>
-    <button class="hbtn" onclick="openBgModal()" title="背景">🖼️</button>
   </div>
 
   <div id="chat-body">
@@ -92,7 +87,7 @@
     <div id="img-preview-row"></div>
     <div id="input-row">
       <!-- ★ 修复：用 id="btn-emoji" 让 outsideClick 能正确识别 -->
-      <button class="ibtn ibtn-g" id="btn-emoji" onclick="toggleEmoji()" type="button">😊</button>
+      <button class="ibtn ibtn-g" id="btn-emoji" onclick="toggleEmoji(event)" type="button">😊</button>
       <textarea id="msg-input" placeholder="发消息…（Enter 换行，Ctrl/⌘+Enter 发送）" rows="1" onkeydown="onKey(event)" oninput="autoH(this)"></textarea>
       <button class="ibtn ibtn-g" onclick="triggerFile()" title="发文件/图片">📎</button>
       <button class="ibtn ibtn-g" id="btn-voice" onmousedown="startRec()" ontouchstart="startRec(event)" onmouseup="stopRec()" ontouchend="stopRec()">🎤</button>
@@ -377,7 +372,24 @@
     <div class="mrow"><label>我的名称</label><input type="text" id="um-username" placeholder="我"/></div>
     <div class="mrow"><label>显示我的头像</label><label class="toggle"><input type="checkbox" id="um-show-user-av"><span class="tslider"></span></label></div>
     <div class="mrow"><label>显示 AI 头像</label><label class="toggle"><input type="checkbox" id="um-show-ai-av"><span class="tslider"></span></label></div>
-    <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border)">
+    <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
+      <div style="font-size:11px;font-weight:800;color:var(--accent);margin-bottom:7px">💬 我的状态</div>
+      <div class="mrow"><label>当前状态</label><input type="text" id="um-my-status" placeholder="😊 今天心情很好…"/></div>
+      <div style="display:flex;gap:5px;flex-wrap:wrap;margin:4px 0 10px">
+        <button class="status-preset-btn" onclick="$i('um-my-status').value='😊 开心'">😊 开心</button>
+        <button class="status-preset-btn" onclick="$i('um-my-status').value='😴 好困'">😴 好困</button>
+        <button class="status-preset-btn" onclick="$i('um-my-status').value='🎮 在玩游戏'">🎮 在玩</button>
+        <button class="status-preset-btn" onclick="$i('um-my-status').value='📚 在学习'">📚 学习</button>
+        <button class="status-preset-btn" onclick="$i('um-my-status').value='🌙 晚安'">🌙 晚安</button>
+      </div>
+      <div class="mrow"><label>AI 留言</label>
+        <div style="flex:1;display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+          <select id="um-ai-contact" style="flex:1;min-width:100px"></select>
+          <button class="btn-p" onclick="doAiMessage()" style="white-space:nowrap">💌 让TA留言</button>
+        </div>
+      </div>
+    </div>
+    <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
       <div id="um-auth-info" style="font-size:12px;color:var(--text3);margin-bottom:8px"></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn-s" onclick="openAuthModal()">🔐 登录 / 注册</button>
@@ -588,30 +600,20 @@
   </div>
 </div>
 
-<!-- User Status -->
-<div class="overlay" id="status-modal">
-  <div class="modal">
-    <h2>💬 更改状态 <button class="mclose" onclick="closeModal('status-modal')">✕</button></h2>
-    <div style="display:flex;flex-wrap:wrap;gap:7px;margin-bottom:10px">
-      ${['😊 开心','😟 有点难过','🌧 今天下雨','🌸 春天来了','😴 好困哦','🎮 在玩游戏','📚 在学习','☕ 喝咖啡中','🎵 听歌中','🌙 晚安'].map(s=>`<button onclick="setMyStatus('${s}')" style="background:var(--hover);border:1.5px solid var(--border);border-radius:9px;padding:5px 10px;font-size:12px;cursor:pointer;font-family:inherit;">${s}</button>`).join('')}
-    </div>
-    <div class="mrow"><label>自定义</label><input type="text" id="custom-status-inp" placeholder="emoji + 文字…"/></div>
-    <div class="mbtns">
-      <button class="btn-s" onclick="closeModal('status-modal')">取消</button>
-      <button class="btn-p" onclick="setMyStatus($i('custom-status-inp').value)">设置</button>
-    </div>
-  </div>
-</div>
 
 <!-- Ctx Menu -->
 <div id="ctx-menu">
+  <div class="ctx-item" id="ctx-online-item" onclick="toggleOnline()">🌐 联网搜索</div>
+  <div class="ctx-item" id="ctx-imggen-item" onclick="toggleImgGen()">🎨 图片生成</div>
+  <div class="ctx-item" id="ctx-minimap-item" onclick="toggleMinimap()">🗺️ 迷你地图</div>
+  <div class="ctx-item" onclick="openBgModal()">🖼️ 聊天背景</div>
+  <div class="ctx-divider"></div>
   <div class="ctx-item" id="ctx-pin-item" onclick="pinChat()">📌 置顶</div>
   <div class="ctx-item" onclick="clearCtx()">🧹 清空上下文</div>
   <div class="ctx-item" onclick="compressCtx()">🗜️ 压缩上下文</div>
   <div class="ctx-item" onclick="renameChat()">✏️ 重命名</div>
   <div class="ctx-item" onclick="archiveChat()">📁 归档</div>
   <div class="ctx-item" onclick="openWelcomeModal()">🎨 自定义欢迎页</div>
-  <div class="ctx-item" onclick="openStatusModal()">💬 更改我的状态</div>
   <div class="ctx-item danger" onclick="deleteCurrentChat()">🗑️ 删除对话</div>
 </div>
 

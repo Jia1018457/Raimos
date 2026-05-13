@@ -67,6 +67,16 @@ let S = {
     companionPomoBreak:5,
     companionCharLeft:3,    // % from left edge of stage
     companionCharBottom:4,  // % from bottom edge of stage
+
+    // ── Cloudinary 图床 ──
+    cloudinaryCloud:'', cloudinaryPreset:'',
+
+    // ── 个人信息 ──
+    city:'', backendUrl:'',
+    refChatEnabled:false, refChatCount:5, refMemEnabled:true,
+
+    // ── 表情包库 ──
+    stickerLibKey:'', stickerCallPrompt:'',
   },
   _momentTimers: {},
   _imgSearchTarget: 'compose',
@@ -336,8 +346,11 @@ function openInlineAvatarPicker(prefix) {
 async function uploadCmAv(input) {
   const file = input.files[0]; if (!file) return;
   const compressed = await compressImg(file, 200);
-  $i('cm-av').value = compressed;
-  $i('cm-av-preview').innerHTML = `<img src="${compressed}" style="width:28px;height:28px;border-radius:50%;object-fit:cover">`;
+  toast('上传头像中…');
+  let url = await uploadToCloudinary(compressed, 'raimos/avatars').catch(()=>null);
+  url = url || compressed;
+  $i('cm-av').value = url;
+  $i('cm-av-preview').innerHTML = `<img src="${url}" style="width:28px;height:28px;border-radius:50%;object-fit:cover">`;
   input.value = '';
 }
 function setCmSection(name, c, fields) {
@@ -1178,6 +1191,17 @@ async function submitComment(momentId) {
   const rt=_replyingTo[momentId];
   const c={id:uid(),momentId,author:S.settings.userName||'我',text,replyTo:rt?.author||null,ts:Date.now()};
   await dbPut('comments',c); delete _replyingTo[momentId]; inp.value='';
+  // Write to Firestore so backend can trigger AI reply
+  if (window._fbUser && window._fbDb && window._fbLib) {
+    try {
+      const m = await dbGet('moments', momentId);
+      const contactId = m?.contactId;
+      const needsReply = !!contactId;
+      const { doc, setDoc } = window._fbLib;
+      await setDoc(doc(window._fbDb,'users',window._fbUser.uid,'comments',c.id),
+        {...c, needsAiReply: needsReply, replied: false, contactId: contactId||null});
+    } catch(e) { console.warn('comment sync error', e); }
+  }
   inp.placeholder='写评论…';
   const m = await dbGet('moments',momentId);
   if(m){const card=await makeMomentCard(m);const old=$i('mc-'+momentId);if(old)old.replaceWith(card);}
@@ -1394,8 +1418,11 @@ function composePicLocal() { $i('compose-pic-file').click(); }
 async function handleComposePic(input) {
   for (const file of input.files) {
     const compressed = await compressImg(file, parseInt(S.settings.imgSize)||800);
-    S._composePics.push({dataUrl:compressed});
-    addComposePicPreview(compressed, S._composePics.length-1);
+    toast('上传图片中…');
+    let url = await uploadToCloudinary(compressed, 'raimos/moments').catch(()=>null);
+    url = url || compressed;
+    S._composePics.push({dataUrl:url});
+    addComposePicPreview(url, S._composePics.length-1);
   }
   input.value='';
 }
@@ -1555,6 +1582,23 @@ async function callCustomTTS(text,url,key,voice){url=url||S.settings.ttsUrl;key=
 function initVoices(){const load=()=>{const vs=speechSynthesis.getVoices();const sel=$i('s-bvoice');if(!sel||!vs.length)return;sel.innerHTML='';vs.forEach(v=>{const o=document.createElement('option');o.value=v.name;o.textContent=`${v.name} (${v.lang})`;if(v.name===S.settings.browserVoice)o.selected=true;sel.appendChild(o);});if(!S.settings.browserVoice){const zh=vs.find(v=>v.lang.startsWith('zh'));if(zh){S.settings.browserVoice=zh.name;sel.value=zh.name;}}};speechSynthesis.onvoiceschanged=load;load();}
 
 // ══════════════════════════════
+//  CLOUDINARY
+// ══════════════════════════════
+async function uploadToCloudinary(fileOrDataUrl, folder='raimos') {
+  const cloud = S.settings.cloudinaryCloud?.trim();
+  const preset = S.settings.cloudinaryPreset?.trim();
+  if (!cloud || !preset) return null;
+  const fd = new FormData();
+  fd.append('file', fileOrDataUrl);
+  fd.append('upload_preset', preset);
+  fd.append('folder', folder);
+  const res = await fetch(`https://api.cloudinary.com/v1_1/${cloud}/auto/upload`, {method:'POST', body:fd});
+  const d = await res.json();
+  if (d.secure_url) return d.secure_url;
+  throw new Error(d.error?.message || 'Cloudinary 上传失败');
+}
+
+// ══════════════════════════════
 //  FILES
 // ══════════════════════════════
 function triggerFile(){$i('file-upload').click();}
@@ -1580,9 +1624,68 @@ function toggleEmoji(e){
 
 function insertEmoji(e){const i=$i('msg-input');const s=i.selectionStart,end=i.selectionEnd;i.value=i.value.slice(0,s)+e+i.value.slice(end);i.selectionStart=i.selectionEnd=s+e.length;i.focus();}
 async function sendSticker(sk){const chat=S._chats[S.currentChat];if(!chat)return;await addMsg(S.currentChat,{role:'user',type:'sticker',content:sk.content||sk.label||'',url:sk.url,isImg:sk.isImg});await renderMsgs();scrollTo_(false);$i('emoji-picker').classList.remove('show');}
-function openStickersModal(){renderStickerLib();$i('sticker-modal').classList.add('show');}
+function openStickersModal(){
+  renderStickerLib();
+  const keyEl=$i('sticker-lib-key'); const promptEl=$i('sticker-call-prompt');
+  if(keyEl) keyEl.value = S.settings.stickerLibKey||'';
+  if(promptEl) promptEl.value = S.settings.stickerCallPrompt||'';
+  $i('sticker-modal').classList.add('show');
+}
+async function saveStickerLibConfig(){
+  S.settings.stickerLibKey=($i('sticker-lib-key')?.value||'').trim();
+  S.settings.stickerCallPrompt=($i('sticker-call-prompt')?.value||'').trim();
+  await saveSetting('stickerLibKey',S.settings.stickerLibKey);
+  await saveSetting('stickerCallPrompt',S.settings.stickerCallPrompt);
+  toast('✅ 配置已保存');
+}
+
+// ══════════════════════════════
+//  我的相册
+// ══════════════════════════════
+async function uploadAlbumPhotos(input) {
+  for (const file of input.files) {
+    const compressed = await compressImg(file, parseInt(S.settings.imgSize)||800);
+    toast('上传相册图片中…');
+    let url = await uploadToCloudinary(compressed, 'raimos/album').catch(()=>null);
+    url = url || compressed;
+    const photo = {id:uid(), url, ts:Date.now()};
+    await dbPut('album', photo);
+  }
+  input.value='';
+  renderAlbum();
+}
+async function renderAlbum() {
+  const grid = $i('album-grid'); if (!grid) return;
+  const photos = await dbGetAll('album');
+  const countEl = $i('album-count');
+  if (countEl) countEl.textContent = `共 ${photos.length} 张`;
+  grid.innerHTML = '';
+  photos.forEach(p => {
+    const div = document.createElement('div');
+    div.style.cssText = 'position:relative;border-radius:8px;overflow:hidden;aspect-ratio:1;background:var(--bg2)';
+    div.innerHTML = `<img src="${p.url}" style="width:100%;height:100%;object-fit:cover">`;
+    const del = document.createElement('button');
+    del.style.cssText = 'position:absolute;top:3px;right:3px;width:18px;height:18px;border-radius:50%;background:rgba(0,0,0,.5);color:#fff;border:none;cursor:pointer;font-size:10px;display:flex;align-items:center;justify-content:center;';
+    del.textContent = '✕';
+    del.onclick = async () => { await dbDel('album', p.id); renderAlbum(); };
+    div.appendChild(del);
+    grid.appendChild(div);
+  });
+}
+function openAlbumModal() { renderAlbum(); $i('album-modal').classList.add('show'); }
 function renderStickerLib(){const lib=$i('sticker-lib');lib.innerHTML='';S._stickers.forEach((s,i)=>{const d=document.createElement('div');d.style.cssText='position:relative;border:1.5px solid var(--border);border-radius:9px;overflow:hidden;padding:5px;';if(s.isImg)d.innerHTML=`<img src="${s.url}" style="width:100%;border-radius:6px">`;else d.innerHTML=`<div style="font-size:34px;text-align:center;padding:3px">${s.content}</div>`;if(s.label)d.innerHTML+=`<div style="font-size:9.5px;text-align:center;color:var(--text3);margin-top:2px">${esc(s.label)}</div>`;const del=document.createElement('button');del.style.cssText='position:absolute;top:-4px;right:-4px;width:16px;height:16px;border-radius:50%;background:var(--accent);color:#fff;border:none;cursor:pointer;font-size:8px;display:flex;align-items:center;justify-content:center;';del.textContent='✕';del.onclick=async()=>{await dbDel('stickers',s.id);S._stickers.splice(i,1);renderStickerLib();};d.appendChild(del);lib.appendChild(d);});}
-async function addStickerImgs(input){for(const file of input.files){const url=await new Promise(r=>{const fr=new FileReader();fr.onload=e=>r(e.target.result);fr.readAsDataURL(file);});const label=window.prompt(`给这个表情包起个标签（AI用来识别）:`)||file.name.replace(/\.\w+$/,'');const sk={id:uid(),isImg:true,url,label,content:label};await dbPut('stickers',sk);S._stickers.push(sk);}renderStickerLib();input.value='';}
+async function addStickerImgs(input){
+  for(const file of input.files){
+    const dataUrl=await new Promise(r=>{const fr=new FileReader();fr.onload=e=>r(e.target.result);fr.readAsDataURL(file);});
+    const label=window.prompt(`给这个表情包起个标签（AI用来识别）:`)||file.name.replace(/\.\w+$/,'');
+    toast('上传表情包中…');
+    let url=await uploadToCloudinary(dataUrl,'raimos/stickers').catch(()=>null);
+    url=url||dataUrl;
+    const sk={id:uid(),isImg:true,url,label,content:label};
+    await dbPut('stickers',sk);S._stickers.push(sk);
+  }
+  renderStickerLib();input.value='';
+}
 async function addTextSticker(){const t=window.prompt('输入文字/emoji表情包:');if(!t)return;const label=window.prompt('标签（AI识别用）:')||t;const sk={id:uid(),isImg:false,content:t,label};await dbPut('stickers',sk);S._stickers.push(sk);renderStickerLib();}
 
 // ══════════════════════════════
@@ -1802,9 +1905,12 @@ async function doAiMessage() {
 async function uploadUserAv(input) {
   const file = input.files[0]; if (!file) return;
   const compressed = await compressImg(file, 200);
-  $i('um-av-val').value = compressed;
+  toast('上传头像中…');
+  let url = await uploadToCloudinary(compressed, 'raimos/avatars').catch(()=>null);
+  url = url || compressed;
+  $i('um-av-val').value = url;
   const prev = $i('um-av-preview');
-  prev.innerHTML = `<img src="${compressed}" style="width:44px;height:44px;border-radius:50%;object-fit:cover">`;
+  prev.innerHTML = `<img src="${url}" style="width:44px;height:44px;border-radius:50%;object-fit:cover">`;
   input.value = '';
 }
 function openInlineUserAvPicker() {
@@ -1824,7 +1930,17 @@ function openInlineUserAvPicker() {
   });
 }
 function buildAvatarGrid(){const g=$i('avatar-grid');g.innerHTML='';['🐱','🐶','🐻','🐼','🦊','🐰','🐯','🦁','🐸','🤖','🦄','🌸','⭐','🌙','🎀','🎵'].forEach(e=>{const b=document.createElement('button');b.textContent=e;b.style.cssText='font-size:24px;padding:5px;border:2px solid var(--border);border-radius:9px;background:none;cursor:pointer';b.onclick=()=>{S.settings.aiAvatar=e;const h=$i('hdr-avatar');h.textContent=e;saveSetting('aiAvatar',e);};g.appendChild(b);});}
-function uploadAvatar(input){const file=input.files[0];if(!file)return;const fr=new FileReader();fr.onload=e=>{S.settings.aiAvatar=e.target.result;const h=$i('hdr-avatar');h.innerHTML=`<img src="${e.target.result}">`;saveSetting('aiAvatar',e.target.result);};fr.readAsDataURL(file);}
+async function uploadAvatar(input){
+  const file=input.files[0]; if(!file)return;
+  const compressed=await compressImg(file,200);
+  toast('上传头像中…');
+  let url=await uploadToCloudinary(compressed,'raimos/avatars').catch(()=>null);
+  url=url||compressed;
+  S.settings.aiAvatar=url;
+  const h=$i('hdr-avatar');
+  h.innerHTML=`<img src="${url}">`;
+  saveSetting('aiAvatar',url);
+}
 
 // ══════════════════════════════
 //  SETTINGS UI
@@ -1842,8 +1958,25 @@ function buildSettingsUI() {
       <div class="s-row"><label>Tavily Key (搜索)</label><input type="password" id="s-tavily" value="${s.tavilyKey||''}" placeholder="可选，联网搜索"/></div>
       <div class="s-row"><label>Unsplash Key (图片)</label><input type="password" id="s-unsplash" value="${s.unsplashKey||''}" placeholder="可选，朋友圈搜图"/></div>
     </div>
+    <div class="s-section" hidden><h3>👤 个人信息</h3>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:8px">用于AI发朋友圈时的个性化内容生成</div>
+      <div class="s-row"><label>所在城市</label><input type="text" id="s-city" value="${s.city||''}" placeholder="如：北京、上海（用于查天气）"/></div>
+      <div class="s-row"><label>参考最近聊天</label><label class="toggle"><input type="checkbox" id="s-ref-chat" ${s.refChatEnabled?'checked':''}><span class="tslider"></span></label></div>
+      <div class="s-row"><label>参考条数</label><input type="number" id="s-ref-chat-count" value="${s.refChatCount||5}" min="1" max="50" style="max-width:70px"/> 条</div>
+      <div class="s-row"><label>参考记忆库</label><label class="toggle"><input type="checkbox" id="s-ref-mem" ${s.refMemEnabled!==false?'checked':''}><span class="tslider"></span></label></div>
+    </div>
+    <div class="s-section" hidden><h3>🖼️ Cloudinary 图床</h3>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:8px">用于图片云端存储（头像、表情包、相册等）。<a href="https://cloudinary.com" target="_blank" style="color:var(--accent)">免费注册</a>后填入下方信息。Upload preset 选 unsigned 模式。</div>
+      <div class="s-row"><label>Cloud Name</label><input type="text" id="s-cld-cloud" value="${s.cloudinaryCloud||''}" placeholder="your-cloud-name"/></div>
+      <div class="s-row"><label>Upload Preset</label><input type="text" id="s-cld-preset" value="${s.cloudinaryPreset||''}" placeholder="unsigned preset 名称"/></div>
+    </div>
+    <div class="s-section" hidden><h3>🚂 后台服务</h3>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:8px">部署后台服务（Railway）后，把访问地址填入下方，前端将对接 AI 主动行为功能。</div>
+      <div class="s-row"><label>后台服务地址</label><input type="text" id="s-backend-url" value="${s.backendUrl||''}" placeholder="https://xxx.railway.app"/></div>
+      <div style="font-size:11px;color:var(--text3)">💡 部署说明见 <code>backend/README.md</code></div>
+    </div>
     <div class="s-section" hidden><h3>☁️ 云同步</h3>
-      <div style="padding:4px 0 10px;font-size:12px;color:var(--text3)">登录后可把助手、对话、记忆同步到云端，换设备也能用。</div>
+      <div style="padding:4px 0 10px;font-size:12px;color:var(--text3)">登录后可同步助手、对话、记忆、朋友圈、相册、表情包、关键词动画到云端。</div>
       <div style="display:flex;gap:7px;flex-wrap:wrap;">
         <button class="btn-p" onclick="openAuthModal()">🔐 登录 / 注册</button>
         <button class="btn-s" onclick="syncToCloud()">☁️ 上传同步</button>
@@ -1894,6 +2027,7 @@ function buildSettingsUI() {
     </div>
     <div class="s-section" hidden><h3>🌸 朋友圈（全局默认）</h3>
       <div style="font-size:11px;color:var(--text3);margin-bottom:8px">各助手可在扩展设置中单独覆盖</div>
+      <div class="s-row"><label>我的相册</label><button class="btn-s" onclick="openAlbumModal()">🖼️ 管理相册（AI发圈用图）</button></div>
       <div class="s-row"><label>启用朋友圈</label><label class="toggle"><input type="checkbox" id="s-moments-enabled" ${s.momentsEnabled?'checked':''}><span class="tslider"></span></label></div>
       <div class="s-row"><label>AI 自动发圈</label><label class="toggle"><input type="checkbox" id="s-auto-post" ${s.autoPost?'checked':''}><span class="tslider"></span></label></div>
       <div class="s-row"><label>发圈时间范围</label>
@@ -2024,6 +2158,16 @@ async function saveAllSettings(){
   s.imgGenApiKey=get('s-imggen-api-key');
   s.userName=get('s-username','我');
   s.showUserAvatar=getB('s-show-user-av'); s.showAiAvatar=getB('s-show-ai-av');
+  // 个人信息
+  s.city=get('s-city','').trim();
+  s.refChatEnabled=getB('s-ref-chat');
+  s.refChatCount=parseInt(get('s-ref-chat-count','5'));
+  s.refMemEnabled=getB('s-ref-mem');
+  // Cloudinary
+  s.cloudinaryCloud=get('s-cld-cloud','').trim();
+  s.cloudinaryPreset=get('s-cld-preset','').trim();
+  // 后台服务
+  s.backendUrl=get('s-backend-url','').trim();
   document.documentElement.style.setProperty('--font-size',s.fontSize+'px');
   applyBubble();scheduleProactive();initMomentTimers();await saveSettings_();toast('✅ 设置已保存');
 }
@@ -2136,7 +2280,16 @@ function syncKwResizeInputs(){
   const box=document.querySelector('#kw-gif-preview .kw-resize-box'); if(!box)return;
   if($i('kw-width'))$i('kw-width').value=Math.round(box.offsetWidth); if($i('kw-height'))$i('kw-height').value=Math.round(box.offsetHeight);
 }
-function handleGifUpload(input){const file=input.files[0];if(!file)return;const fr=new FileReader();fr.onload=e=>{S._newGifData=e.target.result;$i('kw-gif-preview').innerHTML=`<div class="kw-resize-box kw-mask-${$i('kw-mask')?.value||'soft'}" style="width:${$i('kw-width')?.value||180}px;height:${$i('kw-height')?.value||180}px"><img src="${S._newGifData}"></div><small style="color:var(--accent)">✓ ${esc(file.name)} · 拖拽右下角可调整尺寸</small>`;};fr.readAsDataURL(file);input.value='';}
+async function handleGifUpload(input){
+  const file=input.files[0]; if(!file)return;
+  const dataUrl=await new Promise(r=>{const fr=new FileReader();fr.onload=e=>r(e.target.result);fr.readAsDataURL(file);});
+  toast('上传动图中…');
+  let url=await uploadToCloudinary(dataUrl,'raimos/anims').catch(()=>null);
+  url=url||dataUrl;
+  S._newGifData=url;
+  $i('kw-gif-preview').innerHTML=`<div class="kw-resize-box kw-mask-${$i('kw-mask')?.value||'soft'}" style="width:${$i('kw-width')?.value||180}px;height:${$i('kw-height')?.value||180}px"><img src="${url}"></div><small style="color:var(--accent)">✓ ${esc(file.name)} · 拖拽右下角可调整尺寸</small>`;
+  input.value='';
+}
 function dropGif(e){e.preventDefault();const file=e.dataTransfer?.files?.[0];if(!file)return;const obj={files:[file]};handleGifUpload(obj);}
 async function addKwAnim(){
   syncKwResizeInputs(); const word=$i('kw-word').value.trim();if(!word){toast('请输入关键词');return;}if(S._newAnimType==='gif'&&!S._newGifData){toast('请上传GIF或选择其他动画类型');return;}
@@ -2390,7 +2543,41 @@ async function syncToCloud() {
       await setDoc(doc(fsDb, 'users', uid, 'memories', m.id), m);
     }
 
-    toast(`✅ 同步完成！${contacts.length} 个助手，${chats.length} 个对话，${memories.length} 条记忆`);
+    const moments = await dbGetAll('moments');
+    for (const m of moments) {
+      const data = {...m};
+      // strip large dataURL images — only keep http/https URLs
+      if (Array.isArray(data.images)) data.images = data.images.filter(u => u && u.startsWith('http'));
+      await setDoc(doc(fsDb, 'users', uid, 'moments', m.id), data);
+    }
+
+    const comments = await dbGetAll('comments');
+    for (const c of comments) {
+      await setDoc(doc(fsDb, 'users', uid, 'comments', c.id), c);
+    }
+
+    const stickers = await dbGetAll('stickers');
+    for (const s of stickers) {
+      const data = {...s};
+      if (data.url && data.url.startsWith('data:')) data.url = '__local__';
+      await setDoc(doc(fsDb, 'users', uid, 'stickers', s.id), data);
+    }
+
+    const kwAnims = await dbGetAll('kwAnims');
+    for (const a of kwAnims) {
+      const data = {...a};
+      if (data.gifData && data.gifData.startsWith('data:')) data.gifData = '__local__';
+      await setDoc(doc(fsDb, 'users', uid, 'kwAnims', a.id), data);
+    }
+
+    const album = await dbGetAll('album');
+    for (const p of album) {
+      const data = {...p};
+      if (data.url && data.url.startsWith('data:')) data.url = '__local__';
+      await setDoc(doc(fsDb, 'users', uid, 'album', p.id), data);
+    }
+
+    toast(`✅ 同步完成！${contacts.length} 个助手，${chats.length} 个对话，${memories.length} 条记忆，${moments.length} 条朋友圈，${album.length} 张相册`);
   } catch(e) {
     toast('❌ 同步失败：' + e.message);
     console.error(e);
@@ -2418,7 +2605,27 @@ async function restoreFromCloud() {
       const data = d.data(); await dbPut('memories', data);
       if (!S._memories.find(m => m.id === data.id)) S._memories.push(data);
     }
-    renderChatList(); renderContacts(); renderMemories();
+    const momentsSnap = await getDocs(collection(fsDb, 'users', uid, 'moments'));
+    for (const d of momentsSnap.docs) { await dbPut('moments', d.data()); }
+    const commentsSnap = await getDocs(collection(fsDb, 'users', uid, 'comments'));
+    for (const d of commentsSnap.docs) { await dbPut('comments', d.data()); }
+    const stickersSnap = await getDocs(collection(fsDb, 'users', uid, 'stickers'));
+    for (const d of stickersSnap.docs) {
+      const data = d.data();
+      if (data.url !== '__local__') { await dbPut('stickers', data); if (!S._stickers.find(s=>s.id===data.id)) S._stickers.push(data); }
+    }
+    const kwAnimsSnap = await getDocs(collection(fsDb, 'users', uid, 'kwAnims'));
+    for (const d of kwAnimsSnap.docs) {
+      const data = d.data();
+      if (data.gifData !== '__local__') await dbPut('kwAnims', data);
+    }
+    const albumSnap = await getDocs(collection(fsDb, 'users', uid, 'album'));
+    for (const d of albumSnap.docs) {
+      const data = d.data();
+      if (data.url !== '__local__') await dbPut('album', data);
+    }
+    S.kwAnims = await dbGetAll('kwAnims');
+    renderChatList(); renderContacts(); renderMemories(); renderMoments();
     toast('✅ 恢复完成！');
   } catch(e) {
     toast('❌ 恢复失败：' + e.message);
@@ -2684,6 +2891,13 @@ async function handleCompanionMedia(input) {
   const target = S._companion.uploadTarget; if (!target) return;
   const id = `comp_${target}_${uid()}`;
   await saveMediaBlob(id, file, { name:file.name, mime:file.type, kind:target });
+  // Upload image/video char to Cloudinary for cloud sync
+  if (target === 'char' && file.type.startsWith('image/')) {
+    toast('上传形象图片中…');
+    const dataUrl = await new Promise(r=>{const fr=new FileReader();fr.onload=e=>r(e.target.result);fr.readAsDataURL(file);});
+    const url = await uploadToCloudinary(dataUrl, 'raimos/companion').catch(()=>null);
+    if (url) { S.settings.companionCharUrl = url; await saveSetting('companionCharUrl', url); }
+  }
   if (target === 'char') {
     S.settings.companionCharType = 'upload'; S.settings.companionCharMediaId = id;
     await saveSetting('companionCharType', 'upload'); await saveSetting('companionCharMediaId', id);

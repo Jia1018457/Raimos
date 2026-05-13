@@ -12,6 +12,23 @@ const WMO = {
   95: '雷暴', 96: '轻冰雹雷暴', 99: '强冰雹雷暴',
 };
 
+/** Geocode a city name to {lat, lon} using Open-Meteo Geocoding API (free). */
+export async function geocodeCity(city) {
+  if (!city) return null;
+  try {
+    const res = await fetch(
+      `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1&language=zh&format=json`,
+      { signal: AbortSignal.timeout(6_000) }
+    );
+    if (!res.ok) return null;
+    const d = await res.json();
+    const r = d.results?.[0];
+    return r ? { lat: r.latitude, lon: r.longitude } : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Fetch current weather from Open-Meteo (free, no key needed).
  * Returns null on failure.

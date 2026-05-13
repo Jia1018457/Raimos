@@ -34,7 +34,7 @@ let S = {
     stream:true, showToken:false, showThink:true,
     temp:0.85, ctx:20, imgSize:800, sumThresh:40,
     proactive:false, proMax:3, proStart:8, proEnd:22,
-    momentsEnabled:false, autoPost:false, postFreqMin:12, postFreqMax:36,
+    momentsEnabled:false, autoPost:false, momentFreqMode:'perWeek', momentFreqCount:3,
     autoComment:false, commentFreqMins:360,
     replyMomentComments:false, replyDelay:120, autoLike:false, likeProb:60,
     maxComments:1,
@@ -77,6 +77,11 @@ let S = {
 
     // ── 表情包库 ──
     stickerLibKey:'', stickerCallPrompt:'',
+
+    // ── AI 聊天发图 ──
+    aiChatImages: false,
+    aiChatImageFreq: 20,   // % probability per reply
+    aiChatImageSources: 'album', // album,stickers,search,generate
 
     // ── 开屏动画 ──
     splashEnabled: false,
@@ -318,11 +323,11 @@ function openContactModal(editId) {
   if (c?.xProStart !== null && c?.xProStart !== undefined) { const el=$i('cm-x-pro-start'); if(el)el.value=c.xProStart??8; }
   if (c?.xProEnd !== null && c?.xProEnd !== undefined) { const el=$i('cm-x-pro-end'); if(el)el.value=c.xProEnd??22; }
   // Moments section
-  setCmSection('moments', c, ['xMomentsEnabled','xAutoPost','xPostFreqMin','xPostFreqMax','xAutoComment','xCommentFreqMins','xReplyMomentComments','xReplyDelay','xAutoLike','xLikeProb','xMaxComments','xPostImages','xImageFreq','xImageSources']);
+  setCmSection('moments', c, ['xMomentsEnabled','xAutoPost','xMomentFreqMode','xMomentFreqCount','xAutoComment','xCommentFreqMins','xReplyMomentComments','xReplyDelay','xAutoLike','xLikeProb','xMaxComments','xPostImages','xImageFreq','xImageSources']);
   if (c?.xMomentsEnabled !== null && c?.xMomentsEnabled !== undefined) { const el=$i('cm-x-moments-enabled'); if(el)el.checked=!!c.xMomentsEnabled; }
   if (c?.xAutoPost !== null && c?.xAutoPost !== undefined) { const el=$i('cm-x-auto-post'); if(el)el.checked=!!c.xAutoPost; }
-  if (c?.xPostFreqMin !== null && c?.xPostFreqMin !== undefined) { const el=$i('cm-x-post-freq-min'); if(el)el.value=c.xPostFreqMin||12; }
-  if (c?.xPostFreqMax !== null && c?.xPostFreqMax !== undefined) { const el=$i('cm-x-post-freq-max'); if(el)el.value=c.xPostFreqMax||36; }
+  if (c?.xMomentFreqMode !== null && c?.xMomentFreqMode !== undefined) { const el=$i('cm-x-moment-freq-mode'); if(el)el.value=c.xMomentFreqMode||'perWeek'; }
+  if (c?.xMomentFreqCount !== null && c?.xMomentFreqCount !== undefined) { const el=$i('cm-x-moment-freq-count'); if(el)el.value=c.xMomentFreqCount||3; }
   if (c?.xAutoComment !== null && c?.xAutoComment !== undefined) { const el=$i('cm-x-auto-comment'); if(el)el.checked=!!c.xAutoComment; }
   if (c?.xCommentFreqMins !== null && c?.xCommentFreqMins !== undefined) { const el=$i('cm-x-comment-freq'); if(el)el.value=c.xCommentFreqMins||360; }
   if (c?.xMaxComments !== null && c?.xMaxComments !== undefined) { const el=$i('cm-x-max-comments'); if(el)el.value=c.xMaxComments||1; }
@@ -335,6 +340,14 @@ function openContactModal(editId) {
   if (c?.xImageSources !== null && c?.xImageSources !== undefined) {
     const srcs = (c.xImageSources||'').split(',');
     ['stickers','search','generate'].forEach(s => { const el=$i(`cm-x-imgsrc-${s}`); if(el)el.checked=srcs.includes(s); });
+  }
+  // AI chat images section
+  setCmSection('aichat', c, ['xAiChatImages','xAiChatImageFreq','xAiChatImageSources']);
+  if (c?.xAiChatImages !== null && c?.xAiChatImages !== undefined) { const el=$i('cm-x-ai-chat-images'); if(el)el.checked=!!c.xAiChatImages; }
+  if (c?.xAiChatImageFreq !== null && c?.xAiChatImageFreq !== undefined) { const el=$i('cm-x-ai-chat-freq'); if(el){ el.value=c.xAiChatImageFreq||20; const v=$i('cm-x-ai-chat-freq-v'); if(v)v.textContent=(c.xAiChatImageFreq||20)+'%'; } }
+  if (c?.xAiChatImageSources !== null && c?.xAiChatImageSources !== undefined) {
+    const srcs2 = (c.xAiChatImageSources||'album').split(',');
+    ['album','stickers','search'].forEach(s => { const el=$i(`cm-x-aichat-src-${s}`); if(el)el.checked=srcs2.includes(s); });
   }
   $i('contact-modal').classList.add('show');
 }
@@ -416,8 +429,8 @@ async function saveContact() {
     // Moments section
     xMomentsEnabled: getCmSection('moments') ? getB2('cm-x-moments-enabled') : null,
     xAutoPost: getCmSection('moments') ? getB2('cm-x-auto-post') : null,
-    xPostFreqMin: getCmSection('moments') ? parseInt(getV('cm-x-post-freq-min','12')) : null,
-    xPostFreqMax: getCmSection('moments') ? parseInt(getV('cm-x-post-freq-max','36')) : null,
+    xMomentFreqMode: getCmSection('moments') ? getV('cm-x-moment-freq-mode','perWeek') : null,
+    xMomentFreqCount: getCmSection('moments') ? parseInt(getV('cm-x-moment-freq-count','3')) : null,
     xAutoComment: getCmSection('moments') ? getB2('cm-x-auto-comment') : null,
     xCommentFreqMins: getCmSection('moments') ? parseInt(getV('cm-x-comment-freq','360')) : null,
     xMaxComments: getCmSection('moments') ? parseInt(getV('cm-x-max-comments','1')) : null,
@@ -428,6 +441,10 @@ async function saveContact() {
     xPostImages: getCmSection('moments') ? getB2('cm-x-post-images') : null,
     xImageFreq: getCmSection('moments') ? parseInt(getV('cm-x-image-freq','50')) : null,
     xImageSources: getCmSection('moments') ? ['stickers','search','generate'].filter(s=>$i(`cm-x-imgsrc-${s}`)?.checked).join(',') : null,
+    // AI chat images
+    xAiChatImages: getCmSection('aichat') ? getB2('cm-x-ai-chat-images') : null,
+    xAiChatImageFreq: getCmSection('aichat') ? parseInt(getV('cm-x-ai-chat-freq','20')) : null,
+    xAiChatImageSources: getCmSection('aichat') ? ['album','stickers','search'].filter(s=>$i(`cm-x-aichat-src-${s}`)?.checked).join(',') || 'album' : null,
   };
   await dbPut('contacts', contact);
   S._contacts[id] = contact;
@@ -886,6 +903,7 @@ try {
       await addMsg(chatId, { role:'ai', type:'text', content:cleanText, thinking:thinking||null, elapsed, usage: usageObj });
     }
     for (const sk of stkList) await addMsg(chatId, { role:'ai', type:'sticker', content:sk.content, url:sk.url, isImg:sk.isImg });
+    await maybeAiSendImage(chatId, contact, cleanText);
     await renderMsgs(); scrollTo_(false);
     if (cs(contact?.xAutoTts, s.autoTts) && cleanText) speakText(cleanText);
     checkKwAnims(cleanText, 'ai');
@@ -896,6 +914,32 @@ try {
     await renderMsgs(); scrollTo_(false);
   }
   S.isStreaming = false;
+}
+
+async function maybeAiSendImage(chatId, contact, context) {
+  const s = S.settings;
+  if (!cs(contact?.xAiChatImages, s.aiChatImages)) return;
+  const freq = cs(contact?.xAiChatImageFreq, s.aiChatImageFreq) || 20;
+  if (Math.random() * 100 > freq) return;
+  const sources = (cs(contact?.xAiChatImageSources, s.aiChatImageSources) || 'album').split(',').map(x => x.trim()).filter(Boolean);
+  const pick = sources[Math.floor(Math.random() * sources.length)];
+  try {
+    if (pick === 'album') {
+      const url = await pickAlbumPhoto(context);
+      if (url) await addMsg(chatId, { role:'ai', type:'image', imageData:url, content:'[图片]' });
+    } else if (pick === 'stickers') {
+      const stk = await pickSticker(context);
+      if (stk) await addMsg(chatId, { role:'ai', type:'sticker', content:stk.label||stk.content, url:stk.url, isImg:stk.isImg });
+    } else if (pick === 'search') {
+      const key = s.unsplashKey?.trim();
+      if (!key) return;
+      const kw = encodeURIComponent(context.slice(0, 30) || 'cute');
+      const r = await fetch(`https://api.unsplash.com/photos/random?query=${kw}&client_id=${key}`);
+      const d = await r.json();
+      const url = d?.urls?.regular;
+      if (url) await addMsg(chatId, { role:'ai', type:'image', imageData:url, content:'[图片]' });
+    }
+  } catch(e) { /* silent fail */ }
 }
 
 async function handleStream(res, chatId) {
@@ -1333,9 +1377,11 @@ function initMomentTimers() {
 }
 function scheduleMomentPost(contactId) {
   const c = S._contacts[contactId]; if (!c) return;
-  const minHrs = cs(c?.xPostFreqMin, S.settings.postFreqMin) || 12;
-  const maxHrs = Math.max(minHrs + 1, cs(c?.xPostFreqMax, S.settings.postFreqMax) || 36);
-  const delay = (minHrs + Math.random() * (maxHrs - minHrs)) * 3600 * 1000;
+  const mode = cs(c?.xMomentFreqMode, S.settings.momentFreqMode) || 'perWeek';
+  const count = Math.max(1, parseInt(cs(c?.xMomentFreqCount, S.settings.momentFreqCount)) || 3);
+  const periodHrs = mode === 'perDay' ? 24 : 168;
+  const avgDelay = periodHrs / count;
+  const delay = avgDelay * (0.5 + Math.random()) * 3600 * 1000;
   if (!S._momentTimers[contactId]) S._momentTimers[contactId] = {};
   S._momentTimers[contactId].post = setTimeout(() => triggerMomentPost(contactId), delay);
 }
@@ -1632,13 +1678,35 @@ function toggleEmoji(e){
 
 function insertEmoji(e){const i=$i('msg-input');const s=i.selectionStart,end=i.selectionEnd;i.value=i.value.slice(0,s)+e+i.value.slice(end);i.selectionStart=i.selectionEnd=s+e.length;i.focus();}
 async function sendSticker(sk){const chat=S._chats[S.currentChat];if(!chat)return;await addMsg(S.currentChat,{role:'user',type:'sticker',content:sk.content||sk.label||'',url:sk.url,isImg:sk.isImg});await renderMsgs();scrollTo_(false);$i('emoji-picker').classList.remove('show');}
-function openStickersModal(){
-  renderStickerLib();
+// ══════════════════════════════════════════════════════
+//  相册（照片 + 表情包合并管理）
+// ══════════════════════════════════════════════════════
+let _albumCurrentTab = 'photos';
+
+function switchAlbumTab(tab) {
+  _albumCurrentTab = tab;
+  const tabs = ['photos','stickers'];
+  tabs.forEach(t => {
+    const btn = $i(`album-tab-${t}`); const panel = $i(`album-panel-${t}`);
+    if (!btn || !panel) return;
+    const active = t === tab;
+    btn.style.background = active ? 'var(--accent)' : 'none';
+    btn.style.color = active ? '#fff' : 'var(--text2)';
+    panel.style.display = active ? '' : 'none';
+  });
+  if (tab === 'photos') renderAlbum();
+  if (tab === 'stickers') renderStickerLib();
+}
+
+function openStickersModal(tab) {
   const keyEl=$i('sticker-lib-key'); const promptEl=$i('sticker-call-prompt');
   if(keyEl) keyEl.value = S.settings.stickerLibKey||'';
   if(promptEl) promptEl.value = S.settings.stickerCallPrompt||'';
   $i('sticker-modal').classList.add('show');
+  switchAlbumTab(tab || 'photos');
 }
+function openAlbumModal() { openStickersModal('photos'); }
+
 async function saveStickerLibConfig(){
   S.settings.stickerLibKey=($i('sticker-lib-key')?.value||'').trim();
   S.settings.stickerCallPrompt=($i('sticker-call-prompt')?.value||'').trim();
@@ -1647,40 +1715,84 @@ async function saveStickerLibConfig(){
   toast('✅ 配置已保存');
 }
 
-// ══════════════════════════════
-//  我的相册
-// ══════════════════════════════
 async function uploadAlbumPhotos(input) {
   for (const file of input.files) {
+    const label = window.prompt(`给这张照片起个标签（AI 按标签检索，不填则用文件名）：`) || file.name.replace(/\.\w+$/,'');
     const compressed = await compressImg(file, parseInt(S.settings.imgSize)||800);
-    toast('上传相册图片中…');
+    toast('上传照片中…');
     let url = await uploadToCloudinary(compressed, 'raimos/album').catch(()=>null);
     url = url || compressed;
-    const photo = {id:uid(), url, ts:Date.now()};
+    const photo = {id:uid(), url, label: label.trim(), ts:Date.now()};
     await dbPut('album', photo);
   }
   input.value='';
   renderAlbum();
 }
+
 async function renderAlbum() {
   const grid = $i('album-grid'); if (!grid) return;
   const photos = await dbGetAll('album');
   const countEl = $i('album-count');
   if (countEl) countEl.textContent = `共 ${photos.length} 张`;
   grid.innerHTML = '';
+  if (!photos.length) {
+    grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:30px;color:var(--text3);font-size:12px">还没有照片，点「上传照片」添加<br>AI 会按标签检索这些图片</div>';
+    return;
+  }
   photos.forEach(p => {
     const div = document.createElement('div');
-    div.style.cssText = 'position:relative;border-radius:8px;overflow:hidden;aspect-ratio:1;background:var(--bg2)';
-    div.innerHTML = `<img src="${p.url}" style="width:100%;height:100%;object-fit:cover">`;
+    div.style.cssText = 'position:relative;border-radius:8px;overflow:hidden;background:var(--bg2);';
+    div.innerHTML = `
+      <img src="${p.url}" style="width:100%;aspect-ratio:1;object-fit:cover;display:block">
+      <div style="padding:4px 6px;font-size:10px;color:var(--text3);background:var(--bg2);display:flex;align-items:center;gap:4px">
+        <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.label||'无标签')}</span>
+        <button onclick="editAlbumLabel('${p.id}')" style="background:none;border:none;cursor:pointer;font-size:10px;color:var(--accent);padding:0">✏️</button>
+      </div>`;
     const del = document.createElement('button');
-    del.style.cssText = 'position:absolute;top:3px;right:3px;width:18px;height:18px;border-radius:50%;background:rgba(0,0,0,.5);color:#fff;border:none;cursor:pointer;font-size:10px;display:flex;align-items:center;justify-content:center;';
+    del.style.cssText = 'position:absolute;top:3px;right:3px;width:18px;height:18px;border-radius:50%;background:rgba(0,0,0,.55);color:#fff;border:none;cursor:pointer;font-size:10px;';
     del.textContent = '✕';
     del.onclick = async () => { await dbDel('album', p.id); renderAlbum(); };
     div.appendChild(del);
     grid.appendChild(div);
   });
 }
-function openAlbumModal() { renderAlbum(); $i('album-modal').classList.add('show'); }
+
+async function editAlbumLabel(photoId) {
+  const p = await dbGet('album', photoId); if (!p) return;
+  const label = window.prompt('修改照片标签：', p.label||'');
+  if (label === null) return;
+  p.label = label.trim();
+  await dbPut('album', p);
+  renderAlbum();
+}
+
+/** Pick best-matching album photo by keyword/context label matching */
+async function pickAlbumPhoto(keywords) {
+  const photos = await dbGetAll('album');
+  if (!photos.length) return null;
+  const kws = (keywords||'').toLowerCase().split(/[\s,，]+/).filter(Boolean);
+  // Score each photo by label match
+  const scored = photos.map(p => {
+    const lbl = (p.label||'').toLowerCase();
+    const score = kws.reduce((s,k) => s + (lbl.includes(k)?1:0), 0);
+    return {p, score};
+  });
+  scored.sort((a,b) => b.score - a.score || Math.random() - 0.5);
+  return scored[0]?.p || null;
+}
+
+/** Pick best-matching sticker by label */
+function pickSticker(keywords) {
+  if (!S._stickers?.length) return null;
+  const kws = (keywords||'').toLowerCase().split(/[\s,，]+/).filter(Boolean);
+  const scored = S._stickers.filter(s=>s.isImg).map(s => {
+    const lbl = (s.label||s.content||'').toLowerCase();
+    const score = kws.reduce((acc,k)=>acc+(lbl.includes(k)?1:0),0);
+    return {s, score};
+  });
+  scored.sort((a,b) => b.score - a.score || Math.random() - 0.5);
+  return scored[0]?.s || null;
+}
 
 // ══════════════════════════════════════════════════════
 //  SPLASH SCREEN (开屏动画)
@@ -1946,7 +2058,14 @@ function getLum(hex){try{const r=parseInt(hex.slice(1,3),16)/255,g=parseInt(hex.
 
 const BG_PRESETS=[{c:'#fdf6f0',l:'默认粉'},{c:'#fff0f3',l:'粉白'},{c:'#f0fff4',l:'薄荷'},{c:'#f0f8ff',l:'天蓝'},{c:'#f5f0ff',l:'薰衣草'},{c:'#fffde7',l:'奶油'},{c:'#1a1220',l:'深紫'},{c:'#0d1b2a',l:'深蓝'},{c:'#0d2818',l:'深绿'}];
 function openBgModal(){const bg=$i('bg-grid');bg.innerHTML='';BG_PRESETS.forEach(p=>{const d=document.createElement('div');d.className='bg-tile'+(S.settings.chatBg===p.c?' sel':'');d.style.background=p.c;d.style.border='1.5px solid #ccc';d.title=p.l;d.onclick=()=>{S.settings.chatBg=p.c;S.settings.chatBgImg='';applyBg();saveSetting('chatBg',p.c);saveSetting('chatBgImg','');document.querySelectorAll('.bg-tile').forEach(t=>t.classList.remove('sel'));d.classList.add('sel');};bg.appendChild(d);});const cust=document.createElement('div');cust.className='bg-tile';cust.style.background='conic-gradient(red,yellow,lime,cyan,blue,magenta,red)';cust.style.position='relative';cust.innerHTML='<input type="color" style="opacity:0;position:absolute;inset:0;cursor:pointer;width:100%;height:100%" oninput="S.settings.chatBg=this.value;S.settings.chatBgImg=\'\';applyBg();saveSetting(\'chatBg\',this.value)">';bg.appendChild(cust);$i('bg-modal').classList.add('show');}
-function setBgImg(input){const file=input.files[0];if(!file)return;const fr=new FileReader();fr.onload=e=>{S.settings.chatBgImg=e.target.result;applyBg();saveSetting('chatBgImg',e.target.result);};fr.readAsDataURL(file);}
+async function setBgImg(input){
+  const file=input.files[0]; if(!file)return;
+  const dataUrl=await new Promise(r=>{const fr=new FileReader();fr.onload=e=>r(e.target.result);fr.readAsDataURL(file);});
+  toast('上传背景图中…');
+  let url=await uploadToCloudinary(dataUrl,'raimos/bg').catch(()=>null);
+  url=url||dataUrl;
+  S.settings.chatBgImg=url; applyBg(); saveSetting('chatBgImg',url);
+}
 function clearBgImg(){S.settings.chatBgImg='';applyBg();saveSetting('chatBgImg','');}
 
 const USER_COLORS=['#ff8fab','#ff6b6b','#ffa94d','#51cf66','#339af0','#cc5de8','#f06595','#20c997','#ff4757'];
@@ -2201,10 +2320,13 @@ function buildSettingsUI() {
       <div class="s-row"><label>我的相册</label><button class="btn-s" onclick="openAlbumModal()">🖼️ 管理相册（AI发圈用图）</button></div>
       <div class="s-row"><label>启用朋友圈</label><label class="toggle"><input type="checkbox" id="s-moments-enabled" ${s.momentsEnabled?'checked':''}><span class="tslider"></span></label></div>
       <div class="s-row"><label>AI 自动发圈</label><label class="toggle"><input type="checkbox" id="s-auto-post" ${s.autoPost?'checked':''}><span class="tslider"></span></label></div>
-      <div class="s-row"><label>发圈时间范围</label>
-        <input type="number" id="s-post-freq-min" value="${s.postFreqMin||12}" min="1" max="720" style="max-width:60px"/> ~
-        <input type="number" id="s-post-freq-max" value="${s.postFreqMax||36}" min="1" max="720" style="max-width:60px"/>
-        <span style="font-size:11px;color:var(--text3)">小时（在此范围内随机）</span>
+      <div class="s-row"><label>发圈频率</label>
+        <select id="s-moment-freq-mode" style="max-width:90px">
+          <option value="perDay" ${(s.momentFreqMode||'perWeek')==='perDay'?'selected':''}>每天</option>
+          <option value="perWeek" ${(s.momentFreqMode||'perWeek')==='perWeek'?'selected':''}>每周</option>
+        </select>
+        <input type="number" id="s-moment-freq-count" value="${s.momentFreqCount||3}" min="1" max="30" style="max-width:55px"/>
+        <span style="font-size:11px;color:var(--text3)">次（随机分布）</span>
       </div>
       <div class="s-row"><label>AI 自动评论</label><label class="toggle"><input type="checkbox" id="s-auto-comment" ${s.autoComment?'checked':''}><span class="tslider"></span></label></div>
       <div class="s-row"><label>评论检查间隔</label><input type="number" id="s-comment-freq" value="${s.commentFreqMins||360}" min="1" max="10000" style="max-width:80px"/> 分钟 <span style="font-size:11px;color:var(--text3)">（只评论未评论过的新帖）</span></div>
@@ -2217,9 +2339,19 @@ function buildSettingsUI() {
       <div class="s-row"><label>发圈带图片</label><label class="toggle"><input type="checkbox" id="s-post-images" ${s.postImages?'checked':''}><span class="tslider"></span></label></div>
       <div class="s-row"><label>带图概率</label><input type="range" id="s-image-freq" min="0" max="100" step="10" value="${s.imageFreq||50}" oninput="$i('s-image-freq-v').textContent=this.value+'%'"><span class="rval" id="s-image-freq-v">${s.imageFreq||50}%</span></div>
       <div class="s-row"><label>图片来源</label><div style="display:flex;gap:10px;flex-wrap:wrap;font-size:12px">
-        <label><input type="checkbox" id="s-imgsrc-stickers" ${(s.imageSources||'').includes('stickers')?'checked':''}> 已存表情包</label>
+        <label><input type="checkbox" id="s-imgsrc-stickers" ${(s.imageSources||'').includes('stickers')?'checked':''}> 我的相册</label>
         <label><input type="checkbox" id="s-imgsrc-search" ${(s.imageSources||'').includes('search')?'checked':''}> 联网搜索</label>
         <label><input type="checkbox" id="s-imgsrc-generate" ${(s.imageSources||'').includes('generate')?'checked':''}> 生成图片</label>
+      </div></div>
+    </div>
+    <div class="s-section" hidden><h3>📨 AI聊天发图</h3>
+      <div style="font-size:11px;color:var(--text3);margin-bottom:8px">各助手可在扩展设置中单独覆盖</div>
+      <div class="s-row"><label>AI 发图功能</label><label class="toggle"><input type="checkbox" id="s-ai-chat-images" ${s.aiChatImages?'checked':''}><span class="tslider"></span></label></div>
+      <div class="s-row"><label>发图概率</label><input type="range" id="s-ai-chat-image-freq" min="0" max="100" step="5" value="${s.aiChatImageFreq||20}" oninput="$i('s-ai-chat-image-freq-v').textContent=this.value+'%'"><span class="rval" id="s-ai-chat-image-freq-v">${s.aiChatImageFreq||20}%</span></div>
+      <div class="s-row"><label>图片来源</label><div style="display:flex;gap:10px;flex-wrap:wrap;font-size:12px">
+        <label><input type="checkbox" id="s-aichat-src-album" ${(s.aiChatImageSources||'album').includes('album')?'checked':''}> 我的相册</label>
+        <label><input type="checkbox" id="s-aichat-src-stickers" ${(s.aiChatImageSources||'').includes('stickers')?'checked':''}> 表情包</label>
+        <label><input type="checkbox" id="s-aichat-src-search" ${(s.aiChatImageSources||'').includes('search')?'checked':''}> 联网搜索</label>
       </div></div>
     </div>
     <div class="s-section" hidden><h3>🎲 图片生成</h3>
@@ -2314,7 +2446,7 @@ async function saveAllSettings(){
   s.proactive=getB('s-proactive');s.proMax=parseInt(get('s-pro-max','3'));
   s.proStart=parseInt(get('s-pro-start','8'));s.proEnd=parseInt(get('s-pro-end','22'));
   s.momentsEnabled=getB('s-moments-enabled');s.autoPost=getB('s-auto-post');
-  s.postFreqMin=parseInt(get('s-post-freq-min','12'));s.postFreqMax=parseInt(get('s-post-freq-max','36'));
+  s.momentFreqMode=get('s-moment-freq-mode','perWeek');s.momentFreqCount=parseInt(get('s-moment-freq-count','3'));
   s.autoComment=getB('s-auto-comment');s.commentFreqMins=parseInt(get('s-comment-freq','360'));
   s.maxComments=parseInt(get('s-max-comments','1'));
   s.replyMomentComments=getB('s-reply-comments');s.replyDelay=parseInt(get('s-reply-delay','120'));
@@ -2339,6 +2471,10 @@ async function saveAllSettings(){
   s.cloudinaryPreset=get('s-cld-preset','').trim();
   // 后台服务
   s.backendUrl=get('s-backend-url','').trim();
+  // AI 聊天发图
+  s.aiChatImages=getB('s-ai-chat-images');
+  s.aiChatImageFreq=parseInt(get('s-ai-chat-image-freq','20'));
+  s.aiChatImageSources=['album','stickers','search'].filter(x=>getB(`s-aichat-src-${x}`)).join(',') || 'album';
   // 开屏动画
   s.splashEnabled=getB('s-splash-enabled');
   s.splashDuration=parseInt(get('s-splash-dur','4'));
@@ -2694,6 +2830,7 @@ async function syncToCloud() {
   const uid = window._fbUser.uid;
   const { doc, setDoc } = window._fbLib;
   const fsDb = window._fbDb;
+  const hasCloudinary = S.settings.cloudinaryCloud && S.settings.cloudinaryPreset;
   toast('☁️ 同步中…');
   try {
     const settingsData = {};
@@ -2708,8 +2845,19 @@ async function syncToCloud() {
     }
 
     const chats = await dbGetAll('chats');
+    let totalMsgs = 0;
     for (const c of chats) {
       await setDoc(doc(fsDb, 'users', uid, 'chats', c.id), c);
+      // sync last 80 messages per chat
+      const msgs = await dbGetAll('messages', 'chatId', c.id);
+      const recent = msgs.slice(-80);
+      for (const m of recent) {
+        const mData = {...m};
+        if (mData.imageData && mData.imageData.startsWith('data:')) delete mData.imageData;
+        if (mData.url && mData.url.startsWith('data:')) delete mData.url;
+        await setDoc(doc(fsDb, 'users', uid, 'messages', m.id), mData);
+        totalMsgs++;
+      }
     }
 
     const memories = await dbGetAll('memories');
@@ -2720,7 +2868,6 @@ async function syncToCloud() {
     const moments = await dbGetAll('moments');
     for (const m of moments) {
       const data = {...m};
-      // strip large dataURL images — only keep http/https URLs
       if (Array.isArray(data.images)) data.images = data.images.filter(u => u && u.startsWith('http'));
       await setDoc(doc(fsDb, 'users', uid, 'moments', m.id), data);
     }
@@ -2745,13 +2892,16 @@ async function syncToCloud() {
     }
 
     const album = await dbGetAll('album');
+    let localPhotos = 0;
     for (const p of album) {
       const data = {...p};
-      if (data.url && data.url.startsWith('data:')) data.url = '__local__';
+      if (data.url && data.url.startsWith('data:')) { data.url = '__local__'; localPhotos++; }
       await setDoc(doc(fsDb, 'users', uid, 'album', p.id), data);
     }
 
-    toast(`✅ 同步完成！${contacts.length} 个助手，${chats.length} 个对话，${memories.length} 条记忆，${moments.length} 条朋友圈，${album.length} 张相册`);
+    let msg = `✅ 同步完成！${contacts.length}个助手，${chats.length}个对话（${totalMsgs}条消息），${memories.length}条记忆，${moments.length}条朋友圈，${album.length}张相册`;
+    if (localPhotos > 0 && !hasCloudinary) msg += `\n⚠️ ${localPhotos}张照片是本地上传的，未配置Cloudinary故无法跨设备同步`;
+    toast(msg);
   } catch(e) {
     toast('❌ 同步失败：' + e.message);
     console.error(e);
@@ -2774,6 +2924,10 @@ async function restoreFromCloud() {
     for (const d of chatsSnap.docs) {
       const data = d.data(); await dbPut('chats', data); S._chats[data.id] = data;
     }
+    // restore messages
+    const msgsSnap = await getDocs(collection(fsDb, 'users', uid, 'messages'));
+    for (const d of msgsSnap.docs) { await dbPut('messages', d.data()); }
+
     const memsSnap = await getDocs(collection(fsDb, 'users', uid, 'memories'));
     for (const d of memsSnap.docs) {
       const data = d.data(); await dbPut('memories', data);

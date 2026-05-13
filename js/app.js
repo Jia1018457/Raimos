@@ -74,6 +74,10 @@ let S = {
     // ── 个人信息 ──
     city:'', backendUrl:'',
     refChatEnabled:false, refChatCount:5, refMemEnabled:true,
+    // 后台任务使用的助手 ID
+    proContactId:'',      // 主动消息用哪个助手
+    momentContactId:'',   // 朋友圈用哪个助手
+    commentContactId:'',  // 评论回复用哪个助手（fallback）
 
     // ── 表情包库 ──
     stickerLibKey:'', stickerCallPrompt:'',
@@ -2417,7 +2421,14 @@ function buildSettingsUI() {
       <div class="s-row"><label>显示 AI 头像</label><label class="toggle"><input type="checkbox" id="s-show-ai-av" ${s.showAiAvatar!==false?'checked':''}><span class="tslider"></span></label></div>
     </div>
     <div class="s-section" hidden><h3>🐾 主动消息</h3>
+      <div style="font-size:11px;color:var(--text3);margin-bottom:8px">需要部署后台服务（Railway）才能离线触发</div>
       <div class="s-row"><label>启用</label><label class="toggle"><input type="checkbox" id="s-proactive" ${s.proactive?'checked':''}><span class="tslider"></span></label></div>
+      <div class="s-row"><label>发消息的助手</label>
+        <select id="s-pro-contact" style="flex:1">
+          <option value="">-- 请选择 --</option>
+          ${Object.values(S._contacts).map(c=>`<option value="${c.id}" ${s.proContactId===c.id?'selected':''}>${esc(c.name)}</option>`).join('')}
+        </select>
+      </div>
       <div class="s-row"><label>每天最多</label><input type="number" id="s-pro-max" value="${s.proMax||3}" min="1" max="20" style="max-width:60px"/> 次</div>
       <div class="s-row"><label>活跃时段</label><input type="number" id="s-pro-start" value="${s.proStart??8}" min="0" max="23" style="max-width:55px"/><span style="color:var(--text3);font-size:11px">:00 ~</span><input type="number" id="s-pro-end" value="${s.proEnd??22}" min="0" max="23" style="max-width:55px"/><span style="color:var(--text3);font-size:11px">:00</span></div>
     </div>
@@ -2426,6 +2437,12 @@ function buildSettingsUI() {
       <div class="s-row"><label>我的相册</label><button class="btn-s" onclick="openAlbumModal()">🖼️ 管理相册（AI发圈用图）</button></div>
       <div class="s-row"><label>启用朋友圈</label><label class="toggle"><input type="checkbox" id="s-moments-enabled" ${s.momentsEnabled?'checked':''}><span class="tslider"></span></label></div>
       <div class="s-row"><label>AI 自动发圈</label><label class="toggle"><input type="checkbox" id="s-auto-post" ${s.autoPost?'checked':''}><span class="tslider"></span></label></div>
+      <div class="s-row"><label>发圈的助手</label>
+        <select id="s-moment-contact" style="flex:1">
+          <option value="">-- 请选择 --</option>
+          ${Object.values(S._contacts).map(c=>`<option value="${c.id}" ${s.momentContactId===c.id?'selected':''}>${esc(c.name)}</option>`).join('')}
+        </select>
+      </div>
       <div class="s-row"><label>发圈频率</label>
         <select id="s-moment-freq-mode" style="max-width:90px">
           <option value="perDay" ${(s.momentFreqMode||'perWeek')==='perDay'?'selected':''}>每天</option>
@@ -2563,6 +2580,8 @@ async function saveAllSettings(){
   s.imgSize=parseInt(get('s-imgsize','800'));s.sumThresh=parseInt(get('s-sumthresh','40'));
   s.proactive=getB('s-proactive');s.proMax=parseInt(get('s-pro-max','3'));
   s.proStart=parseInt(get('s-pro-start','8'));s.proEnd=parseInt(get('s-pro-end','22'));
+  s.proContactId=get('s-pro-contact','');
+  s.momentContactId=get('s-moment-contact','');
   s.momentsEnabled=getB('s-moments-enabled');s.autoPost=getB('s-auto-post');
   s.momentFreqMode=get('s-moment-freq-mode','perWeek');s.momentFreqCount=parseInt(get('s-moment-freq-count','3'));
   s.momentPromptMode=get('s-moment-prompt-mode','add');s.momentPrompt=get('s-moment-prompt','').trim();

@@ -3,7 +3,7 @@
 // ═══════════════════════════════════════════
 
 const DB_NAME = 'raimos_db';
-const DB_VER  = 2;
+const DB_VER  = 3;
 
 const STORES = {
   chats:         { keyPath: 'id' },
@@ -12,12 +12,13 @@ const STORES = {
   memories:      { keyPath: 'id' },
   stickers:      { keyPath: 'id' },
   kwAnims:       { keyPath: 'id' },
-  moments:       { keyPath: 'id' },        // 朋友圈帖子
+  moments:       { keyPath: 'id' },
   comments:      { keyPath: 'id', indexes: [['momentId','momentId']] },
-  files:         { keyPath: 'id' },        // 图片/文件二进制
+  files:         { keyPath: 'id' },
   settings:      { keyPath: 'key' },
-  album:         { keyPath: 'id' },        // 我的相册（AI 发朋友圈用图）
-  wardrobeItems: { keyPath: 'id' },        // 换装衣柜（本地持久化）
+  album:         { keyPath: 'id' },
+  wardrobeItems: { keyPath: 'id' },
+  statusNotes:   { keyPath: 'id' },            // AI 状态留言便签
 };
 
 let _db = null;

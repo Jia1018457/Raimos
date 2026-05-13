@@ -725,3 +725,22 @@ body.comp-immersive #comp-panel{display:none;}
 .anim-emoji-rain{position:fixed;top:-60px;z-index:9002;pointer-events:none;filter:drop-shadow(0 0 10px rgba(255,255,255,.75));animation:emojiRain linear forwards;}
 @keyframes emojiRain{0%{opacity:0;transform:translateY(-10vh) rotate(0deg) scale(.75)}12%{opacity:1}100%{opacity:0;transform:translateY(112vh) rotate(360deg) scale(1.12)}}
 @media (max-width: 768px){.nav-logo{display:flex;font-size:13px;width:34px;height:34px;}}
+
+/* SPLASH SCREEN */
+#splash-screen{display:flex;}
+#splash-screen.hidden{display:none!important;}
+@keyframes splashPulse{0%,100%{opacity:.6;transform:scale(.96)}50%{opacity:1;transform:scale(1.04)}}
+
+/* STATUS NOTES DRAWER */
+#status-notes-drawer{display:flex;}
+#status-notes-drawer.hidden{display:none!important;}
+.status-note-card{background:var(--bg2);border:1.5px solid var(--border);border-radius:14px;padding:12px 13px;animation:fadeUp .25s ease-out;}
+.status-note-card.unread{border-color:var(--accent);background:color-mix(in srgb,var(--accent3) 60%,var(--bg2));}
+.status-note-meta{display:flex;align-items:center;gap:7px;margin-bottom:7px;}
+.status-note-avatar{width:28px;height:28px;border-radius:50%;border:1.5px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:16px;overflow:hidden;flex-shrink:0;}
+.status-note-avatar img{width:100%;height:100%;object-fit:cover;}
+.status-note-name{font-weight:700;font-size:12.5px;color:var(--text);}
+.status-note-time{font-size:10.5px;color:var(--text3);margin-left:auto;}
+.status-note-trigger{font-size:11px;color:var(--text3);margin-bottom:5px;display:flex;align-items:center;gap:4px;}
+.status-note-content{font-size:13.5px;line-height:1.55;color:var(--text2);}
+@keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}

@@ -9,7 +9,7 @@
 import cron from 'node-cron';
 import { db } from './firebase.js';
 import { callAI } from './ai.js';
-import { getWeather, weatherText } from './weather.js';
+import { getWeather, weatherText, geocodeCity } from './weather.js';
 
 const UID = process.env.RAIMOS_UID;
 
@@ -64,7 +64,7 @@ async function getRecentMoments(limit = 5) {
 function resolveApiKey(settings) {
   return {
     apiKey: settings.apiKey || process.env.OPENROUTER_API_KEY || '',
-    apiUrl: settings.ttsUrl || undefined, // ttsUrl is for TTS; AI URL might be stored differently
+    apiUrl: settings.apiUrl || undefined,
   };
 }
 
@@ -125,13 +125,16 @@ export function startCommentReplyListener() {
 
 async function replyToComment(comment) {
   const settings = await getSettings();
-  if (!settings.commentAutoReply) return;
+  // Support both legacy 'commentAutoReply' and new 'replyMomentComments'
+  if (!settings.replyMomentComments && !settings.commentAutoReply) return;
 
   const { apiKey } = resolveApiKey(settings);
   if (!apiKey) { console.log('[CommentReply] No API key'); return; }
 
-  const contact = await getContact(settings.commentContactId);
-  if (!contact) { console.log('[CommentReply] commentContactId not configured'); return; }
+  // Use per-comment contactId, fall back to commentContactId setting
+  const contactId = comment.contactId || settings.commentContactId;
+  const contact = await getContact(contactId);
+  if (!contact) { console.log('[CommentReply] no contact configured for comment reply'); return; }
 
   // Fetch parent moment for context
   const momentSnap = await db.doc(`users/${UID}/moments/${comment.momentId}`).get();
@@ -204,7 +207,7 @@ export async function startProactiveMessaging() {
   cron.schedule('*/5 * * * *', async () => {
     if (Date.now() < _nextProactiveTs) return;
     const s = await getSettings();
-    if (!s.proactive) return;
+    if (!s.proactive && !s.proactiveEnabled) return;
     if (!inActiveWindow(s)) {
       _nextProactiveTs = calcNextProactiveTs(s);
       return;
@@ -306,7 +309,8 @@ export async function startProactiveMoments() {
   // Check every 10 minutes
   cron.schedule('*/10 * * * *', async () => {
     const s = await getSettings();
-    if (!s.momentAutoPost) return;
+    // Support both 'autoPost' (frontend) and legacy 'momentAutoPost'
+    if (!s.autoPost && !s.momentAutoPost) return;
 
     if (!_momentSchedule.length) {
       _momentSchedule = buildMomentSchedule(s);
@@ -363,6 +367,21 @@ function buildMomentSchedule(settings, nextPeriod = false) {
   return times.filter(t => t > now).sort((a, b) => a - b);
 }
 
+async function getRecentChats(limit = 5) {
+  try {
+    const snap = await db.collection(`users/${UID}/chats`).orderBy('updatedAt', 'desc').limit(3).get();
+    const chats = snap.docs.map(d => d.data());
+    const msgs = [];
+    for (const chat of chats) {
+      const mSnap = await db.collection(`users/${UID}/messages`)
+        .where('chatId', '==', chat.id)
+        .orderBy('ts', 'desc').limit(Math.ceil(limit / chats.length)).get();
+      mSnap.docs.forEach(d => { const m = d.data(); if (m.role === 'user' && m.content) msgs.push(m.content); });
+    }
+    return msgs.slice(0, limit);
+  } catch { return []; }
+}
+
 async function postProactiveMoment(settings) {
   const { apiKey } = resolveApiKey(settings);
   if (!apiKey) return;
@@ -372,13 +391,27 @@ async function postProactiveMoment(settings) {
 
   // --- Context gathering ---
   let weatherInfo = '';
-  if (settings.weatherLat && settings.weatherLon) {
+  // Try city name first (new), fall back to lat/lon (legacy)
+  const city = settings.city || '';
+  if (city) {
+    const geo = await geocodeCity(city);
+    if (geo) {
+      const w = await getWeather(geo.lat, geo.lon);
+      if (w) weatherInfo = `${city}当前天气：${weatherText(w)}`;
+    }
+  } else if (settings.weatherLat && settings.weatherLon) {
     const w = await getWeather(Number(settings.weatherLat), Number(settings.weatherLon));
     if (w) weatherInfo = `当前天气：${weatherText(w)}`;
   }
 
-  const memories = await getMemories(15);
+  const refMem = settings.refMemEnabled !== false;
+  const memories = refMem ? await getMemories(15) : [];
   const memCtx = memories.slice(0, 8).join('；');
+
+  const refChat = settings.refChatEnabled;
+  const chatCount = Math.max(1, Number(settings.refChatCount || 5));
+  const recentChats = refChat ? await getRecentChats(chatCount) : [];
+  const chatCtx = recentChats.length ? `最近聊天内容：${recentChats.join('；')}` : '';
 
   const recentMoments = await getRecentMoments(5);
   const recentTexts = recentMoments.map(m => m.text || '').filter(Boolean);
@@ -405,6 +438,7 @@ async function postProactiveMoment(settings) {
     `现在是${partOfDay} ${timeStr}。`,
     weatherInfo,
     memCtx    ? `关于用户的记忆片段：${memCtx}` : '',
+    chatCtx,
     recentTexts.length ? `最近发过的朋友圈（避免重复）：${recentTexts.join('；')}` : '',
     imageUrl  ? '（本次将附上一张照片）' : '',
   ].filter(Boolean).join('\n');

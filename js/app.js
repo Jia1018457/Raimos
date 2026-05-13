@@ -1726,10 +1726,17 @@ function renderStickerPicker(){const c=$i('ep-content');c.innerHTML='';if(!S._st
 function toggleEmoji(e){
   if(e){e.preventDefault();e.stopPropagation();}
   const picker=$i('emoji-picker');
+  if(!picker)return;
+  const willShow = !picker.classList.contains('show');
   picker.classList.toggle('show');
+  // 手机上收起键盘，避免遮挡表情面板
+  if(willShow){
+    const focused=document.activeElement;
+    if(focused&&(focused.tagName==='INPUT'||focused.tagName==='TEXTAREA'))focused.blur();
+  }
 }
 
-function insertEmoji(e){const i=$i('msg-input');const s=i.selectionStart,end=i.selectionEnd;i.value=i.value.slice(0,s)+e+i.value.slice(end);i.selectionStart=i.selectionEnd=s+e.length;i.focus();}
+function insertEmoji(e){const i=$i('msg-input');if(!i)return;const s=i.selectionStart||0,end=i.selectionEnd||0;i.value=i.value.slice(0,s)+e+i.value.slice(end);i.selectionStart=i.selectionEnd=s+[...e].reduce((n,c)=>n+c.length,0);}
 async function sendSticker(sk){const chat=S._chats[S.currentChat];if(!chat)return;await addMsg(S.currentChat,{role:'user',type:'sticker',content:sk.content||sk.label||'',url:sk.url,isImg:sk.isImg});await renderMsgs();scrollTo_(false);$i('emoji-picker').classList.remove('show');}
 // ══════════════════════════════════════════════════════
 //  相册（照片 + 表情包合并管理）
@@ -3040,7 +3047,19 @@ async function syncToCloud() {
       await setDoc(doc(fsDb, 'users', uid, 'album', p.id), data);
     }
 
-    let msg = `✅ 同步完成！${contacts.length}个助手，${chats.length}个对话（${totalMsgs}条消息），${memories.length}条记忆，${moments.length}条朋友圈，${album.length}张相册`;
+    // 打卡目标 & 记录
+    const ckGoals = await dbGetAll('checkinGoals');
+    for (const g of ckGoals) await setDoc(doc(fsDb, 'users', uid, 'checkinGoals', g.id), g);
+    const ckRecs = await dbGetAll('checkinRecords');
+    // 只同步近 120 天
+    const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 120);
+    const cutoffStr = cutoff.toISOString().slice(0,10);
+    let ckRecCount = 0;
+    for (const r of ckRecs) {
+      if (r.date >= cutoffStr) { await setDoc(doc(fsDb, 'users', uid, 'checkinRecords', r.id), r); ckRecCount++; }
+    }
+
+    let msg = `✅ 同步完成！${contacts.length}个助手，${chats.length}个对话（${totalMsgs}条消息），${memories.length}条记忆，${moments.length}条朋友圈，${album.length}张相册，${ckGoals.length}个打卡目标（${ckRecCount}条记录）`;
     if (localPhotos > 0 && !hasCloudinary) msg += `\n⚠️ ${localPhotos}张照片是本地上传的，未配置Cloudinary故无法跨设备同步`;
     toast(msg);
   } catch(e) {
@@ -3053,51 +3072,89 @@ async function restoreFromCloud() {
   if (!window._fbUser) { toast('请先登录'); openAuthModal(); return; }
   if (!confirm('从云端恢复数据？会覆盖本地同名数据。')) return;
   const uid = window._fbUser.uid;
-  const { collection, getDocs } = window._fbLib;
+  const { collection, getDocs, doc, getDoc } = window._fbLib;
   const fsDb = window._fbDb;
   toast('⬇️ 恢复中…');
   try {
+    // 1. 设置（API Key、主题等）
+    const settingsDoc = await getDoc(doc(fsDb, 'users', uid, 'meta', 'settings'));
+    if (settingsDoc.exists()) {
+      const settingsData = settingsDoc.data();
+      for (const [k, v] of Object.entries(settingsData)) {
+        if (v !== null && v !== undefined) {
+          await setSetting(k, v);
+          S.settings[k] = v;
+        }
+      }
+      applyTheme(); applyBg(); applyBubble(); buildSettingsUI();
+    }
+
+    // 2. 联系人
     const contactsSnap = await getDocs(collection(fsDb, 'users', uid, 'contacts'));
     for (const d of contactsSnap.docs) {
       const data = d.data(); await dbPut('contacts', data); S._contacts[data.id] = data;
     }
+
+    // 3. 对话
     const chatsSnap = await getDocs(collection(fsDb, 'users', uid, 'chats'));
     for (const d of chatsSnap.docs) {
       const data = d.data(); await dbPut('chats', data); S._chats[data.id] = data;
     }
-    // restore messages
+    // 消息
     const msgsSnap = await getDocs(collection(fsDb, 'users', uid, 'messages'));
     for (const d of msgsSnap.docs) { await dbPut('messages', d.data()); }
 
+    // 4. 记忆
     const memsSnap = await getDocs(collection(fsDb, 'users', uid, 'memories'));
     for (const d of memsSnap.docs) {
       const data = d.data(); await dbPut('memories', data);
       if (!S._memories.find(m => m.id === data.id)) S._memories.push(data);
     }
+
+    // 5. 朋友圈 & 评论
     const momentsSnap = await getDocs(collection(fsDb, 'users', uid, 'moments'));
     for (const d of momentsSnap.docs) { await dbPut('moments', d.data()); }
     const commentsSnap = await getDocs(collection(fsDb, 'users', uid, 'comments'));
     for (const d of commentsSnap.docs) { await dbPut('comments', d.data()); }
+
+    // 6. 表情包
     const stickersSnap = await getDocs(collection(fsDb, 'users', uid, 'stickers'));
     for (const d of stickersSnap.docs) {
       const data = d.data();
       if (data.url !== '__local__') { await dbPut('stickers', data); if (!S._stickers.find(s=>s.id===data.id)) S._stickers.push(data); }
     }
+
+    // 7. 关键词动画
     const kwAnimsSnap = await getDocs(collection(fsDb, 'users', uid, 'kwAnims'));
     for (const d of kwAnimsSnap.docs) {
       const data = d.data();
       if (data.gifData !== '__local__') await dbPut('kwAnims', data);
     }
+
+    // 8. 相册
     const albumSnap = await getDocs(collection(fsDb, 'users', uid, 'album'));
     for (const d of albumSnap.docs) {
       const data = d.data();
       if (data.url !== '__local__') await dbPut('album', data);
     }
+
+    // 9. 打卡目标 & 记录
+    const ckGoalsSnap = await getDocs(collection(fsDb, 'users', uid, 'checkinGoals'));
+    for (const d of ckGoalsSnap.docs) { await dbPut('checkinGoals', d.data()); }
+    const ckRecsSnap = await getDocs(collection(fsDb, 'users', uid, 'checkinRecords'));
+    for (const d of ckRecsSnap.docs) { await dbPut('checkinRecords', d.data()); }
+
     S.kwAnims = await dbGetAll('kwAnims');
     renderChatList(); renderContacts(); renderMemories(); renderMoments();
-    toast('✅ 恢复完成！');
+    // 刷新打卡页面
+    if (typeof renderCheckinPage === 'function') {
+      if (typeof initCheckin === 'function') await initCheckin();
+      else await renderCheckinPage();
+    }
+    toast('✅ 恢复完成！设置、联系人、对话、打卡数据已全部恢复');
   } catch(e) {
     toast('❌ 恢复失败：' + e.message);
+    console.error(e);
   }
 }
 

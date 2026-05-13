@@ -207,7 +207,7 @@ body{font-family:'Nunito','Noto Sans SC',sans-serif;background:var(--bg);color:v
 #input-hints{display:flex;align-items:center;gap:7px;font-size:10.5px;color:var(--text3);padding:0 2px;}
 
 /* EMOJI PICKER */
-#emoji-picker{display:none;position:fixed;bottom:80px;left:10px;background:var(--bg3);border:1.5px solid var(--border);border-radius:13px;padding:7px;box-shadow:0 8px 28px var(--shadow2);z-index:300;width:280px;}
+#emoji-picker{display:none;position:fixed;bottom:80px;left:10px;background:var(--bg3);border:1.5px solid var(--border);border-radius:13px;padding:7px;box-shadow:0 8px 28px var(--shadow2);z-index:450;width:280px;}
 #emoji-picker.show{display:block;}
 .ep-tabs{display:flex;gap:3px;margin-bottom:6px;overflow-x:auto;}
 .ep-tab{padding:3px 8px;border-radius:99px;border:none;background:none;cursor:pointer;font-size:11px;font-weight:700;color:var(--text2);white-space:nowrap;transition:background .1s;}

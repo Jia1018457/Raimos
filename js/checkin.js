@@ -501,7 +501,7 @@ function openCkGoalModal(goalId) {
   CK._editingGoalId = goalId;
   const g = goalId ? CK.goals.find(x => x.id === goalId) : null;
 
-  $i('ckg-modal-title').textContent = goalId ? '✏️ 编辑目标' : '🎯 新建打卡目标';
+  $i('ckg-modal-title').innerHTML = (goalId ? '✏️ 编辑目标' : '🎯 新建打卡目标') + ' <button class="mclose" onclick="closeModal(\'ck-goal-modal\')">✕</button>';
   $i('ckg-title').value        = g?.title || '';
   $i('ckg-emoji').value        = g?.emoji || '🎯';
   $i('ckg-color').value        = g?.color || '#ff8fab';

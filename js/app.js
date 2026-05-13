@@ -466,7 +466,13 @@ async function saveContact() {
     xAiChatImageFreq: getCmSection('aichat') ? parseInt(getV('cm-x-ai-chat-freq','20')) : null,
     xAiChatImageSources: getCmSection('aichat') ? ['album','search','generate'].filter(s=>$i(`cm-x-aichat-src-${s}`)?.checked).join(',') || 'album' : null,
   };
-  await dbPut('contacts', contact);
+  try {
+    await dbPut('contacts', contact);
+  } catch(e) {
+    toast('❌ 保存失败：' + e.message);
+    console.error('[saveContact]', e);
+    return;
+  }
   S._contacts[id] = contact;
   initStatusTimers();
   initMomentTimers();
@@ -1719,9 +1725,10 @@ function openLB(url){$i('lb-img').src=url;$i('lightbox').classList.add('show');}
 //  EMOJI / STICKERS
 // ══════════════════════════════
 const EMOJIS={'😊常用':['😊','😂','🥰','😍','🤣','😭','😤','😎','🥺','😏','😅','🤔','😴','🥳','😡','😢','🤩','😮','🙄','😜','🤗','😇','🥱','😈','👻','💀','🎉','✨','💯','🫶'],'🐱动物':['🐱','🐶','🐻','🐼','🦊','🐰','🐯','🦁','🐸','🐧','🦋','🐝','🦄','🐙','🦜','🐬','🐳','🦖','🐺','🦜'],'❤️爱心':['❤️','🧡','💛','💚','💙','💜','🖤','🤍','💕','💞','💓','💗','💖','💝','💘','💟','❣️','💔','🫶','🩷'],'🍕食物':['🍕','🍔','🍟','🌮','🍜','🍣','🍩','🎂','🧁','🍦','🍎','🍊','🍋','🍇','🍓','🥑','🧋','☕','🍵','🧃'],'🌸自然':['🌸','🌺','🌻','🌹','🌷','🌿','🍀','🌾','🌈','⭐','🌙','☀️','❄️','🌊','🔥','💫','🌠','🎋','🌵','🌴'],'🎵其他':['🎵','🎶','🎸','🎹','🎤','🎧','🎮','🎲','🎯','🏆','👑','💎','🔮','🪄','🎀','🎁','🛸','🚀','⚡','🌟']};
-function initEmoji(){const tabs=$i('ep-tabs');tabs.innerHTML='';let first=true;for(const[cat,emojis]of Object.entries(EMOJIS)){const b=document.createElement('button');b.className='ep-tab'+(first?' active':'');b.textContent=cat;b.onclick=()=>{document.querySelectorAll('.ep-tab').forEach(t=>t.classList.remove('active'));b.classList.add('active');renderEmojiGrid(emojis);};tabs.appendChild(b);if(first)renderEmojiGrid(emojis);first=false;}const st=document.createElement('button');st.className='ep-tab';st.textContent='🎭表情包';st.onclick=()=>{document.querySelectorAll('.ep-tab').forEach(t=>t.classList.remove('active'));st.classList.add('active');renderStickerPicker();};tabs.appendChild(st);}
+function initEmoji(){const tabs=$i('ep-tabs');tabs.innerHTML='';let first=true;for(const[cat,emojis]of Object.entries(EMOJIS)){const b=document.createElement('button');b.className='ep-tab'+(first?' active':'');b.textContent=cat;b.onclick=()=>{document.querySelectorAll('.ep-tab').forEach(t=>t.classList.remove('active'));b.classList.add('active');renderEmojiGrid(emojis);};tabs.appendChild(b);if(first)renderEmojiGrid(emojis);first=false;}const st=document.createElement('button');st.className='ep-tab';st.textContent='🎭表情包';st.onclick=()=>{document.querySelectorAll('.ep-tab').forEach(t=>t.classList.remove('active'));st.classList.add('active');renderStickerPicker();};tabs.appendChild(st);const ab=document.createElement('button');ab.className='ep-tab';ab.textContent='📷相册';ab.onclick=()=>{document.querySelectorAll('.ep-tab').forEach(t=>t.classList.remove('active'));ab.classList.add('active');renderAlbumPicker();};tabs.appendChild(ab);}
 function renderEmojiGrid(emojis){const c=$i('ep-content');c.innerHTML='';const g=document.createElement('div');g.className='ep-grid';emojis.forEach(e=>{const b=document.createElement('button');b.className='ep-btn';b.textContent=e;b.onclick=()=>insertEmoji(e);g.appendChild(b);});c.appendChild(g);}
 function renderStickerPicker(){const c=$i('ep-content');c.innerHTML='';if(!S._stickers.length){c.innerHTML='<div style="text-align:center;padding:18px;color:var(--text3);font-size:12px">还没有表情包</div>';return;}const g=document.createElement('div');g.className='ep-sticker-grid';S._stickers.forEach(s=>{const d=document.createElement('div');d.className='ep-sticker';if(s.isImg)d.innerHTML=`<img src="${s.url}">`;else d.innerHTML=`<span>${s.content}</span>`;d.onclick=()=>sendSticker(s);g.appendChild(d);});c.appendChild(g);}
+async function renderAlbumPicker(){const c=$i('ep-content');c.innerHTML='';const photos=await dbGetAll('album');if(!photos.length){c.innerHTML='<div style="text-align:center;padding:18px;color:var(--text3);font-size:12px">相册为空<br>在相册管理中上传图片并添加标签</div>';return;}const g=document.createElement('div');g.className='ep-sticker-grid';photos.forEach(p=>{const d=document.createElement('div');d.className='ep-sticker';d.style.flexDirection='column';d.innerHTML=`<img src="${p.url}" title="${p.label||'无标签'}"><div style="font-size:9px;color:var(--text3);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:60px;text-align:center">${esc(p.label||'无标签')}</div>`;d.onclick=()=>sendSticker({url:p.url,content:p.label||'[图片]',isImg:true});g.appendChild(d);});c.appendChild(g);}
 
 function toggleEmoji(e){
   if(e){e.preventDefault();e.stopPropagation();}
@@ -3151,6 +3158,8 @@ async function restoreFromCloud() {
       if (typeof initCheckin === 'function') await initCheckin();
       else await renderCheckinPage();
     }
+    // 刷新陪伴页面（若已打开）
+    if ($i('companion-page')?.classList.contains('active')) renderCompanionPage();
     toast('✅ 恢复完成！设置、联系人、对话、打卡数据已全部恢复');
   } catch(e) {
     toast('❌ 恢复失败：' + e.message);
@@ -3180,6 +3189,7 @@ function initCompanion() {
       if (key === 'companionFreqMin' && S._companion.running) companionSetupSpeechTimer();
       if (key === 'companionMusicLoop' || key === 'companionMusicVol') applyCompanionMusicSettings();
       if (key === 'companionBgFit') applyCompanionBgFit();
+      if (key === 'companionCharType' || key === 'companionBgType') syncCompanionUIFromSettings();
       if (key !== 'companionMusicLoop' && key !== 'companionMusicVol' && key !== 'companionBgFit') void renderCompanionStage();
     };
     el.addEventListener('change', apply);

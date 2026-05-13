@@ -9,7 +9,7 @@
 import cron from 'node-cron';
 import { db } from './firebase.js';
 import { callAI } from './ai.js';
-import { getWeather, weatherText } from './weather.js';
+import { getWeather, weatherText, geocodeCity } from './weather.js';
 
 const UID = process.env.RAIMOS_UID;
 
@@ -55,6 +55,27 @@ async function getRecentMoments(limit = 5) {
       .limit(limit)
       .get();
     return snap.docs.map(d => d.data());
+  } catch {
+    return [];
+  }
+}
+
+/** Returns recent chat messages across all chats, oldest-first, formatted for context. */
+async function getRecentChatMessages(limit = 10) {
+  try {
+    const snap = await db
+      .collection(`users/${UID}/messages`)
+      .orderBy('ts', 'desc')
+      .limit(limit)
+      .get();
+    return snap.docs
+      .map(d => {
+        const m = d.data();
+        if (!m.content) return null;
+        return `${m.role === 'user' ? '用户' : 'AI'}：${m.content}`;
+      })
+      .filter(Boolean)
+      .reverse();
   } catch {
     return [];
   }
@@ -372,13 +393,23 @@ async function postProactiveMoment(settings) {
 
   // --- Context gathering ---
   let weatherInfo = '';
-  if (settings.weatherLat && settings.weatherLon) {
-    const w = await getWeather(Number(settings.weatherLat), Number(settings.weatherLon));
+  let resolvedLat = settings.weatherLat ? Number(settings.weatherLat) : null;
+  let resolvedLon = settings.weatherLon ? Number(settings.weatherLon) : null;
+  if (!resolvedLat && settings.city) {
+    const coords = await geocodeCity(settings.city);
+    if (coords) { resolvedLat = coords.lat; resolvedLon = coords.lon; }
+  }
+  if (resolvedLat && resolvedLon) {
+    const w = await getWeather(resolvedLat, resolvedLon);
     if (w) weatherInfo = `当前天气：${weatherText(w)}`;
   }
 
-  const memories = await getMemories(15);
-  const memCtx = memories.slice(0, 8).join('；');
+  const useMemory = settings.momentUseMemory !== false;
+  const memCtx = useMemory ? (await getMemories(15)).slice(0, 8).join('；') : '';
+
+  const useRecentChats = !!settings.momentUseRecentChats;
+  const recentChatCount = Math.min(50, Math.max(1, Number(settings.momentRecentChatsCount ?? 10)));
+  const recentChats = useRecentChats ? await getRecentChatMessages(recentChatCount) : [];
 
   const recentMoments = await getRecentMoments(5);
   const recentTexts = recentMoments.map(m => m.text || '').filter(Boolean);
@@ -404,9 +435,10 @@ async function postProactiveMoment(settings) {
   const contextLines = [
     `现在是${partOfDay} ${timeStr}。`,
     weatherInfo,
-    memCtx    ? `关于用户的记忆片段：${memCtx}` : '',
+    memCtx         ? `关于用户的记忆片段：${memCtx}` : '',
+    recentChats.length ? `近期聊天记录（供参考，感受用户近况和心情）：\n${recentChats.join('\n')}` : '',
     recentTexts.length ? `最近发过的朋友圈（避免重复）：${recentTexts.join('；')}` : '',
-    imageUrl  ? '（本次将附上一张照片）' : '',
+    imageUrl       ? '（本次将附上一张照片）' : '',
   ].filter(Boolean).join('\n');
 
   const { content, tokens } = await callAI({

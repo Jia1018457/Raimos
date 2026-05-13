@@ -146,21 +146,26 @@ async function renderCkCalendar() {
   for (let d = 1; d <= daysInMonth; d++) {
     const ds  = `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
     const rec = recMap[ds];
-    const done = !!rec?.completed;
-    const isToday  = ds === today;
-    const isFuture = ds > today;
+    const done      = !!rec?.completed;
+    const totalIt   = goal.items?.length || 0;
+    const doneIt    = totalIt > 0 ? Object.values(rec?.items || {}).filter(Boolean).length : 0;
+    const partial   = !done && !!rec && totalIt > 0 && doneIt > 0;
+    const isToday   = ds === today;
+    const isFuture  = ds > today;
 
     let cls = 'ck-cal-cell';
-    if (isToday) cls += ' today';
-    if (done)    cls += ' checked';
-    if (isFuture)cls += ' future';
+    if (isToday)  cls += ' today';
+    if (done)     cls += ' checked';
+    if (partial)  cls += ' partial';
+    if (isFuture) cls += ' future';
 
-    const bgStyle = done ? `style="--cell-color:${color}"` : '';
-    html += `<div class="${cls}" ${bgStyle} onclick="ckCellClick('${ds}')">
-      <span class="ck-cell-day">${d}</span>
-      ${done ? `<span class="ck-cell-mark">✓</span>` : ''}
-      ${isToday && !done ? `<span class="ck-cell-today-dot"></span>` : ''}
-    </div>`;
+    const bgStyle = (done || partial) ? `style="--cell-color:${color}"` : '';
+    const cellInner = done
+      ? `<span class="ck-cell-day">${d}</span><span class="ck-cell-mark">✓</span>`
+      : partial
+        ? `<span class="ck-cell-day">${d}</span><span class="ck-cell-part-mark">${doneIt}/${totalIt}</span>`
+        : `<span class="ck-cell-day">${d}</span>${isToday ? `<span class="ck-cell-today-dot"></span>` : ''}`;
+    html += `<div class="${cls}" ${bgStyle} onclick="ckCellClick('${ds}')">${cellInner}</div>`;
   }
 
   html += `</div></div>`;
@@ -210,16 +215,19 @@ async function renderCkTodaySection() {
   const total  = await ckGetTotalDays(CK.activeGoalId);
   const color  = goal.color || '#ff8fab';
 
+  const totalItems = (goal.items || []).length;
+  const doneItems  = totalItems > 0 ? (goal.items || []).filter(it => rec?.items?.[it.id]) : [];
+  const doneCount  = doneItems.length;
+  const isPartial  = !!rec && !rec.completed && totalItems > 0 && doneCount > 0;
+
   let doneHtml = '';
   if (rec?.completed) {
-    const itemsDone = (goal.items || []).filter(it => rec.items?.[it.id]).length;
-    const itemsTotal = (goal.items || []).length;
     doneHtml = `
       <div class="ck-done-banner">
         <div class="ck-done-stamp" style="--stamp-color:${color}">✓</div>
         <div class="ck-done-text">
           <div class="ck-done-title">今日已打卡！</div>
-          ${itemsTotal ? `<div class="ck-done-sub">${itemsDone}/${itemsTotal} 项完成 · ${rec.progress||100}%</div>` : `<div class="ck-done-sub">${rec.progress||100}% 完成</div>`}
+          ${totalItems ? `<div class="ck-done-sub">${doneCount}/${totalItems} 项完成 · ${rec.progress||100}%</div>` : `<div class="ck-done-sub">${rec.progress||100}% 完成</div>`}
           ${rec.notes ? `<div class="ck-done-notes">"${rec.notes}"</div>` : ''}
         </div>
       </div>
@@ -227,6 +235,20 @@ async function renderCkTodaySection() {
         <button class="btn-s" onclick="openCkViewModal(null,'${today}')">📝 查看详情</button>
         ${goal.aiEnabled ? `<button class="btn-s" onclick="ckShowAiComment('${CK.activeGoalId}','${today}')">🤖 AI 点评</button>` : ''}
         <button class="btn-s" onclick="openCkGoalModal('${goal.id}')">⚙️ 目标设置</button>
+      </div>`;
+  } else if (isPartial) {
+    const itemsStatusHtml = `<div class="ck-items-preview">${goal.items.map(it => {
+      const done = !!rec.items?.[it.id];
+      return `<span class="ck-item-chip${done ? ' done' : ''}">${done ? '✅' : '⬜'} ${it.label}</span>`;
+    }).join('')}</div>`;
+    doneHtml = `
+      <div style="padding:6px 0 4px;font-size:13px;color:var(--text2)">
+        <strong>${doneCount}/${totalItems}</strong> 项已完成，还差 ${totalItems - doneCount} 项
+      </div>
+      ${itemsStatusHtml}
+      <div class="ck-action-row" style="margin-top:8px">
+        <button class="btn-p" onclick="openCkCheckinModal('${today}')">➕ 继续打卡</button>
+        <button class="btn-s" onclick="openCkViewModal(null,'${today}')">📝 查看记录</button>
       </div>`;
   } else {
     let itemsPreview = '';
@@ -343,18 +365,32 @@ async function openCkCheckinModal(date) {
   if (!goal) { toast('请先选择打卡目标'); return; }
   CK._checkinDate = date;
 
-  const dateLabel = date === ckTodayStr() ? '今天' : date;
+  const dateLabel   = date === ckTodayStr() ? '今天' : date;
   const existingRec = await ckGetRecordByDate(CK.activeGoalId, date);
+  const totalItems  = (goal.items || []).length;
+  const doneCount   = totalItems > 0 ? Object.values(existingRec?.items || {}).filter(Boolean).length : 0;
+  const isSubsequent = !!existingRec && totalItems > 0 && doneCount < totalItems;
 
   let itemsHtml = '';
   if (goal.items?.length) {
+    const doneItems      = isSubsequent ? goal.items.filter(it => existingRec?.items?.[it.id]) : [];
+    const remainingItems = isSubsequent ? goal.items.filter(it => !existingRec?.items?.[it.id]) : goal.items;
+
     itemsHtml = `<div class="ck-modal-section">
-      <div class="ck-modal-section-title">今日分项</div>
+      <div class="ck-modal-section-title">今日分项
+        ${isSubsequent ? `<span style="font-size:11px;opacity:.65;font-weight:400">（${doneCount}/${totalItems} 已完成，继续打卡剩余项）</span>` : ''}
+      </div>
       <div class="ck-checkin-items">`;
-    goal.items.forEach(item => {
-      const checked = existingRec?.items?.[item.id] ?? false;
+    doneItems.forEach(item => {
+      itemsHtml += `<label class="ck-check-label" style="opacity:.5;pointer-events:none">
+        <input type="checkbox" id="cki-${item.id}" checked disabled>
+        <span class="ck-check-box"></span>
+        <span class="ck-check-text">${item.label} ✅</span>
+      </label>`;
+    });
+    remainingItems.forEach(item => {
       itemsHtml += `<label class="ck-check-label">
-        <input type="checkbox" id="cki-${item.id}" ${checked ? 'checked' : ''}>
+        <input type="checkbox" id="cki-${item.id}">
         <span class="ck-check-box"></span>
         <span class="ck-check-text">${item.label}</span>
       </label>`;
@@ -363,13 +399,13 @@ async function openCkCheckinModal(date) {
   }
 
   const prevProgress = existingRec?.progress ?? 100;
-  const prevNotes    = existingRec?.notes ?? '';
 
   $i('ck-checkin-modal-body').innerHTML = `
     <div class="ck-modal-goal-badge" style="--goal-color:${goal.color||'#ff8fab'}">
       <span>${goal.emoji||'🎯'}</span> ${goal.title}
       <span class="ck-modal-date-tag">${dateLabel}</span>
     </div>
+    ${isSubsequent ? `<div style="font-size:12px;color:var(--text3);padding:2px 0 8px">第 ${(existingRec?.submissions?.length||0)+1} 次打卡记录</div>` : ''}
     ${itemsHtml}
     <div class="ck-modal-section">
       <div class="ck-modal-section-title">完成进度</div>
@@ -381,11 +417,11 @@ async function openCkCheckinModal(date) {
       </div>
     </div>
     <div class="ck-modal-section">
-      <div class="ck-modal-section-title">打卡备注 <span style="font-weight:400;opacity:.6">（选填${goal.aiEnabled && goal.aiCommentScopes?.includes('notes') ? '，AI 将对备注进行点评' : ''}）</span></div>
-      <textarea id="cki-notes" placeholder="今天的感受、遇到的困难、小小成就…AI 会针对你的备注给出专属点评" rows="3"
+      <div class="ck-modal-section-title">本次备注 <span style="font-weight:400;opacity:.6">（选填${goal.aiEnabled && goal.aiCommentScopes?.includes('notes') ? '，AI 将参考备注点评' : ''}）</span></div>
+      <textarea id="cki-notes" placeholder="今天的感受、遇到的困难、小小成就…" rows="3"
         style="width:100%;resize:vertical;background:var(--input-bg);border:1.5px solid var(--border);
                border-radius:10px;padding:8px 10px;font-size:13px;color:var(--text);
-               font-family:inherit;outline:none">${prevNotes}</textarea>
+               font-family:inherit;outline:none"></textarea>
     </div>`;
 
   $i('ck-checkin-modal').classList.add('show');
@@ -395,47 +431,60 @@ async function doCkCheckin() {
   const goal = CK.goals.find(g => g.id === CK.activeGoalId);
   if (!goal || !CK._checkinDate) return;
 
-  const items = {};
-  let completedCount = 0;
+  const totalItems = (goal.items || []).length;
+  const newItems = {};
   (goal.items || []).forEach(item => {
-    const checked = $i(`cki-${item.id}`)?.checked ?? false;
-    items[item.id] = checked;
-    if (checked) completedCount++;
+    newItems[item.id] = $i(`cki-${item.id}`)?.checked ?? false;
   });
-
   const progress = parseInt($i('cki-progress')?.value ?? '100');
-  const notes    = $i('cki-notes')?.value.trim() || '';
+  const notes    = ($i('cki-notes')?.value || '').trim();
 
   const existing = await ckGetRecordByDate(CK.activeGoalId, CK._checkinDate);
+
+  // Merge items (union — once checked, stays checked)
+  const mergedItems = { ...(existing?.items || {}), ...Object.fromEntries(
+    Object.entries(newItems).filter(([,v]) => v)
+  )};
+  const doneCount = totalItems > 0 ? Object.values(mergedItems).filter(Boolean).length : 0;
+  const allDone   = totalItems === 0 || doneCount >= totalItems;
+
+  // Append this submission to history
+  const submission = { ts: new Date().toISOString(), items: newItems, notes, progress };
+  const submissions = [...(existing?.submissions || []), submission];
+
   const rec = {
     id:          existing?.id || uid(),
     goalId:      CK.activeGoalId,
     date:        CK._checkinDate,
-    items,
-    progress,
+    items:       mergedItems,
+    progress:    Math.max(existing?.progress || 0, progress),
     notes,
-    completed:   true,
+    submissions,
+    completed:   allDone || (totalItems === 0 && progress > 0),
     aiComment:   existing?.aiComment || '',
     completedAt: new Date().toISOString(),
   };
 
   await dbPut('checkinRecords', rec);
-  ckSyncRecordUp(rec); // cloud sync (non-blocking)
+  ckSyncRecordUp(rec);
   closeModal('ck-checkin-modal');
 
   const today = ckTodayStr();
-  if (CK._checkinDate === today) {
+  if (CK._checkinDate === today && !existing?.completed && rec.completed) {
     await playCkStampAnim(goal);
+  } else if (!existing && CK._checkinDate === today) {
+    toast(`✅ 已记录！${totalItems > 0 ? `${doneCount}/${totalItems} 项` : `${progress}% 完成`}`);
   }
 
   await renderCheckinPage();
 
-  const totalDays  = await ckGetTotalDays(CK.activeGoalId);
-  const newBadge   = CK_MILESTONES.find(m => m.days === totalDays);
-  if (newBadge) setTimeout(() => ckShowBadgeUnlock(newBadge), 1600);
-
-  if (goal.aiEnabled && goal.aiEncourageEnabled && S.settings.apiKey) {
-    setTimeout(() => ckGenerateAiComment(CK.activeGoalId, CK._checkinDate, rec), 2200);
+  if (rec.completed && !existing?.completed) {
+    const totalDays = await ckGetTotalDays(CK.activeGoalId);
+    const newBadge = CK_MILESTONES.find(m => m.days === totalDays);
+    if (newBadge) setTimeout(() => ckShowBadgeUnlock(newBadge), 1600);
+    if (goal.aiEnabled && goal.aiEncourageEnabled && S.settings.apiKey) {
+      setTimeout(() => ckGenerateAiComment(CK.activeGoalId, CK._checkinDate, rec), 2200);
+    }
   }
 }
 
@@ -473,6 +522,15 @@ async function openCkViewModal(rec, date) {
     </div>
     ${itemsHtml}
     ${rec.notes ? `<div class="ck-view-notes">📝 ${rec.notes}</div>` : ''}
+    ${rec.submissions?.length > 1 ? `
+      <div style="margin:10px 0 4px;font-size:12px;font-weight:700;color:var(--text2)">📋 打卡记录（共 ${rec.submissions.length} 次）</div>
+      ${rec.submissions.map((sub, i) => `
+        <div style="background:var(--bg2);border-radius:8px;padding:8px 10px;margin-bottom:5px;font-size:12px;">
+          <div style="font-weight:700;color:var(--text2);margin-bottom:3px">第 ${i+1} 次 · ${sub.ts ? new Date(sub.ts).toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'}) : ''}</div>
+          ${sub.notes ? `<div style="color:var(--text3)">备注：${sub.notes}</div>` : ''}
+          ${sub.progress !== undefined ? `<div style="color:var(--text3)">进度：${sub.progress}%</div>` : ''}
+        </div>`).join('')}
+    ` : ''}
     ${rec.aiComment ? `
       <div class="ck-view-ai-block">
         <div class="ck-view-ai-label">🤖 AI 点评</div>

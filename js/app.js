@@ -3271,6 +3271,7 @@ function syncCompanionUIFromSettings() {
   const charIsUpload = (s.companionCharType || 'builtin') === 'upload';
   $i('comp-char-builtin-row') && ($i('comp-char-builtin-row').style.display = charIsUpload ? 'none' : '');
   $i('comp-char-upload-row') && ($i('comp-char-upload-row').style.display = charIsUpload ? '' : 'none');
+  if (charIsUpload && $i('comp-char-gallery') && !$i('comp-char-gallery').children.length) renderCompMediaGallery('char');
   // Size slider
   const szSlider = $i('comp-char-size');
   const szVal = Math.max(20, Math.min(100, parseInt(s.companionCharSize ?? 40, 10) || 40));
@@ -3282,6 +3283,7 @@ function syncCompanionUIFromSettings() {
   const bgIsUpload = (s.companionBgType || 'builtin') === 'upload';
   $i('comp-bg-builtin-row') && ($i('comp-bg-builtin-row').style.display = bgIsUpload ? 'none' : '');
   $i('comp-bg-upload-row') && ($i('comp-bg-upload-row').style.display = bgIsUpload ? '' : 'none');
+  if (bgIsUpload && $i('comp-bg-gallery') && !$i('comp-bg-gallery').children.length) renderCompMediaGallery('bg');
   setV('comp-bg-fit', s.companionBgFit || 'cover');
   const loop = $i('comp-music-loop'); if (loop) loop.checked = !!s.companionMusicLoop;
   const vol = $i('comp-music-vol'); if (vol) vol.value = String(cs(s.companionMusicVol, 0.6));
@@ -3462,7 +3464,105 @@ async function handleCompanionMedia(input) {
   }
   toast('✅ 已保存素材');
   renderCompanionPage();
+  if (target === 'char' || target === 'bg') renderCompMediaGallery(target);
   if (target === 'music') await applyCompanionMusicSrc();
+}
+
+async function renderCompMediaGallery(target) {
+  const el = $i(`comp-${target}-gallery`); if (!el) return;
+  const kind = target; // 'char' or 'bg'
+  const allFiles = await dbGetAll('files');
+  const files = allFiles.filter(f => f.kind === kind).sort((a,b) => (b.ts||0)-(a.ts||0));
+  const activeId = target === 'char' ? S.settings.companionCharMediaId : S.settings.companionBgMediaId;
+  el.innerHTML = '';
+
+  const uploadBtn = document.createElement('button');
+  uploadBtn.className = 'btn-s comp-media-upload-btn';
+  uploadBtn.textContent = '＋ 上传新素材';
+  uploadBtn.onclick = () => {
+    S._companion.uploadTarget = target;
+    const inp = $i('companion-media-file');
+    inp.accept = 'image/*,video/*'; inp.value = ''; inp.click();
+  };
+  el.appendChild(uploadBtn);
+
+  if (!files.length) {
+    const h = document.createElement('div');
+    h.style.cssText = 'font-size:11px;color:var(--text3);padding:4px 0';
+    h.textContent = '还没有素材，点上方上传';
+    el.appendChild(h); return;
+  }
+
+  const grid = document.createElement('div');
+  grid.className = 'comp-media-grid';
+
+  for (const f of files) {
+    const isActive = f.id === activeId;
+    const card = document.createElement('div');
+    card.className = 'comp-media-card' + (isActive ? ' active' : '');
+
+    const thumb = document.createElement('div');
+    thumb.className = 'comp-media-thumb';
+    const url = await loadMediaUrl(f.id);
+    if (url) {
+      const isVid = f.mime?.startsWith('video/');
+      const media = isVid ? document.createElement('video') : document.createElement('img');
+      media.src = url;
+      if (isVid) { media.muted = true; media.playsInline = true; media.loop = true; }
+      thumb.appendChild(media);
+    } else {
+      thumb.textContent = '📷';
+    }
+    if (isActive) {
+      const badge = document.createElement('div');
+      badge.className = 'comp-media-active-badge';
+      badge.textContent = '使用中';
+      thumb.appendChild(badge);
+    }
+    card.appendChild(thumb);
+
+    const acts = document.createElement('div');
+    acts.className = 'comp-media-actions';
+    const useBtn = document.createElement('button');
+    useBtn.className = 'btn-s'; useBtn.textContent = isActive ? '✓' : '使用';
+    if (!isActive) useBtn.onclick = () => compMediaSelect(target, f.id);
+    const delBtn = document.createElement('button');
+    delBtn.className = 'btn-s'; delBtn.style.color = '#e74c3c'; delBtn.textContent = '✕';
+    delBtn.onclick = () => compMediaDelete(target, f.id);
+    acts.appendChild(useBtn); acts.appendChild(delBtn);
+    card.appendChild(acts);
+    grid.appendChild(card);
+  }
+  el.appendChild(grid);
+}
+
+async function compMediaSelect(target, fileId) {
+  if (target === 'char') {
+    S.settings.companionCharType = 'upload'; S.settings.companionCharMediaId = fileId;
+    await saveSetting('companionCharType', 'upload'); await saveSetting('companionCharMediaId', fileId);
+    const sel = $i('comp-char-type'); if (sel) sel.value = 'upload';
+  } else {
+    S.settings.companionBgType = 'upload'; S.settings.companionBgMediaId = fileId;
+    await saveSetting('companionBgType', 'upload'); await saveSetting('companionBgMediaId', fileId);
+    const sel = $i('comp-bg-type'); if (sel) sel.value = 'upload';
+  }
+  syncCompanionUIFromSettings();
+  void renderCompanionStage();
+  renderCompMediaGallery(target);
+}
+
+async function compMediaDelete(target, fileId) {
+  if (!confirm('删除这个素材？')) return;
+  await dbDel('files', fileId);
+  const activeKey = target === 'char' ? 'companionCharMediaId' : 'companionBgMediaId';
+  const typeKey   = target === 'char' ? 'companionCharType'    : 'companionBgType';
+  if (S.settings[activeKey] === fileId) {
+    S.settings[activeKey] = ''; S.settings[typeKey] = 'builtin';
+    await saveSetting(activeKey, ''); await saveSetting(typeKey, 'builtin');
+    syncCompanionUIFromSettings();
+    void renderCompanionStage();
+  }
+  renderCompMediaGallery(target);
 }
 
 function fmtSec(sec) {

@@ -510,7 +510,13 @@ function openCkGoalModal(goalId) {
   $i('ckg-ai').checked         = g?.aiEnabled ?? true;
   $i('ckg-encourage').checked  = g?.aiEncourageEnabled ?? true;
   $i('ckg-reminder').checked   = g?.reminderEnabled ?? false;
-  $i('ckg-scope').value        = g?.aiCommentScope || 'daily';
+  // Backward-compat: old single string → array
+  const scopes = g?.aiCommentScopes || (g?.aiCommentScope ? [g.aiCommentScope] : ['daily']);
+  $i('ckg-scope-daily').checked  = scopes.includes('daily');
+  $i('ckg-scope-notes').checked  = scopes.includes('notes');
+  $i('ckg-scope-items').checked  = scopes.includes('items');
+  $i('ckg-scope-streak').checked = scopes.includes('streak');
+  $i('ckg-scope-period').checked = scopes.includes('period');
   $i('ckg-prompt-mode').value  = g?.aiPromptMode || 'assistant';
   $i('ckg-custom-prompt').value= g?.customPrompt || '';
   $i('ckg-remind-count').value = g?.reminderCount || 1;
@@ -521,6 +527,7 @@ function openCkGoalModal(goalId) {
   ckRenderItems(g?.items || []);
   ckRenderTimes(g?.reminderTimes || ['20:00']);
   ckBuildContactSel(g?.contactId || '');
+  ckPreviewContact(g?.contactId || '');
   ckToggleDuration();
   ckToggleAiSection();
   ckToggleReminderSection();
@@ -592,11 +599,24 @@ function ckBuildContactSel(selId) {
   });
 }
 
+function ckPreviewContact(contactId) {
+  const el = $i('ckg-contact-preview');
+  if (!el) return;
+  if (!contactId) { el.style.display = 'none'; return; }
+  const c = (S._contacts || {})[contactId];
+  if (!c) { el.style.display = 'none'; return; }
+  const avatar = typeof c.avatar === 'string' && c.avatar.length <= 4 ? c.avatar : '🤖';
+  el.style.display = 'block';
+  el.textContent = `${avatar} ${c.name}${c.desc ? ' · ' + c.desc : ''}`;
+}
+
 function ckToggleDuration() {
   $i('ckg-days-row').style.display = $i('ckg-duration').value === 'fixed' ? 'flex' : 'none';
 }
 function ckToggleAiSection() {
-  $i('ckg-ai-section').style.display = $i('ckg-ai').checked ? 'block' : 'none';
+  const enabled = $i('ckg-ai').checked;
+  $i('ckg-ai-section').style.display = enabled ? 'flex' : 'none';
+  if (enabled) $i('ckg-ai-details')?.setAttribute('open', '');
 }
 function ckToggleReminderSection() {
   $i('ckg-reminder-section').style.display = $i('ckg-reminder').checked ? 'block' : 'none';
@@ -606,46 +626,52 @@ function ckTogglePromptMode() {
 }
 
 async function saveCkGoal() {
-  const title = $i('ckg-title').value.trim();
-  if (!title) { toast('请填写目标名称'); return; }
+  try {
+    const title = $i('ckg-title').value.trim();
+    if (!title) { toast('请填写目标名称'); return; }
 
-  const existing = CK._editingGoalId ? CK.goals.find(g => g.id === CK._editingGoalId) : null;
-  const goal = {
-    id:               CK._editingGoalId || uid(),
-    title,
-    emoji:            $i('ckg-emoji').value || '🎯',
-    color:            $i('ckg-color').value || '#ff8fab',
-    items:            ckGetItems(),
-    durationType:     $i('ckg-duration').value,
-    durationDays:     parseInt($i('ckg-days').value || '30'),
-    startDate:        existing?.startDate || ckTodayStr(),
-    aiEnabled:        $i('ckg-ai').checked,
-    aiEncourageEnabled: $i('ckg-encourage').checked,
-    aiCommentScope:   $i('ckg-scope').value,
-    aiPromptMode:     $i('ckg-prompt-mode').value,
-    customPrompt:     $i('ckg-custom-prompt').value.trim(),
-    contactId:        $i('ckg-contact').value,
-    reminderEnabled:  $i('ckg-reminder').checked,
-    reminderTimes:    ckGetTimes(),
-    reminderCount:    parseInt($i('ckg-remind-count').value || '1'),
-    createdAt:        existing?.createdAt || new Date().toISOString(),
-  };
+    const existing = CK._editingGoalId ? CK.goals.find(g => g.id === CK._editingGoalId) : null;
+    const aiCommentScopes = ['daily','notes','items','streak','period']
+      .filter(s => $i(`ckg-scope-${s}`)?.checked);
+    const goal = {
+      id:                 CK._editingGoalId || uid(),
+      title,
+      emoji:              $i('ckg-emoji').value || '🎯',
+      color:              $i('ckg-color').value || '#ff8fab',
+      items:              ckGetItems(),
+      durationType:       $i('ckg-duration').value,
+      durationDays:       parseInt($i('ckg-days').value || '30'),
+      startDate:          existing?.startDate || ckTodayStr(),
+      aiEnabled:          $i('ckg-ai').checked,
+      aiEncourageEnabled: $i('ckg-encourage').checked,
+      aiCommentScopes,
+      aiPromptMode:       $i('ckg-prompt-mode').value,
+      customPrompt:       $i('ckg-custom-prompt').value.trim(),
+      contactId:          $i('ckg-contact').value,
+      reminderEnabled:    $i('ckg-reminder').checked,
+      reminderTimes:      ckGetTimes(),
+      reminderCount:      parseInt($i('ckg-remind-count').value || '1'),
+      createdAt:          existing?.createdAt || new Date().toISOString(),
+    };
 
-  await dbPut('checkinGoals', goal);
-  ckSyncGoalUp(goal); // cloud sync (non-blocking)
+    await dbPut('checkinGoals', goal);
+    ckSyncGoalUp(goal); // cloud sync (non-blocking)
 
-  const idx = CK.goals.findIndex(g => g.id === goal.id);
-  if (idx >= 0) CK.goals[idx] = goal;
-  else CK.goals.push(goal);
+    const idx = CK.goals.findIndex(g => g.id === goal.id);
+    if (idx >= 0) CK.goals[idx] = goal;
+    else CK.goals.push(goal);
 
-  if (!CK.activeGoalId) CK.activeGoalId = goal.id;
+    if (!CK.activeGoalId) CK.activeGoalId = goal.id;
 
-  closeModal('ck-goal-modal');
-  setupCheckinReminders();
-  // If reminders enabled, subscribe to Web Push
-  if (goal.reminderEnabled) ckSubscribePush();
-  await renderCheckinPage();
-  toast('✨ 目标已保存！');
+    closeModal('ck-goal-modal');
+    setupCheckinReminders();
+    if (goal.reminderEnabled) ckSubscribePush();
+    await renderCheckinPage();
+    toast('✨ 目标已保存！');
+  } catch (e) {
+    console.error('[saveCkGoal]', e);
+    toast('保存失败：' + e.message);
+  }
 }
 
 async function deleteCkGoal() {
@@ -799,28 +825,58 @@ async function ckGenerateAiComment(goalId, date, rec) {
 
   const total  = await ckGetTotalDays(goalId);
   const streak = await ckGetStreak(goalId);
-  const scope  = goal.aiCommentScope || 'daily';
+  // Support both old single-string and new multi-scope array
+  const scopes = goal.aiCommentScopes?.length
+    ? goal.aiCommentScopes
+    : [goal.aiCommentScope || 'daily'];
+
+  const itemsSummary = (goal.items || []).map(it =>
+    `${it.label}：${rec.items?.[it.id] ? '✅' : '❌'}`).join('，') || '';
 
   let prompt = '';
   if (goal.aiPromptMode === 'custom' && goal.customPrompt?.trim()) {
     prompt = goal.customPrompt
-      .replace('{goal}', goal.title)
-      .replace('{date}', date)
-      .replace('{streak}', streak)
-      .replace('{total}', total)
-      .replace('{progress}', rec.progress || 100)
-      .replace('{notes}', rec.notes || '无');
+      .replace(/{goal}/g,     goal.title)
+      .replace(/{date}/g,     date)
+      .replace(/{streak}/g,   streak)
+      .replace(/{total}/g,    total)
+      .replace(/{progress}/g, rec.progress || 100)
+      .replace(/{notes}/g,    rec.notes || '无')
+      .replace(/{items}/g,    itemsSummary || '无');
   } else {
-    const itemsSummary = (goal.items || []).map(it =>
-      `${it.label}：${rec.items?.[it.id] ? '✅' : '❌'}`).join('，') || '';
+    const parts = [];
 
-    if (scope === 'daily') {
-      prompt = `用户正在执行「${goal.title}」打卡目标。${date} 完成打卡，完成度 ${rec.progress||100}%。${itemsSummary ? '分项：' + itemsSummary + '。' : ''}${rec.notes ? '备注：' + rec.notes + '。' : ''}这是第 ${total} 天累计、连续第 ${streak} 天打卡。请用温暖、活泼的语气给出今日点评（50字以内），鼓励但不要太浮夸。`;
-    } else if (scope === 'milestone') {
-      prompt = `用户刚完成「${goal.title}」的第 ${total} 天打卡！请给出里程碑庆贺留言（60字以内），要有仪式感和激励感，可以加入一点幽默。`;
-    } else {
-      prompt = `用户坚持「${goal.title}」已 ${total} 天，连续 ${streak} 天。请做一段简短的阶段性总结留言（100字以内），肯定努力并给予鼓励和建议。`;
+    // base context always included
+    parts.push(`用户正在执行「${goal.title}」打卡目标。${date} 完成打卡，完成度 ${rec.progress||100}%，累计 ${total} 天，连续 ${streak} 天。`);
+
+    if (scopes.includes('items') && itemsSummary) {
+      parts.push(`分项完成情况：${itemsSummary}。`);
     }
+    if (scopes.includes('notes') && rec.notes) {
+      parts.push(`用户今日备注：「${rec.notes}」。`);
+    }
+
+    const instructions = [];
+    if (scopes.includes('daily')) {
+      instructions.push('给出今日简短鼓励点评');
+    }
+    if (scopes.includes('notes') && rec.notes) {
+      instructions.push('对用户备注内容作简短回应');
+    }
+    if (scopes.includes('items') && itemsSummary) {
+      instructions.push('对各分项完成情况逐一点评');
+    }
+    if (scopes.includes('streak') && CK_MILESTONES.some(m => m.days === streak)) {
+      instructions.push(`庆祝连续 ${streak} 天里程碑，要有仪式感`);
+    }
+    if (scopes.includes('period') && total > 0 && total % 10 === 0) {
+      instructions.push(`做第 ${total} 天的阶段性总结`);
+    }
+
+    if (!instructions.length) instructions.push('给出今日简短鼓励点评');
+
+    parts.push(`请${instructions.join('，并')}，语气温暖活泼，总长度 80 字以内。`);
+    prompt = parts.join('');
   }
 
   try {

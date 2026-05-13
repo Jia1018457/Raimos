@@ -3,19 +3,21 @@
 // ═══════════════════════════════════════════
 
 const DB_NAME = 'raimos_db';
-const DB_VER  = 1;
+const DB_VER  = 2;
 
 const STORES = {
-  chats:     { keyPath: 'id' },
-  messages:  { keyPath: 'id', indexes: [['chatId','chatId']] },
-  contacts:  { keyPath: 'id' },
-  memories:  { keyPath: 'id' },
-  stickers:  { keyPath: 'id' },
-  kwAnims:   { keyPath: 'id' },
-  moments:   { keyPath: 'id' },        // 朋友圈帖子
-  comments:  { keyPath: 'id', indexes: [['momentId','momentId']] },
-  files:     { keyPath: 'id' },        // 图片/文件二进制
-  settings:  { keyPath: 'key' },
+  chats:         { keyPath: 'id' },
+  messages:      { keyPath: 'id', indexes: [['chatId','chatId']] },
+  contacts:      { keyPath: 'id' },
+  memories:      { keyPath: 'id' },
+  stickers:      { keyPath: 'id' },
+  kwAnims:       { keyPath: 'id' },
+  moments:       { keyPath: 'id' },        // 朋友圈帖子
+  comments:      { keyPath: 'id', indexes: [['momentId','momentId']] },
+  files:         { keyPath: 'id' },        // 图片/文件二进制
+  settings:      { keyPath: 'key' },
+  album:         { keyPath: 'id' },        // 我的相册（AI 发朋友圈用图）
+  wardrobeItems: { keyPath: 'id' },        // 换装衣柜（本地持久化）
 };
 
 let _db = null;

@@ -1053,7 +1053,13 @@ function toggleEmoji(){
 
 function insertEmoji(e){const i=$i('msg-input');const s=i.selectionStart,end=i.selectionEnd;i.value=i.value.slice(0,s)+e+i.value.slice(end);i.selectionStart=i.selectionEnd=s+e.length;i.focus();}
 async function sendSticker(sk){const chat=S._chats[S.currentChat];if(!chat)return;await addMsg(S.currentChat,{role:'user',type:'sticker',content:sk.content||sk.label||'',url:sk.url,isImg:sk.isImg});await renderMsgs();scrollTo_(false);$i('emoji-picker').classList.remove('show');}
-function openStickersModal(){renderStickerLib();$i('sticker-modal').classList.add('show');}
+function openStickersModal(){
+  renderStickerLib();
+  const keyEl=$i('sticker-lib-key'),promptEl=$i('sticker-call-prompt');
+  if(keyEl)keyEl.value=S.settings.stickerLibKey||'';
+  if(promptEl)promptEl.value=S.settings.stickerCallPrompt||'';
+  $i('sticker-modal').classList.add('show');
+}
 function renderStickerLib(){const lib=$i('sticker-lib');lib.innerHTML='';S._stickers.forEach((s,i)=>{const d=document.createElement('div');d.style.cssText='position:relative;border:1.5px solid var(--border);border-radius:9px;overflow:hidden;padding:5px;';if(s.isImg)d.innerHTML=`<img src="${s.url}" style="width:100%;border-radius:6px">`;else d.innerHTML=`<div style="font-size:34px;text-align:center;padding:3px">${s.content}</div>`;if(s.label)d.innerHTML+=`<div style="font-size:9.5px;text-align:center;color:var(--text3);margin-top:2px">${esc(s.label)}</div>`;const del=document.createElement('button');del.style.cssText='position:absolute;top:-4px;right:-4px;width:16px;height:16px;border-radius:50%;background:var(--accent);color:#fff;border:none;cursor:pointer;font-size:8px;display:flex;align-items:center;justify-content:center;';del.textContent='✕';del.onclick=async()=>{await dbDel('stickers',s.id);S._stickers.splice(i,1);renderStickerLib();};d.appendChild(del);lib.appendChild(d);});}
 async function addStickerImgs(input){for(const file of input.files){const url=await new Promise(r=>{const fr=new FileReader();fr.onload=e=>r(e.target.result);fr.readAsDataURL(file);});const label=window.prompt(`给这个表情包起个标签（AI用来识别）:`)||file.name.replace(/\.\w+$/,'');const sk={id:uid(),isImg:true,url,label,content:label};await dbPut('stickers',sk);S._stickers.push(sk);}renderStickerLib();input.value='';}
 async function addTextSticker(){const t=window.prompt('输入文字/emoji表情包:');if(!t)return;const label=window.prompt('标签（AI识别用）:')||t;const sk={id:uid(),isImg:false,content:t,label};await dbPut('stickers',sk);S._stickers.push(sk);renderStickerLib();}
@@ -1123,13 +1129,17 @@ function buildSettingsUI() {
       <div class="s-row"><label>Unsplash Key (图片)</label><input type="password" id="s-unsplash" value="${s.unsplashKey||''}" placeholder="可选，朋友圈搜图"/></div>
     </div>
     <div class="s-section"><h3>☁️ 云同步</h3>
-      <div style="padding:4px 0 10px;font-size:12px;color:var(--text3)">登录后可把助手、对话、记忆同步到云端，换设备也能用。</div>
+      <div style="padding:4px 0 10px;font-size:12px;color:var(--text3)">登录后可同步：助手、对话、记忆、朋友圈、评论、表情包、关键词动画、换装衣柜、陪伴设置。图片自动上传至 Firebase Storage。</div>
       <div style="display:flex;gap:7px;flex-wrap:wrap;">
         <button class="btn-p" onclick="openAuthModal()">🔐 登录 / 注册</button>
         <button class="btn-s" onclick="syncToCloud()">☁️ 上传同步</button>
         <button class="btn-s" onclick="restoreFromCloud()">⬇️ 从云端恢复</button>
       </div>
       <div id="auth-info" style="margin-top:8px;font-size:12px;color:var(--text3)"></div>
+    </div>
+    <div class="s-section"><h3>🖼️ 我的相册</h3>
+      <div style="padding:4px 0 10px;font-size:12px;color:var(--text3)">上传照片后，AI 发朋友圈时会随机从这里取图。照片同步至 Firebase Storage。</div>
+      <button class="btn-p" onclick="openAlbumModal()">📷 管理相册</button>
     </div>
     <div class="s-section"><h3>🗣️ 语音</h3>
       <div class="s-row"><label>TTS 模式</label><select id="s-tts-mode" onchange="onTtsModeChange()"><option value="browser">浏览器 TTS (免费)</option><option value="custom">自定义 TTS 接口</option></select></div>
@@ -1207,6 +1217,7 @@ async function saveAllSettings(){
   s.fontSize=parseInt(get('s-fontsize','14'));s.bgOpacity=parseFloat(get('s-bgopa','1'));
   s.imgGenModel=get('s-imggen-model','openai/dall-e-3');
   s.userName=get('s-username','我');
+  // sticker lib config is saved separately via saveStickerLibConfig()
   document.documentElement.style.setProperty('--font-size',s.fontSize+'px');
   applyBubble();scheduleProactive();await saveSettings_();toast('✅ 设置已保存');
 }
@@ -1436,35 +1447,127 @@ function updateAuthUI(user) {
   if (ai) ai.textContent = user ? ('已登录：' + user.email) : '未登录';
 }
 
+// ── 上传 dataUrl 到 Firebase Storage，返回下载 URL ──
+async function uploadDataUrlToStorage(userId, path, dataUrl) {
+  const { ref, uploadString, getDownloadURL } = window._fbStorageLib;
+  const storageRef = ref(window._fbStorage, `users/${userId}/${path}`);
+  await uploadString(storageRef, dataUrl, 'data_url');
+  return await getDownloadURL(storageRef);
+}
+
 async function syncToCloud() {
   if (!window._fbUser) { toast('请先登录'); openAuthModal(); return; }
-  const uid = window._fbUser.uid;
+  if (!window._fbStorage || !window._fbStorageLib) { toast('❌ Storage 未初始化'); return; }
+  const userId = window._fbUser.uid;
   const { doc, setDoc } = window._fbLib;
   const fsDb = window._fbDb;
-  toast('☁️ 同步中…');
+  toast('☁️ 同步中，图片较多时请稍候…');
+
   try {
+    // 1. 设置
     const settingsData = {};
     for (const [k,v] of Object.entries(S.settings)) settingsData[k] = v ?? null;
-    await setDoc(doc(fsDb, 'users', uid, 'meta', 'settings'), settingsData);
+    await setDoc(doc(fsDb, 'users', userId, 'meta', 'settings'), settingsData);
 
+    // 2. 联系人（头像图片 → Storage）
     const contacts = await dbGetAll('contacts');
     for (const c of contacts) {
       const data = { ...c };
-      if (data.avatar && data.avatar.startsWith('data:')) data.avatar = '__local__';
-      await setDoc(doc(fsDb, 'users', uid, 'contacts', c.id), data);
+      if (data.avatar && data.avatar.startsWith('data:')) {
+        try { data.avatar = await uploadDataUrlToStorage(userId, `avatars/${c.id}`, data.avatar); }
+        catch(e) { data.avatar = '__local__'; }
+      }
+      await setDoc(doc(fsDb, 'users', userId, 'contacts', c.id), data);
     }
 
+    // 3. 对话
     const chats = await dbGetAll('chats');
-    for (const c of chats) {
-      await setDoc(doc(fsDb, 'users', uid, 'chats', c.id), c);
-    }
+    for (const c of chats) await setDoc(doc(fsDb, 'users', userId, 'chats', c.id), c);
 
+    // 4. 记忆
     const memories = await dbGetAll('memories');
-    for (const m of memories) {
-      await setDoc(doc(fsDb, 'users', uid, 'memories', m.id), m);
+    for (const m of memories) await setDoc(doc(fsDb, 'users', userId, 'memories', m.id), m);
+
+    // 5. 朋友圈（图片 → Storage）
+    const moments = await dbGetAll('moments');
+    for (const m of moments) {
+      const data = { ...m };
+      if (data.images && data.images.length) {
+        const uploaded = [];
+        for (let i = 0; i < data.images.length; i++) {
+          const imgUrl = data.images[i];
+          if (imgUrl && imgUrl.startsWith('data:')) {
+            try { uploaded.push(await uploadDataUrlToStorage(userId, `moments/${m.id}/img_${i}`, imgUrl)); }
+            catch(e) { uploaded.push(''); }
+          } else {
+            uploaded.push(imgUrl || '');
+          }
+        }
+        data.images = uploaded;
+      }
+      await setDoc(doc(fsDb, 'users', userId, 'moments', m.id), data);
     }
 
-    toast(`✅ 同步完成！${contacts.length} 个助手，${chats.length} 个对话，${memories.length} 条记忆`);
+    // 6. 评论
+    const comments = await dbGetAll('comments');
+    for (const c of comments) await setDoc(doc(fsDb, 'users', userId, 'comments', c.id), c);
+
+    // 7. 表情包（图片 → Storage）
+    const stickers = await dbGetAll('stickers');
+    for (const s of stickers) {
+      const data = { ...s };
+      if (data.isImg && data.url && data.url.startsWith('data:')) {
+        try { data.url = await uploadDataUrlToStorage(userId, `stickers/${s.id}`, data.url); }
+        catch(e) {}
+      }
+      await setDoc(doc(fsDb, 'users', userId, 'stickers', s.id), data);
+    }
+
+    // 8. 关键词动画（GIF → Storage）
+    const kwAnims = await dbGetAll('kwAnims');
+    for (const item of kwAnims) {
+      const data = { ...item };
+      if (data.type === 'gif' && data.gifData && data.gifData.startsWith('data:')) {
+        try { data.gifData = await uploadDataUrlToStorage(userId, `kwanims/${item.id}`, data.gifData); }
+        catch(e) {}
+      }
+      await setDoc(doc(fsDb, 'users', userId, 'kwanims', item.id), data);
+    }
+
+    // 9. 换装衣柜（图片 → Storage）
+    const wardrobeItems = await dbGetAll('wardrobeItems');
+    for (const item of wardrobeItems) {
+      const data = { ...item };
+      if (data.dataUrl && data.dataUrl.startsWith('data:')) {
+        try {
+          data.storageUrl = await uploadDataUrlToStorage(userId, `wardrobe/${item.id}`, data.dataUrl);
+          data.dataUrl = '';
+        } catch(e) {}
+      }
+      await setDoc(doc(fsDb, 'users', userId, 'wardrobe', item.id), data);
+    }
+
+    // 10. 我的相册（图片 → Storage）
+    const albumPhotos = await dbGetAll('album');
+    for (const p of albumPhotos) {
+      const data = { ...p };
+      if (data.dataUrl && data.dataUrl.startsWith('data:')) {
+        try {
+          data.storageUrl = await uploadDataUrlToStorage(userId, `album/${p.id}`, data.dataUrl);
+          data.dataUrl = '';
+          await dbPut('album', { ...data });
+        } catch(e) {}
+      }
+      await setDoc(doc(fsDb, 'users', userId, 'album', p.id), {
+        id: data.id, storageUrl: data.storageUrl || data.url || '', ts: data.ts
+      });
+    }
+
+    // 11. 陪伴设置
+    const companionCfg = readCompanionSettings();
+    if (companionCfg) await setDoc(doc(fsDb, 'users', userId, 'meta', 'companion'), companionCfg);
+
+    toast(`✅ 同步完成！联系人${contacts.length} 对话${chats.length} 动态${moments.length} 表情包${stickers.length} 动画${kwAnims.length} 换装${wardrobeItems.length} 相册${albumPhotos.length}`);
   } catch(e) {
     toast('❌ 同步失败：' + e.message);
     console.error(e);
@@ -1474,27 +1577,190 @@ async function syncToCloud() {
 async function restoreFromCloud() {
   if (!window._fbUser) { toast('请先登录'); openAuthModal(); return; }
   if (!confirm('从云端恢复数据？会覆盖本地同名数据。')) return;
-  const uid = window._fbUser.uid;
-  const { collection, getDocs } = window._fbLib;
+  const userId = window._fbUser.uid;
+  const { collection, getDocs, doc, getDoc } = window._fbLib;
   const fsDb = window._fbDb;
   toast('⬇️ 恢复中…');
   try {
-    const contactsSnap = await getDocs(collection(fsDb, 'users', uid, 'contacts'));
+    // 联系人
+    const contactsSnap = await getDocs(collection(fsDb, 'users', userId, 'contacts'));
     for (const d of contactsSnap.docs) {
       const data = d.data(); await dbPut('contacts', data); S._contacts[data.id] = data;
     }
-    const chatsSnap = await getDocs(collection(fsDb, 'users', uid, 'chats'));
+    // 对话
+    const chatsSnap = await getDocs(collection(fsDb, 'users', userId, 'chats'));
     for (const d of chatsSnap.docs) {
       const data = d.data(); await dbPut('chats', data); S._chats[data.id] = data;
     }
-    const memsSnap = await getDocs(collection(fsDb, 'users', uid, 'memories'));
+    // 记忆
+    const memsSnap = await getDocs(collection(fsDb, 'users', userId, 'memories'));
     for (const d of memsSnap.docs) {
       const data = d.data(); await dbPut('memories', data);
       if (!S._memories.find(m => m.id === data.id)) S._memories.push(data);
     }
-    renderChatList(); renderContacts(); renderMemories();
+    // 朋友圈
+    const momentsSnap = await getDocs(collection(fsDb, 'users', userId, 'moments'));
+    for (const d of momentsSnap.docs) await dbPut('moments', d.data());
+    // 评论
+    const commentsSnap = await getDocs(collection(fsDb, 'users', userId, 'comments'));
+    for (const d of commentsSnap.docs) await dbPut('comments', d.data());
+    // 表情包
+    S._stickers = [];
+    const stickersSnap = await getDocs(collection(fsDb, 'users', userId, 'stickers'));
+    for (const d of stickersSnap.docs) {
+      const data = d.data();
+      await dbPut('stickers', data);
+      S._stickers.push(data);
+    }
+    // 关键词动画
+    S.kwAnims = [];
+    const kwAnimsSnap = await getDocs(collection(fsDb, 'users', userId, 'kwanims'));
+    for (const d of kwAnimsSnap.docs) {
+      const data = d.data();
+      await dbPut('kwAnims', data);
+      S.kwAnims.push(data);
+    }
+    // 换装衣柜
+    const wardrobeItems = [];
+    const wardrobeSnap = await getDocs(collection(fsDb, 'users', userId, 'wardrobe'));
+    for (const d of wardrobeSnap.docs) {
+      const data = d.data();
+      if (data.storageUrl && !data.dataUrl) data.dataUrl = data.storageUrl;
+      await dbPut('wardrobeItems', data);
+      wardrobeItems.push(data);
+    }
+    // 将换装数据发送给 iframe
+    const wframe = document.getElementById('wardrobe-iframe');
+    if (wframe && wframe.contentWindow) {
+      wframe.contentWindow.postMessage({ type: 'SET_WARDROBE', items: wardrobeItems }, '*');
+    }
+    // 我的相册
+    const albumSnap = await getDocs(collection(fsDb, 'users', userId, 'album'));
+    for (const d of albumSnap.docs) {
+      const data = d.data();
+      await dbPut('album', { id: data.id, url: data.storageUrl || '', ts: data.ts || Date.now() });
+    }
+    // 陪伴设置
+    const compDoc = await getDoc(doc(fsDb, 'users', userId, 'meta', 'companion'));
+    if (compDoc.exists()) applyCompanionSettings(compDoc.data());
+
+    renderChatList(); renderContacts(); renderMemories(); renderMoments();
     toast('✅ 恢复完成！');
   } catch(e) {
     toast('❌ 恢复失败：' + e.message);
+    console.error(e);
   }
 }
+
+// ── 读取陪伴设置（从 DOM 元素） ──
+function readCompanionSettings() {
+  const get = id => { const el = document.getElementById(id); return el ? el.value : null; };
+  const getB = id => { const el = document.getElementById(id); return el ? el.checked : false; };
+  return {
+    scene: get('comp-scene'), sceneCustom: get('comp-scene-custom'),
+    contact: get('comp-contact'), freq: get('comp-freq'),
+    charType: get('comp-char-type'), charBuiltin: get('comp-char-builtin'), charSize: get('comp-char-size'),
+    bgType: get('comp-bg-type'), bgBuiltin: get('comp-bg-builtin'), bgFit: get('comp-bg-fit'),
+    musicLoop: getB('comp-music-loop'), musicVol: get('comp-music-vol'),
+    timerMode: get('comp-timer-mode'), countdownMin: get('comp-countdown-min'),
+    pomoFocus: get('comp-pomo-focus'), pomoBreak: get('comp-pomo-break'),
+  };
+}
+
+// ── 应用陪伴设置到 DOM ──
+function applyCompanionSettings(cfg) {
+  if (!cfg) return;
+  const set = (id, val) => { const el = document.getElementById(id); if (el && val != null) el.value = val; };
+  const setB = (id, val) => { const el = document.getElementById(id); if (el && val != null) el.checked = !!val; };
+  set('comp-scene', cfg.scene); set('comp-scene-custom', cfg.sceneCustom);
+  set('comp-freq', cfg.freq);
+  set('comp-char-type', cfg.charType); set('comp-char-builtin', cfg.charBuiltin); set('comp-char-size', cfg.charSize);
+  set('comp-bg-type', cfg.bgType); set('comp-bg-builtin', cfg.bgBuiltin); set('comp-bg-fit', cfg.bgFit);
+  setB('comp-music-loop', cfg.musicLoop); set('comp-music-vol', cfg.musicVol);
+  set('comp-timer-mode', cfg.timerMode); set('comp-countdown-min', cfg.countdownMin);
+  set('comp-pomo-focus', cfg.pomoFocus); set('comp-pomo-break', cfg.pomoBreak);
+}
+
+// ══════════════════════════════════════════
+//  我的相册
+// ══════════════════════════════════════════
+
+async function openAlbumModal() {
+  await renderAlbumGrid();
+  document.getElementById('album-modal').classList.add('show');
+}
+
+async function renderAlbumGrid() {
+  const photos = await dbGetAll('album');
+  photos.sort((a, b) => b.ts - a.ts);
+  const grid = document.getElementById('album-grid');
+  const countEl = document.getElementById('album-count');
+  if (countEl) countEl.textContent = `共 ${photos.length} 张`;
+  if (!grid) return;
+  grid.innerHTML = '';
+  for (const p of photos) {
+    const imgSrc = p.url || p.storageUrl || p.dataUrl || '';
+    const div = document.createElement('div');
+    div.style.cssText = 'position:relative;border-radius:9px;overflow:hidden;aspect-ratio:1;background:var(--bg2);';
+    div.innerHTML = `<img src="${imgSrc}" style="width:100%;height:100%;object-fit:cover;" loading="lazy">
+      <button onclick="deleteAlbumPhoto('${p.id}')" style="position:absolute;top:4px;right:4px;width:20px;height:20px;border-radius:50%;background:rgba(0,0,0,.55);color:#fff;border:none;cursor:pointer;font-size:10px;display:flex;align-items:center;justify-content:center;">✕</button>`;
+    grid.appendChild(div);
+  }
+}
+
+async function uploadAlbumPhotos(input) {
+  if (!input.files.length) return;
+  toast('上传中…');
+  for (const file of input.files) {
+    const dataUrl = await new Promise(r => { const fr = new FileReader(); fr.onload = e => r(e.target.result); fr.readAsDataURL(file); });
+    const photoId = uid();
+    let url = dataUrl;
+    if (window._fbUser && window._fbStorage && window._fbStorageLib) {
+      try {
+        url = await uploadDataUrlToStorage(window._fbUser.uid, `album/${photoId}`, dataUrl);
+        const { doc, setDoc } = window._fbLib;
+        await setDoc(doc(window._fbDb, 'users', window._fbUser.uid, 'album', photoId), { id: photoId, storageUrl: url, ts: Date.now() });
+      } catch(e) { url = dataUrl; }
+    }
+    await dbPut('album', { id: photoId, url, ts: Date.now() });
+  }
+  input.value = '';
+  toast('✅ 照片已上传到相册');
+  await renderAlbumGrid();
+}
+
+async function deleteAlbumPhoto(id) {
+  await dbDel('album', id);
+  await renderAlbumGrid();
+}
+
+// 供 AI 发朋友圈时随机取图
+async function getRandomAlbumPhoto() {
+  const photos = await dbGetAll('album');
+  if (!photos.length) return null;
+  const p = photos[Math.floor(Math.random() * photos.length)];
+  return p.url || p.storageUrl || p.dataUrl || null;
+}
+
+// ══════════════════════════════════════════
+//  表情包库配置
+// ══════════════════════════════════════════
+
+async function saveStickerLibConfig() {
+  S.settings.stickerLibKey = document.getElementById('sticker-lib-key')?.value?.trim() || '';
+  S.settings.stickerCallPrompt = document.getElementById('sticker-call-prompt')?.value?.trim() || '';
+  await saveSettings_();
+  toast('✅ 表情包库配置已保存');
+}
+
+// ══════════════════════════════════════════
+//  换装 ↔ 主窗口 postMessage 桥
+// ══════════════════════════════════════════
+
+window.addEventListener('message', async (e) => {
+  if (!e.data || e.data.type !== 'WARDROBE_DATA') return;
+  const items = e.data.items || [];
+  // 将衣柜数据持久化到 IndexedDB，供云同步使用
+  await dbClear('wardrobeItems');
+  for (const item of items) await dbPut('wardrobeItems', item);
+});

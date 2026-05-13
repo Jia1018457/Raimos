@@ -416,18 +416,18 @@ async function postProactiveMoment(settings) {
   const recentMoments = await getRecentMoments(5);
   const recentTexts = recentMoments.map(m => m.text || '').filter(Boolean);
 
-  // Pick a random photo from the user's album (if any)
-  let imageUrl = null;
+  // Gather album photos with labels for AI-driven selection
+  let albumPhotos = [];
   try {
     const albumSnap = await db.collection(`users/${UID}/album`).get();
-    const photos = albumSnap.docs
+    albumPhotos = albumSnap.docs
       .map(d => d.data())
-      .filter(p => p.storageUrl || p.url);
-    if (photos.length) {
-      const pick = photos[Math.floor(Math.random() * photos.length)];
-      imageUrl = pick.storageUrl || pick.url || null;
-    }
-  } catch { /* no album, skip */ }
+      .filter(p => (p.storageUrl || p.url) && (p.storageUrl || p.url).startsWith('http'));
+  } catch { /* no album */ }
+
+  const albumLabels = albumPhotos.length
+    ? `可用相册照片标签（格式：标签→图片编号）：${albumPhotos.map((p,i)=>`${p.label||'无标签'}→${i}`).join('；')}`
+    : '';
 
   const now     = new Date();
   const timeStr = `${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}`;
@@ -440,7 +440,7 @@ async function postProactiveMoment(settings) {
     memCtx    ? `关于用户的记忆片段：${memCtx}` : '',
     chatCtx,
     recentTexts.length ? `最近发过的朋友圈（避免重复）：${recentTexts.join('；')}` : '',
-    imageUrl  ? '（本次将附上一张照片）' : '',
+    albumLabels,
   ].filter(Boolean).join('\n');
 
   const { content, tokens } = await callAI({
@@ -453,19 +453,30 @@ async function postProactiveMoment(settings) {
         `${contextLines}\n\n` +
         `请写一条朋友圈文案，自然真实、像真人在分享生活。` +
         `可以聊天气、心情、日常观察、有趣的想法等。` +
-        `（30-120字，不加话题标签，不提"我是AI"）：`,
+        `（30-120字，不加话题标签，不提"我是AI"）\n\n` +
+        `${albumPhotos.length ? '如果有合适的相册照片，在文案末尾加一行：IMG:图片编号（如IMG:2），没有合适的不用加。' : ''}\n` +
+        `只输出文案内容，不要其他说明：`,
     }],
-    maxTokens: 200,
+    maxTokens: 220,
   });
 
   if (!content) return;
+
+  // Parse AI-chosen image index
+  const imgMatch = content.match(/\bIMG:(\d+)\b/);
+  let imageUrl = null;
+  let finalContent = content.replace(/\bIMG:\d+\b/g, '').trim();
+  if (imgMatch) {
+    const idx = parseInt(imgMatch[1]);
+    if (albumPhotos[idx]) imageUrl = albumPhotos[idx].storageUrl || albumPhotos[idx].url || null;
+  }
 
   const momentId = genId();
   await db.doc(`users/${UID}/moments/${momentId}`).set({
     id: momentId,
     author: contact.name,
     avatar: contact.avatar || '🤖',
-    text: content,
+    text: finalContent,
     images: imageUrl ? [imageUrl] : [],
     ts: Date.now(),
     likes: 0,

@@ -965,23 +965,16 @@
   <div class="modal wide">
     <h2 id="ckg-modal-title">🎯 新建打卡目标 <button class="mclose" onclick="closeModal('ck-goal-modal')">✕</button></h2>
 
-    <!-- Basic Info -->
-    <div class="mrow">
-      <label>目标名称</label>
-      <input type="text" id="ckg-title" placeholder="如：每日跑步、背单词…" style="flex:1"/>
-    </div>
+    <!-- 基本信息 -->
+    <div class="mrow"><label>目标名称</label><input type="text" id="ckg-title" placeholder="如：每日跑步、背单词…" style="flex:1"/></div>
     <div class="mrow">
       <label>图标 & 颜色</label>
       <div style="display:flex;gap:8px;align-items:center;flex:1;flex-wrap:wrap">
-        <input type="text" id="ckg-emoji" placeholder="🎯" maxlength="4"
-          style="width:52px;text-align:center;font-size:20px;background:var(--input-bg);border:1.5px solid var(--border);border-radius:8px;padding:5px;font-family:inherit;color:var(--text)"/>
-        <input type="color" id="ckg-color" value="#ff8fab"
-          style="width:44px;height:36px;border:none;border-radius:8px;cursor:pointer;padding:2px;background:var(--input-bg)"/>
-        <span style="font-size:11px;color:var(--text3)">日历颜色</span>
+        <input type="text" id="ckg-emoji" placeholder="🎯" maxlength="4" style="width:52px;text-align:center;font-size:20px;background:var(--input-bg);border:1.5px solid var(--border);border-radius:8px;padding:5px;font-family:inherit;color:var(--text)"/>
+        <input type="color" id="ckg-color" value="#ff8fab" style="width:44px;height:36px;border:none;border-radius:8px;cursor:pointer;padding:2px;background:var(--input-bg)"/>
+        <span style="font-size:11px;color:var(--text3)">日历打卡颜色</span>
       </div>
     </div>
-
-    <!-- Duration -->
     <div class="mrow">
       <label>坚持周期</label>
       <select id="ckg-duration" onchange="ckToggleDuration()" style="flex:1">
@@ -991,74 +984,112 @@
     </div>
     <div class="mrow" id="ckg-days-row" style="display:none">
       <label>挑战天数</label>
-      <input type="number" id="ckg-days" value="30" min="1" max="3650"
-        style="max-width:90px;background:var(--input-bg);border:1.5px solid var(--border);border-radius:8px;padding:6px 10px;font-size:13px;color:var(--text);font-family:inherit"/> 天
+      <input type="number" id="ckg-days" value="30" min="1" max="3650" style="max-width:80px;background:var(--input-bg);border:1.5px solid var(--border);border-radius:8px;padding:6px 10px;font-size:13px;color:var(--text);font-family:inherit"/> 天
     </div>
 
-    <!-- Daily Items -->
-    <div class="ckg-section">
-      <div class="ckg-section-title">每日分项（可选）</div>
-      <div id="ckg-items" style="max-height:200px;overflow-y:auto;margin-bottom:8px"></div>
+    <!-- 每日分项 -->
+    <div class="ckg-section" style="margin-top:10px">
+      <div class="ckg-section-title">每日分项打卡 <span style="font-weight:400;opacity:.6">（可选，AI 会对每项逐一点评）</span></div>
+      <div id="ckg-items" style="max-height:180px;overflow-y:auto;margin-bottom:8px"></div>
       <button class="btn-s" onclick="ckAddItemRow()">＋ 添加分项</button>
     </div>
 
-    <!-- AI Settings -->
-    <div class="mrow" style="border-top:1.5px dashed var(--border);padding-top:12px;margin-top:4px">
-      <label>AI 功能</label>
-      <label class="toggle"><input type="checkbox" id="ckg-ai" onchange="ckToggleAiSection()" checked><span class="tslider"></span></label>
-    </div>
-    <div id="ckg-ai-section" style="padding:0 0 8px">
-      <div class="ckg-section">
-        <div class="ckg-section-title">AI 助手设置</div>
-        <div class="mrow"><label>选择 AI</label><select id="ckg-contact" style="flex:1"></select></div>
-        <div class="mrow">
-          <label>打卡鼓励</label>
-          <label class="toggle"><input type="checkbox" id="ckg-encourage" checked><span class="tslider"></span></label>
-          <span style="font-size:11px;color:var(--text3);margin-left:6px">每次打卡完成自动 AI 鼓励</span>
-        </div>
-        <div class="mrow"><label>点评范围</label>
-          <select id="ckg-scope" style="flex:1">
-            <option value="daily">当天打卡留言</option>
-            <option value="milestone">里程碑留言（达到坚持天数）</option>
-            <option value="period">阶段总结留言</option>
-          </select>
-        </div>
-        <div class="mrow"><label>提示词模式</label>
-          <select id="ckg-prompt-mode" onchange="ckTogglePromptMode()" style="flex:1">
-            <option value="assistant">使用助手内置提示词</option>
-            <option value="custom">使用自定义提示词</option>
-          </select>
-        </div>
-        <div class="mrow" id="ckg-custom-prompt-row" style="display:none;align-items:flex-start">
-          <label style="padding-top:5px">自定义提示词</label>
-          <textarea id="ckg-custom-prompt" rows="3" placeholder="可用 {goal} {date} {streak} {total} {progress} {notes} 作变量"
-            style="flex:1;resize:vertical;background:var(--input-bg);border:1.5px solid var(--border);border-radius:10px;padding:8px 10px;font-size:12px;color:var(--text);font-family:inherit;outline:none"></textarea>
-        </div>
-      </div>
-    </div>
+    <!-- AI 功能 -->
+    <details class="cm-ext" style="margin-top:10px;border-top:1.5px dashed var(--border);padding-top:10px" id="ckg-ai-details">
+      <summary style="font-size:13px;font-weight:700;color:var(--accent);cursor:pointer;user-select:none;list-style:none;display:flex;align-items:center;gap:8px">
+        🤖 AI 点评功能
+        <label class="toggle" style="margin-left:auto" onclick="event.stopPropagation()">
+          <input type="checkbox" id="ckg-ai" onchange="ckToggleAiSection()"><span class="tslider"></span>
+        </label>
+        <span style="font-size:10px;color:var(--text3);font-weight:400">点击展开</span>
+      </summary>
+      <div id="ckg-ai-section" style="margin-top:10px;flex-direction:column;gap:0">
 
-    <!-- Reminder Settings -->
-    <div class="mrow" style="border-top:1.5px dashed var(--border);padding-top:12px;margin-top:4px">
-      <label>打卡提醒</label>
-      <label class="toggle"><input type="checkbox" id="ckg-reminder" onchange="ckToggleReminderSection();if(this.checked)ckRequestNotifPerm()"><span class="tslider"></span></label>
-    </div>
-    <div id="ckg-reminder-section" style="display:none;padding:0 0 8px">
-      <div class="ckg-section">
-        <div class="ckg-section-title">提醒设置</div>
+        <!-- 选择助手 -->
+        <div class="cm-sect-hdr">💬 选择 AI 助手</div>
+        <div style="padding:6px 0 10px">
+          <div class="mrow"><label>助手</label>
+            <select id="ckg-contact" style="flex:1" onchange="ckPreviewContact(this.value)">
+              <option value="">（使用全局默认）</option>
+            </select>
+          </div>
+          <div id="ckg-contact-preview" style="display:none;margin:4px 0 2px;padding:8px 10px;background:var(--hover);border-radius:10px;font-size:12px;color:var(--text2)"></div>
+        </div>
+
+        <!-- 打卡鼓励 -->
+        <div class="cm-sect-hdr">🎉 打卡完成时</div>
+        <div style="padding:6px 0 10px">
+          <div class="mrow">
+            <label>自动 AI 鼓励</label>
+            <label class="toggle"><input type="checkbox" id="ckg-encourage" checked><span class="tslider"></span></label>
+            <span style="font-size:11px;color:var(--text3);margin-left:6px">每次打卡成功后触发</span>
+          </div>
+        </div>
+
+        <!-- 点评范围（多选） -->
+        <div class="cm-sect-hdr">📋 点评范围 <span style="font-size:10px;font-weight:400;color:var(--text3)">可多选</span></div>
+        <div style="padding:6px 0 10px">
+          <div class="ckg-scope-grid">
+            <label class="ckg-scope-label"><input type="checkbox" id="ckg-scope-daily" checked><span>📅 当天打卡总结</span></label>
+            <label class="ckg-scope-label"><input type="checkbox" id="ckg-scope-notes"><span>📝 对备注进行点评</span></label>
+            <label class="ckg-scope-label"><input type="checkbox" id="ckg-scope-items"><span>✅ 分项完成情况点评</span></label>
+            <label class="ckg-scope-label"><input type="checkbox" id="ckg-scope-streak"><span>🔥 连续坚持里程碑</span></label>
+            <label class="ckg-scope-label"><input type="checkbox" id="ckg-scope-period"><span>📊 阶段性总结（每10天）</span></label>
+          </div>
+        </div>
+
+        <!-- 提示词 -->
+        <div class="cm-sect-hdr">✏️ 点评提示词</div>
+        <div style="padding:6px 0 10px">
+          <div class="mrow"><label>模式</label>
+            <select id="ckg-prompt-mode" onchange="ckTogglePromptMode()" style="flex:1">
+              <option value="assistant">使用助手内置提示词</option>
+              <option value="custom">使用独立自定义提示词</option>
+            </select>
+          </div>
+          <div id="ckg-custom-prompt-row" style="display:none;flex-direction:column;gap:6px;margin-top:4px">
+            <div style="font-size:11px;color:var(--text3);line-height:1.5">
+              可用变量：<code style="background:var(--hover);padding:1px 4px;border-radius:4px">{goal}</code>
+              <code style="background:var(--hover);padding:1px 4px;border-radius:4px">{date}</code>
+              <code style="background:var(--hover);padding:1px 4px;border-radius:4px">{streak}</code>
+              <code style="background:var(--hover);padding:1px 4px;border-radius:4px">{total}</code>
+              <code style="background:var(--hover);padding:1px 4px;border-radius:4px">{progress}</code>
+              <code style="background:var(--hover);padding:1px 4px;border-radius:4px">{notes}</code>
+              <code style="background:var(--hover);padding:1px 4px;border-radius:4px">{items}</code>
+            </div>
+            <textarea id="ckg-custom-prompt" rows="4" placeholder="例：我在坚持「{goal}」，今天第{total}天，{notes}。请用好朋友的语气鼓励我，50字以内。"
+              style="width:100%;resize:vertical;background:var(--input-bg);border:1.5px solid var(--border);border-radius:10px;padding:8px 10px;font-size:12px;color:var(--text);font-family:inherit;outline:none"></textarea>
+            <div style="font-size:11px;color:var(--text3)">💡 自定义提示词会完全替代内置逻辑，你也可以同时启用助手的系统提示词让 AI 有角色感</div>
+          </div>
+        </div>
+
+      </div>
+    </details>
+
+    <!-- 打卡提醒 -->
+    <details class="cm-ext" style="margin-top:10px;border-top:1.5px dashed var(--border);padding-top:10px">
+      <summary style="font-size:13px;font-weight:700;color:var(--accent);cursor:pointer;user-select:none;list-style:none;display:flex;align-items:center;gap:8px">
+        ⏰ 打卡提醒
+        <label class="toggle" style="margin-left:auto" onclick="event.stopPropagation()">
+          <input type="checkbox" id="ckg-reminder" onchange="ckToggleReminderSection();if(this.checked)ckRequestNotifPerm()"><span class="tslider"></span>
+        </label>
+        <span style="font-size:10px;color:var(--text3);font-weight:400">点击展开</span>
+      </summary>
+      <div id="ckg-reminder-section" style="display:none;margin-top:10px">
         <div id="ckg-times" style="margin-bottom:8px"></div>
         <button class="btn-s" onclick="ckAddTimeRow()">＋ 添加提醒时间</button>
         <div class="mrow" style="margin-top:10px">
           <label>每天最多提醒</label>
-          <input type="number" id="ckg-remind-count" value="1" min="1" max="10"
-            style="max-width:60px;background:var(--input-bg);border:1.5px solid var(--border);border-radius:8px;padding:6px 10px;font-size:13px;color:var(--text);font-family:inherit"/> 次
+          <input type="number" id="ckg-remind-count" value="1" min="1" max="10" style="max-width:60px;background:var(--input-bg);border:1.5px solid var(--border);border-radius:8px;padding:6px 10px;font-size:13px;color:var(--text);font-family:inherit"/> 次
         </div>
+        <div style="font-size:11px;color:var(--text3);margin-top:8px">需要在设置中填写后端地址，并登录才能收到离线推送</div>
       </div>
-    </div>
+    </details>
 
-    <div class="mbtns">
+    <div class="mbtns" style="margin-top:14px">
       <button class="btn-danger" id="ckg-delete-btn" onclick="deleteCkGoal()" style="display:none">🗑️ 删除目标</button>
       <button class="btn-s" onclick="closeModal('ck-goal-modal')">取消</button>
-      <button class="btn-p" onclick="saveCkGoal()">💾 保存</button>
+      <button class="btn-p" onclick="saveCkGoal()">💾 保存目标</button>
     </div>
   </div>
 </div>

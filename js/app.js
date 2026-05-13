@@ -167,6 +167,9 @@ const MODELS = [
 //  INIT
 // ══════════════════════════════
 async function init() {
+  // Request persistent storage so browser won't evict IndexedDB under quota pressure
+  if (navigator.storage?.persist) navigator.storage.persist().catch(() => {});
+
   await loadAllData();
   applyTheme();
   applyBg();
@@ -200,28 +203,34 @@ async function init() {
   updateStatusNoteBadge();
   initSplashScreen();
   if (typeof initCheckin === 'function') initCheckin();
+  if (S._dbError) setTimeout(() => toast('⚠️ 数据库加载异常，部分数据可能丢失：' + S._dbError), 800);
 }
 
 // ══════════════════════════════
 //  DATA LOAD / SAVE
 // ══════════════════════════════
 async function loadAllData() {
-  const contacts = await dbGetAll('contacts');
-  contacts.forEach(c => S._contacts[c.id] = c);
-  const chats = await dbGetAll('chats');
-  chats.forEach(c => S._chats[c.id] = c);
-  S._memories = await dbGetAll('memories');
-  S._stickers = await dbGetAll('stickers');
-  S.kwAnims = await dbGetAll('kwAnims');
-  const savedSettings = await getAllSettings();
-  Object.assign(S.settings, savedSettings);
-  S.kwAnimEnabled = savedSettings.kwAnimEnabled !== false;
-  S.myStatus = savedSettings.myStatus || '😊 在线';
-  S.currentChat = savedSettings.currentChat || null;
-  S.currentContact = savedSettings.currentContact || null;
-  S.proCount = savedSettings.proCount || 0;
-  S.proDate = savedSettings.proDate || '';
-  S._minimapOn = savedSettings.minimapOn === true;
+  try {
+    const contacts = await dbGetAll('contacts');
+    contacts.forEach(c => S._contacts[c.id] = c);
+    const chats = await dbGetAll('chats');
+    chats.forEach(c => S._chats[c.id] = c);
+    S._memories = await dbGetAll('memories');
+    S._stickers = await dbGetAll('stickers');
+    S.kwAnims = await dbGetAll('kwAnims');
+    const savedSettings = await getAllSettings();
+    Object.assign(S.settings, savedSettings);
+    S.kwAnimEnabled = savedSettings.kwAnimEnabled !== false;
+    S.myStatus = savedSettings.myStatus || '😊 在线';
+    S.currentChat = savedSettings.currentChat || null;
+    S.currentContact = savedSettings.currentContact || null;
+    S.proCount = savedSettings.proCount || 0;
+    S.proDate = savedSettings.proDate || '';
+    S._minimapOn = savedSettings.minimapOn === true;
+  } catch(e) {
+    console.error('[loadAllData] DB error:', e);
+    S._dbError = e.message;
+  }
 }
 
 async function saveSetting(key, value) {
@@ -642,13 +651,18 @@ function openWelcomeModal() {
   $i('welcome-modal').classList.add('show'); closeCtxMenu();
 }
 async function saveWelcome() {
-  S.settings.welcomeIcon = $i('wm-icon').value || '🐻';
-  S.settings.welcomeTitle = $i('wm-title').value || '你好呀！';
-  S.settings.welcomeSub = $i('wm-sub').value;
-  await saveSetting('welcomeIcon', S.settings.welcomeIcon);
-  await saveSetting('welcomeTitle', S.settings.welcomeTitle);
-  await saveSetting('welcomeSub', S.settings.welcomeSub);
-  updateWelcome(); closeModal('welcome-modal'); toast('✅ 欢迎页已更新');
+  try {
+    S.settings.welcomeIcon = $i('wm-icon').value || '🐻';
+    S.settings.welcomeTitle = $i('wm-title').value || '你好呀！';
+    S.settings.welcomeSub = $i('wm-sub').value;
+    await saveSetting('welcomeIcon', S.settings.welcomeIcon);
+    await saveSetting('welcomeTitle', S.settings.welcomeTitle);
+    await saveSetting('welcomeSub', S.settings.welcomeSub);
+    updateWelcome(); closeModal('welcome-modal'); toast('✅ 欢迎页已更新');
+  } catch(e) {
+    toast('❌ 保存失败：' + e.message);
+    console.error('[saveWelcome]', e);
+  }
 }
 
 function renderChatList(filter = '') {
@@ -2634,7 +2648,8 @@ async function saveAllSettings(){
   s.splashEnabled=getB('s-splash-enabled');
   s.splashDuration=parseInt(get('s-splash-dur','4'));
   document.documentElement.style.setProperty('--font-size',s.fontSize+'px');
-  applyBubble();scheduleProactive();initMomentTimers();await saveSettings_();toast('✅ 设置已保存');
+  applyBubble();scheduleProactive();initMomentTimers();
+  try { await saveSettings_(); toast('✅ 设置已保存'); } catch(e) { toast('❌ 设置保存失败：' + e.message); console.error('[saveAllSettings]', e); }
 }
 
 async function updateStorageInfo(){
@@ -2982,12 +2997,13 @@ function updateAuthUI(user) {
 
 async function syncToCloud() {
   if (!window._fbUser) { toast('请先登录'); openAuthModal(); return; }
+  if (!window._fbLib || !window._fbDb) { toast('⚠️ Firebase 尚未就绪，请稍后再试'); return; }
   const uid = window._fbUser.uid;
-  const { doc, setDoc } = window._fbLib;
-  const fsDb = window._fbDb;
   const hasCloudinary = S.settings.cloudinaryCloud && S.settings.cloudinaryPreset;
   toast('☁️ 同步中…');
   try {
+    const { doc, setDoc } = window._fbLib;
+    const fsDb = window._fbDb;
     const settingsData = {};
     for (const [k,v] of Object.entries(S.settings)) settingsData[k] = v ?? null;
     await setDoc(doc(fsDb, 'users', uid, 'meta', 'settings'), settingsData);
@@ -3077,12 +3093,13 @@ async function syncToCloud() {
 
 async function restoreFromCloud() {
   if (!window._fbUser) { toast('请先登录'); openAuthModal(); return; }
+  if (!window._fbLib || !window._fbDb) { toast('⚠️ Firebase 尚未就绪，请稍后再试'); return; }
   if (!confirm('从云端恢复数据？会覆盖本地同名数据。')) return;
   const uid = window._fbUser.uid;
-  const { collection, getDocs, doc, getDoc } = window._fbLib;
-  const fsDb = window._fbDb;
   toast('⬇️ 恢复中…');
   try {
+    const { collection, getDocs, doc, getDoc } = window._fbLib;
+    const fsDb = window._fbDb;
     // 1. 设置（API Key、主题等）
     const settingsDoc = await getDoc(doc(fsDb, 'users', uid, 'meta', 'settings'));
     if (settingsDoc.exists()) {

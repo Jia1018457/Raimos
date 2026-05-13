@@ -167,6 +167,9 @@ const MODELS = [
 //  INIT
 // ══════════════════════════════
 async function init() {
+  // Request persistent storage so browser won't evict IndexedDB under quota pressure
+  if (navigator.storage?.persist) navigator.storage.persist().catch(() => {});
+
   await loadAllData();
   applyTheme();
   applyBg();
@@ -200,28 +203,34 @@ async function init() {
   updateStatusNoteBadge();
   initSplashScreen();
   if (typeof initCheckin === 'function') initCheckin();
+  if (S._dbError) setTimeout(() => toast('⚠️ 数据库加载异常，部分数据可能丢失：' + S._dbError), 800);
 }
 
 // ══════════════════════════════
 //  DATA LOAD / SAVE
 // ══════════════════════════════
 async function loadAllData() {
-  const contacts = await dbGetAll('contacts');
-  contacts.forEach(c => S._contacts[c.id] = c);
-  const chats = await dbGetAll('chats');
-  chats.forEach(c => S._chats[c.id] = c);
-  S._memories = await dbGetAll('memories');
-  S._stickers = await dbGetAll('stickers');
-  S.kwAnims = await dbGetAll('kwAnims');
-  const savedSettings = await getAllSettings();
-  Object.assign(S.settings, savedSettings);
-  S.kwAnimEnabled = savedSettings.kwAnimEnabled !== false;
-  S.myStatus = savedSettings.myStatus || '😊 在线';
-  S.currentChat = savedSettings.currentChat || null;
-  S.currentContact = savedSettings.currentContact || null;
-  S.proCount = savedSettings.proCount || 0;
-  S.proDate = savedSettings.proDate || '';
-  S._minimapOn = savedSettings.minimapOn === true;
+  try {
+    const contacts = await dbGetAll('contacts');
+    contacts.forEach(c => S._contacts[c.id] = c);
+    const chats = await dbGetAll('chats');
+    chats.forEach(c => S._chats[c.id] = c);
+    S._memories = await dbGetAll('memories');
+    S._stickers = await dbGetAll('stickers');
+    S.kwAnims = await dbGetAll('kwAnims');
+    const savedSettings = await getAllSettings();
+    Object.assign(S.settings, savedSettings);
+    S.kwAnimEnabled = savedSettings.kwAnimEnabled !== false;
+    S.myStatus = savedSettings.myStatus || '😊 在线';
+    S.currentChat = savedSettings.currentChat || null;
+    S.currentContact = savedSettings.currentContact || null;
+    S.proCount = savedSettings.proCount || 0;
+    S.proDate = savedSettings.proDate || '';
+    S._minimapOn = savedSettings.minimapOn === true;
+  } catch(e) {
+    console.error('[loadAllData] DB error:', e);
+    S._dbError = e.message;
+  }
 }
 
 async function saveSetting(key, value) {
@@ -466,7 +475,13 @@ async function saveContact() {
     xAiChatImageFreq: getCmSection('aichat') ? parseInt(getV('cm-x-ai-chat-freq','20')) : null,
     xAiChatImageSources: getCmSection('aichat') ? ['album','search','generate'].filter(s=>$i(`cm-x-aichat-src-${s}`)?.checked).join(',') || 'album' : null,
   };
-  await dbPut('contacts', contact);
+  try {
+    await dbPut('contacts', contact);
+  } catch(e) {
+    toast('❌ 保存失败：' + e.message);
+    console.error('[saveContact]', e);
+    return;
+  }
   S._contacts[id] = contact;
   initStatusTimers();
   initMomentTimers();
@@ -636,13 +651,18 @@ function openWelcomeModal() {
   $i('welcome-modal').classList.add('show'); closeCtxMenu();
 }
 async function saveWelcome() {
-  S.settings.welcomeIcon = $i('wm-icon').value || '🐻';
-  S.settings.welcomeTitle = $i('wm-title').value || '你好呀！';
-  S.settings.welcomeSub = $i('wm-sub').value;
-  await saveSetting('welcomeIcon', S.settings.welcomeIcon);
-  await saveSetting('welcomeTitle', S.settings.welcomeTitle);
-  await saveSetting('welcomeSub', S.settings.welcomeSub);
-  updateWelcome(); closeModal('welcome-modal'); toast('✅ 欢迎页已更新');
+  try {
+    S.settings.welcomeIcon = $i('wm-icon').value || '🐻';
+    S.settings.welcomeTitle = $i('wm-title').value || '你好呀！';
+    S.settings.welcomeSub = $i('wm-sub').value;
+    await saveSetting('welcomeIcon', S.settings.welcomeIcon);
+    await saveSetting('welcomeTitle', S.settings.welcomeTitle);
+    await saveSetting('welcomeSub', S.settings.welcomeSub);
+    updateWelcome(); closeModal('welcome-modal'); toast('✅ 欢迎页已更新');
+  } catch(e) {
+    toast('❌ 保存失败：' + e.message);
+    console.error('[saveWelcome]', e);
+  }
 }
 
 function renderChatList(filter = '') {
@@ -1719,9 +1739,10 @@ function openLB(url){$i('lb-img').src=url;$i('lightbox').classList.add('show');}
 //  EMOJI / STICKERS
 // ══════════════════════════════
 const EMOJIS={'😊常用':['😊','😂','🥰','😍','🤣','😭','😤','😎','🥺','😏','😅','🤔','😴','🥳','😡','😢','🤩','😮','🙄','😜','🤗','😇','🥱','😈','👻','💀','🎉','✨','💯','🫶'],'🐱动物':['🐱','🐶','🐻','🐼','🦊','🐰','🐯','🦁','🐸','🐧','🦋','🐝','🦄','🐙','🦜','🐬','🐳','🦖','🐺','🦜'],'❤️爱心':['❤️','🧡','💛','💚','💙','💜','🖤','🤍','💕','💞','💓','💗','💖','💝','💘','💟','❣️','💔','🫶','🩷'],'🍕食物':['🍕','🍔','🍟','🌮','🍜','🍣','🍩','🎂','🧁','🍦','🍎','🍊','🍋','🍇','🍓','🥑','🧋','☕','🍵','🧃'],'🌸自然':['🌸','🌺','🌻','🌹','🌷','🌿','🍀','🌾','🌈','⭐','🌙','☀️','❄️','🌊','🔥','💫','🌠','🎋','🌵','🌴'],'🎵其他':['🎵','🎶','🎸','🎹','🎤','🎧','🎮','🎲','🎯','🏆','👑','💎','🔮','🪄','🎀','🎁','🛸','🚀','⚡','🌟']};
-function initEmoji(){const tabs=$i('ep-tabs');tabs.innerHTML='';let first=true;for(const[cat,emojis]of Object.entries(EMOJIS)){const b=document.createElement('button');b.className='ep-tab'+(first?' active':'');b.textContent=cat;b.onclick=()=>{document.querySelectorAll('.ep-tab').forEach(t=>t.classList.remove('active'));b.classList.add('active');renderEmojiGrid(emojis);};tabs.appendChild(b);if(first)renderEmojiGrid(emojis);first=false;}const st=document.createElement('button');st.className='ep-tab';st.textContent='🎭表情包';st.onclick=()=>{document.querySelectorAll('.ep-tab').forEach(t=>t.classList.remove('active'));st.classList.add('active');renderStickerPicker();};tabs.appendChild(st);}
+function initEmoji(){const tabs=$i('ep-tabs');tabs.innerHTML='';let first=true;for(const[cat,emojis]of Object.entries(EMOJIS)){const b=document.createElement('button');b.className='ep-tab'+(first?' active':'');b.textContent=cat;b.onclick=()=>{document.querySelectorAll('.ep-tab').forEach(t=>t.classList.remove('active'));b.classList.add('active');renderEmojiGrid(emojis);};tabs.appendChild(b);if(first)renderEmojiGrid(emojis);first=false;}const st=document.createElement('button');st.className='ep-tab';st.textContent='🎭表情包';st.onclick=()=>{document.querySelectorAll('.ep-tab').forEach(t=>t.classList.remove('active'));st.classList.add('active');renderStickerPicker();};tabs.appendChild(st);const ab=document.createElement('button');ab.className='ep-tab';ab.textContent='📷相册';ab.onclick=()=>{document.querySelectorAll('.ep-tab').forEach(t=>t.classList.remove('active'));ab.classList.add('active');renderAlbumPicker();};tabs.appendChild(ab);}
 function renderEmojiGrid(emojis){const c=$i('ep-content');c.innerHTML='';const g=document.createElement('div');g.className='ep-grid';emojis.forEach(e=>{const b=document.createElement('button');b.className='ep-btn';b.textContent=e;b.onclick=()=>insertEmoji(e);g.appendChild(b);});c.appendChild(g);}
 function renderStickerPicker(){const c=$i('ep-content');c.innerHTML='';if(!S._stickers.length){c.innerHTML='<div style="text-align:center;padding:18px;color:var(--text3);font-size:12px">还没有表情包</div>';return;}const g=document.createElement('div');g.className='ep-sticker-grid';S._stickers.forEach(s=>{const d=document.createElement('div');d.className='ep-sticker';if(s.isImg)d.innerHTML=`<img src="${s.url}">`;else d.innerHTML=`<span>${s.content}</span>`;d.onclick=()=>sendSticker(s);g.appendChild(d);});c.appendChild(g);}
+async function renderAlbumPicker(){const c=$i('ep-content');c.innerHTML='';const photos=await dbGetAll('album');if(!photos.length){c.innerHTML='<div style="text-align:center;padding:18px;color:var(--text3);font-size:12px">相册为空<br>在相册管理中上传图片并添加标签</div>';return;}const g=document.createElement('div');g.className='ep-sticker-grid';photos.forEach(p=>{const d=document.createElement('div');d.className='ep-sticker';d.style.flexDirection='column';d.innerHTML=`<img src="${p.url}" title="${p.label||'无标签'}"><div style="font-size:9px;color:var(--text3);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:60px;text-align:center">${esc(p.label||'无标签')}</div>`;d.onclick=()=>sendSticker({url:p.url,content:p.label||'[图片]',isImg:true});g.appendChild(d);});c.appendChild(g);}
 
 function toggleEmoji(e){
   if(e){e.preventDefault();e.stopPropagation();}
@@ -2627,7 +2648,8 @@ async function saveAllSettings(){
   s.splashEnabled=getB('s-splash-enabled');
   s.splashDuration=parseInt(get('s-splash-dur','4'));
   document.documentElement.style.setProperty('--font-size',s.fontSize+'px');
-  applyBubble();scheduleProactive();initMomentTimers();await saveSettings_();toast('✅ 设置已保存');
+  applyBubble();scheduleProactive();initMomentTimers();
+  try { await saveSettings_(); toast('✅ 设置已保存'); } catch(e) { toast('❌ 设置保存失败：' + e.message); console.error('[saveAllSettings]', e); }
 }
 
 async function updateStorageInfo(){
@@ -2975,12 +2997,13 @@ function updateAuthUI(user) {
 
 async function syncToCloud() {
   if (!window._fbUser) { toast('请先登录'); openAuthModal(); return; }
+  if (!window._fbLib || !window._fbDb) { toast('⚠️ Firebase 尚未就绪，请稍后再试'); return; }
   const uid = window._fbUser.uid;
-  const { doc, setDoc } = window._fbLib;
-  const fsDb = window._fbDb;
   const hasCloudinary = S.settings.cloudinaryCloud && S.settings.cloudinaryPreset;
   toast('☁️ 同步中…');
   try {
+    const { doc, setDoc } = window._fbLib;
+    const fsDb = window._fbDb;
     const settingsData = {};
     for (const [k,v] of Object.entries(S.settings)) settingsData[k] = v ?? null;
     await setDoc(doc(fsDb, 'users', uid, 'meta', 'settings'), settingsData);
@@ -3070,12 +3093,13 @@ async function syncToCloud() {
 
 async function restoreFromCloud() {
   if (!window._fbUser) { toast('请先登录'); openAuthModal(); return; }
+  if (!window._fbLib || !window._fbDb) { toast('⚠️ Firebase 尚未就绪，请稍后再试'); return; }
   if (!confirm('从云端恢复数据？会覆盖本地同名数据。')) return;
   const uid = window._fbUser.uid;
-  const { collection, getDocs, doc, getDoc } = window._fbLib;
-  const fsDb = window._fbDb;
   toast('⬇️ 恢复中…');
   try {
+    const { collection, getDocs, doc, getDoc } = window._fbLib;
+    const fsDb = window._fbDb;
     // 1. 设置（API Key、主题等）
     const settingsDoc = await getDoc(doc(fsDb, 'users', uid, 'meta', 'settings'));
     if (settingsDoc.exists()) {
@@ -3151,6 +3175,8 @@ async function restoreFromCloud() {
       if (typeof initCheckin === 'function') await initCheckin();
       else await renderCheckinPage();
     }
+    // 刷新陪伴页面（若已打开）
+    if ($i('companion-page')?.classList.contains('active')) renderCompanionPage();
     toast('✅ 恢复完成！设置、联系人、对话、打卡数据已全部恢复');
   } catch(e) {
     toast('❌ 恢复失败：' + e.message);
@@ -3180,6 +3206,7 @@ function initCompanion() {
       if (key === 'companionFreqMin' && S._companion.running) companionSetupSpeechTimer();
       if (key === 'companionMusicLoop' || key === 'companionMusicVol') applyCompanionMusicSettings();
       if (key === 'companionBgFit') applyCompanionBgFit();
+      if (key === 'companionCharType' || key === 'companionBgType') syncCompanionUIFromSettings();
       if (key !== 'companionMusicLoop' && key !== 'companionMusicVol' && key !== 'companionBgFit') void renderCompanionStage();
     };
     el.addEventListener('change', apply);
@@ -3244,6 +3271,7 @@ function syncCompanionUIFromSettings() {
   const charIsUpload = (s.companionCharType || 'builtin') === 'upload';
   $i('comp-char-builtin-row') && ($i('comp-char-builtin-row').style.display = charIsUpload ? 'none' : '');
   $i('comp-char-upload-row') && ($i('comp-char-upload-row').style.display = charIsUpload ? '' : 'none');
+  if (charIsUpload && $i('comp-char-gallery') && !$i('comp-char-gallery').children.length) renderCompMediaGallery('char');
   // Size slider
   const szSlider = $i('comp-char-size');
   const szVal = Math.max(20, Math.min(100, parseInt(s.companionCharSize ?? 40, 10) || 40));
@@ -3255,6 +3283,7 @@ function syncCompanionUIFromSettings() {
   const bgIsUpload = (s.companionBgType || 'builtin') === 'upload';
   $i('comp-bg-builtin-row') && ($i('comp-bg-builtin-row').style.display = bgIsUpload ? 'none' : '');
   $i('comp-bg-upload-row') && ($i('comp-bg-upload-row').style.display = bgIsUpload ? '' : 'none');
+  if (bgIsUpload && $i('comp-bg-gallery') && !$i('comp-bg-gallery').children.length) renderCompMediaGallery('bg');
   setV('comp-bg-fit', s.companionBgFit || 'cover');
   const loop = $i('comp-music-loop'); if (loop) loop.checked = !!s.companionMusicLoop;
   const vol = $i('comp-music-vol'); if (vol) vol.value = String(cs(s.companionMusicVol, 0.6));
@@ -3435,7 +3464,105 @@ async function handleCompanionMedia(input) {
   }
   toast('✅ 已保存素材');
   renderCompanionPage();
+  if (target === 'char' || target === 'bg') renderCompMediaGallery(target);
   if (target === 'music') await applyCompanionMusicSrc();
+}
+
+async function renderCompMediaGallery(target) {
+  const el = $i(`comp-${target}-gallery`); if (!el) return;
+  const kind = target; // 'char' or 'bg'
+  const allFiles = await dbGetAll('files');
+  const files = allFiles.filter(f => f.kind === kind).sort((a,b) => (b.ts||0)-(a.ts||0));
+  const activeId = target === 'char' ? S.settings.companionCharMediaId : S.settings.companionBgMediaId;
+  el.innerHTML = '';
+
+  const uploadBtn = document.createElement('button');
+  uploadBtn.className = 'btn-s comp-media-upload-btn';
+  uploadBtn.textContent = '＋ 上传新素材';
+  uploadBtn.onclick = () => {
+    S._companion.uploadTarget = target;
+    const inp = $i('companion-media-file');
+    inp.accept = 'image/*,video/*'; inp.value = ''; inp.click();
+  };
+  el.appendChild(uploadBtn);
+
+  if (!files.length) {
+    const h = document.createElement('div');
+    h.style.cssText = 'font-size:11px;color:var(--text3);padding:4px 0';
+    h.textContent = '还没有素材，点上方上传';
+    el.appendChild(h); return;
+  }
+
+  const grid = document.createElement('div');
+  grid.className = 'comp-media-grid';
+
+  for (const f of files) {
+    const isActive = f.id === activeId;
+    const card = document.createElement('div');
+    card.className = 'comp-media-card' + (isActive ? ' active' : '');
+
+    const thumb = document.createElement('div');
+    thumb.className = 'comp-media-thumb';
+    const url = await loadMediaUrl(f.id);
+    if (url) {
+      const isVid = f.mime?.startsWith('video/');
+      const media = isVid ? document.createElement('video') : document.createElement('img');
+      media.src = url;
+      if (isVid) { media.muted = true; media.playsInline = true; media.loop = true; }
+      thumb.appendChild(media);
+    } else {
+      thumb.textContent = '📷';
+    }
+    if (isActive) {
+      const badge = document.createElement('div');
+      badge.className = 'comp-media-active-badge';
+      badge.textContent = '使用中';
+      thumb.appendChild(badge);
+    }
+    card.appendChild(thumb);
+
+    const acts = document.createElement('div');
+    acts.className = 'comp-media-actions';
+    const useBtn = document.createElement('button');
+    useBtn.className = 'btn-s'; useBtn.textContent = isActive ? '✓' : '使用';
+    if (!isActive) useBtn.onclick = () => compMediaSelect(target, f.id);
+    const delBtn = document.createElement('button');
+    delBtn.className = 'btn-s'; delBtn.style.color = '#e74c3c'; delBtn.textContent = '✕';
+    delBtn.onclick = () => compMediaDelete(target, f.id);
+    acts.appendChild(useBtn); acts.appendChild(delBtn);
+    card.appendChild(acts);
+    grid.appendChild(card);
+  }
+  el.appendChild(grid);
+}
+
+async function compMediaSelect(target, fileId) {
+  if (target === 'char') {
+    S.settings.companionCharType = 'upload'; S.settings.companionCharMediaId = fileId;
+    await saveSetting('companionCharType', 'upload'); await saveSetting('companionCharMediaId', fileId);
+    const sel = $i('comp-char-type'); if (sel) sel.value = 'upload';
+  } else {
+    S.settings.companionBgType = 'upload'; S.settings.companionBgMediaId = fileId;
+    await saveSetting('companionBgType', 'upload'); await saveSetting('companionBgMediaId', fileId);
+    const sel = $i('comp-bg-type'); if (sel) sel.value = 'upload';
+  }
+  syncCompanionUIFromSettings();
+  void renderCompanionStage();
+  renderCompMediaGallery(target);
+}
+
+async function compMediaDelete(target, fileId) {
+  if (!confirm('删除这个素材？')) return;
+  await dbDel('files', fileId);
+  const activeKey = target === 'char' ? 'companionCharMediaId' : 'companionBgMediaId';
+  const typeKey   = target === 'char' ? 'companionCharType'    : 'companionBgType';
+  if (S.settings[activeKey] === fileId) {
+    S.settings[activeKey] = ''; S.settings[typeKey] = 'builtin';
+    await saveSetting(activeKey, ''); await saveSetting(typeKey, 'builtin');
+    syncCompanionUIFromSettings();
+    void renderCompanionStage();
+  }
+  renderCompMediaGallery(target);
 }
 
 function fmtSec(sec) {

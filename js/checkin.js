@@ -44,8 +44,13 @@ async function initCheckin() {
   CK.goals = await ckGetGoals();
   if (CK.goals.length && !CK.activeGoalId) CK.activeGoalId = CK.goals[0].id;
   setupCheckinReminders();
-  // Catch up any missed reminders from when the app was closed
   await ckCatchUpReminders();
+  // Pull latest data from cloud in background, then refresh UI
+  ckLoadFromCloud().then(() => {
+    if (document.getElementById('checkin-page')?.classList.contains('active')) {
+      renderCheckinPage();
+    }
+  });
 }
 
 // ══════════════════════════════
@@ -415,6 +420,7 @@ async function doCkCheckin() {
   };
 
   await dbPut('checkinRecords', rec);
+  ckSyncRecordUp(rec); // cloud sync (non-blocking)
   closeModal('ck-checkin-modal');
 
   const today = ckTodayStr();
@@ -626,6 +632,7 @@ async function saveCkGoal() {
   };
 
   await dbPut('checkinGoals', goal);
+  ckSyncGoalUp(goal); // cloud sync (non-blocking)
 
   const idx = CK.goals.findIndex(g => g.id === goal.id);
   if (idx >= 0) CK.goals[idx] = goal;
@@ -635,6 +642,8 @@ async function saveCkGoal() {
 
   closeModal('ck-goal-modal');
   setupCheckinReminders();
+  // If reminders enabled, subscribe to Web Push
+  if (goal.reminderEnabled) ckSubscribePush();
   await renderCheckinPage();
   toast('✨ 目标已保存！');
 }
@@ -647,6 +656,7 @@ async function deleteCkGoal() {
   await dbDel('checkinGoals', gid);
   const recs = await ckGetRecords(gid);
   for (const r of recs) await dbDel('checkinRecords', r.id);
+  ckDeleteGoalFromCloud(gid); // cloud sync (non-blocking)
 
   CK.goals = CK.goals.filter(g => g.id !== gid);
   if (CK.activeGoalId === gid) CK.activeGoalId = CK.goals[0]?.id || null;
@@ -973,4 +983,129 @@ async function ckRequestNotifPerm() {
 // ══════════════════════════════
 function ckTodayStr() {
   return new Date().toISOString().slice(0, 10);
+}
+
+// ══════════════════════════════
+//  CLOUD SYNC (Firestore)
+// ══════════════════════════════
+// Only active when the user is logged in (_fbUser set by Firebase SDK in index.html)
+
+function ckUid()       { return window._fbUser?.uid || null; }
+function ckIsLoggedIn(){ return !!ckUid(); }
+
+function ckFbDoc(path) {
+  return window._fbLib.doc(window._fbDb, path);
+}
+function ckFbCol(path) {
+  return window._fbLib.collection(window._fbDb, path);
+}
+
+// Upload one goal to Firestore
+async function ckSyncGoalUp(goal) {
+  if (!ckIsLoggedIn()) return;
+  try {
+    await window._fbLib.setDoc(ckFbDoc(`users/${ckUid()}/checkinGoals/${goal.id}`), goal);
+  } catch(e) { console.warn('[CK] syncGoal failed', e.message); }
+}
+
+// Upload one record to Firestore
+async function ckSyncRecordUp(record) {
+  if (!ckIsLoggedIn()) return;
+  try {
+    await window._fbLib.setDoc(ckFbDoc(`users/${ckUid()}/checkinRecords/${record.id}`), record);
+  } catch(e) { console.warn('[CK] syncRecord failed', e.message); }
+}
+
+// Delete goal + records from Firestore
+async function ckDeleteGoalFromCloud(goalId) {
+  if (!ckIsLoggedIn()) return;
+  try {
+    await window._fbLib.deleteDoc(ckFbDoc(`users/${ckUid()}/checkinGoals/${goalId}`));
+    const snap = await window._fbLib.getDocs(
+      window._fbLib.query(
+        ckFbCol(`users/${ckUid()}/checkinRecords`),
+        window._fbLib.where('goalId', '==', goalId)
+      )
+    );
+    for (const d of snap.docs) {
+      await window._fbLib.deleteDoc(d.ref);
+    }
+  } catch(e) { console.warn('[CK] deleteFromCloud failed', e.message); }
+}
+
+// Load goals + records from Firestore and merge into local IndexedDB
+async function ckLoadFromCloud() {
+  if (!ckIsLoggedIn()) return;
+  try {
+    // Goals
+    const goalsSnap = await window._fbLib.getDocs(ckFbCol(`users/${ckUid()}/checkinGoals`));
+    for (const d of goalsSnap.docs) {
+      const goal = d.data();
+      await dbPut('checkinGoals', goal);
+      const idx = CK.goals.findIndex(g => g.id === goal.id);
+      if (idx >= 0) CK.goals[idx] = goal;
+      else CK.goals.push(goal);
+    }
+
+    // Records — last 120 days only to keep it fast
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - 120);
+    const cutoffStr = cutoff.toISOString().slice(0, 10);
+
+    const recsSnap = await window._fbLib.getDocs(ckFbCol(`users/${ckUid()}/checkinRecords`));
+    for (const d of recsSnap.docs) {
+      const rec = d.data();
+      if (rec.date >= cutoffStr) await dbPut('checkinRecords', rec);
+    }
+
+    if (CK.goals.length && !CK.activeGoalId) CK.activeGoalId = CK.goals[0].id;
+  } catch(e) { console.warn('[CK] loadFromCloud failed', e.message); }
+}
+
+// ══════════════════════════════
+//  WEB PUSH SUBSCRIPTION
+// ══════════════════════════════
+
+// Call this when the user enables reminders on any goal
+async function ckSubscribePush() {
+  if (!ckIsLoggedIn()) return;
+  const backendUrl = (window.S?.settings?.backendUrl || '').trim();
+  if (!backendUrl) return;
+
+  try {
+    // 1. Get VAPID public key from our backend
+    const keyRes = await fetch(`${backendUrl}/vapid-public-key`);
+    if (!keyRes.ok) return;
+    const { publicKey } = await keyRes.json();
+    if (!publicKey) return;
+
+    // 2. Request notification permission
+    if (Notification?.permission === 'default') {
+      await Notification.requestPermission();
+    }
+    if (Notification?.permission !== 'granted') return;
+
+    // 3. Subscribe via Service Worker
+    const reg = await navigator.serviceWorker?.ready;
+    if (!reg?.pushManager) return;
+
+    const existing = await reg.pushManager.getSubscription();
+    const sub = existing || await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: ckUrlBase64ToUint8Array(publicKey),
+    });
+
+    // 4. POST subscription to backend → saved in Firestore
+    await fetch(`${backendUrl}/push/subscribe`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ uid: ckUid(), subscription: sub.toJSON() }),
+    });
+  } catch(e) { console.warn('[CK] subscribePush failed', e.message); }
+}
+
+function ckUrlBase64ToUint8Array(b64) {
+  const pad  = '='.repeat((4 - b64.length % 4) % 4);
+  const raw  = atob((b64 + pad).replace(/-/g, '+').replace(/_/g, '/'));
+  return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
 }

@@ -16,5 +16,10 @@
     "node-cron": "^3.0.3",
     "node-fetch": "^3.3.2",
     "web-push": "^3.6.7"
+  },
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js",
+    "gen-vapid-keys": "web-push generate-vapid-keys"
   }
 }

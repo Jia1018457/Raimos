@@ -1,16 +1,17 @@
 /**
  * Raimos Backend Tasks
  *
- * Task 1 – commentReply    : Firestore listener → AI replies to user comments on Moments
- * Task 2 – proactiveMsg    : Scheduler → AI sends proactive chat messages
- * Task 3 – proactiveMoment : Scheduler (random distribution) → AI posts Moments
+ * Task 1 – commentReply      : Firestore listener → AI replies to user comments on Moments
+ * Task 2 – proactiveMsg      : Scheduler → AI sends proactive chat messages
+ * Task 3 – proactiveMoment   : Scheduler (random distribution) → AI posts Moments
+ * Task 4 – checkinReminders  : Scheduler → Web Push when check-in time arrives & goal unpunched
  */
 
 import cron from 'node-cron';
 import { db } from './firebase.js';
 import { callAI } from './ai.js';
 import { getWeather, weatherText, geocodeCity } from './weather.js';
-import webPush from 'web-push';
+import { sendPushToUser } from './push.js';
 
 const UID = process.env.RAIMOS_UID;
 
@@ -522,4 +523,77 @@ async function postProactiveMoment(settings) {
 
   await sendPush(`🌸 ${contact.name} 发了朋友圈`, finalContent.slice(0, 80), 'proactive-moment');
   console.log(`[ProactiveMoment] ✓ Posted by ${contact.name}: "${content.slice(0, 50)}"`);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  TASK 4 — Check-in Reminders (Web Push)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+export function startCheckinReminders() {
+  console.log('[CheckinReminder] Started — polling every 5 min');
+
+  // Run once immediately on startup (catches any missed reminders)
+  fireCheckinReminders().catch(e => console.error('[CheckinReminder] Startup check:', e.message));
+
+  // Then every 5 minutes
+  cron.schedule('*/5 * * * *', () => {
+    fireCheckinReminders().catch(e =>
+      console.error('[CheckinReminder] Error:', e.message)
+    );
+  });
+}
+
+async function fireCheckinReminders() {
+  const now   = new Date();
+  const nowM  = now.getHours() * 60 + now.getMinutes();
+  const today = now.toISOString().slice(0, 10);
+
+  // Load all check-in goals for this user
+  let goalsSnap;
+  try {
+    goalsSnap = await db.collection(`users/${UID}/checkinGoals`).get();
+  } catch (e) {
+    console.warn('[CheckinReminder] Could not read goals:', e.message);
+    return;
+  }
+  if (goalsSnap.empty) return;
+
+  for (const gDoc of goalsSnap.docs) {
+    const goal = gDoc.data();
+    if (!goal.reminderEnabled || !goal.reminderTimes?.length) continue;
+
+    // Is any reminder time within ±3 minutes of now?
+    const shouldFire = goal.reminderTimes.some(t => {
+      const [h, m] = t.split(':').map(Number);
+      return Math.abs(h * 60 + m - nowM) <= 3;
+    });
+    if (!shouldFire) continue;
+
+    // Has the user already checked in today for this goal?
+    try {
+      const recsSnap = await db
+        .collection(`users/${UID}/checkinRecords`)
+        .where('goalId', '==', goal.id)
+        .get();
+      const alreadyDone = recsSnap.docs.some(d => {
+        const r = d.data();
+        return r.date === today && r.completed === true;
+      });
+      if (alreadyDone) continue;
+    } catch (e) {
+      console.warn('[CheckinReminder] Could not read records:', e.message);
+      continue;
+    }
+
+    // Fire!
+    await sendPushToUser(UID, {
+      title: `打卡提醒 · ${goal.emoji || '🎯'} ${goal.title}`,
+      body:  '今天还没打卡哦，坚持才能看到改变 💪',
+      icon:  '/icon-192.png',
+      badge: '/icon-192.png',
+      tag:   `ck-${goal.id}-${today}`,
+      url:   '/',
+    });
+    console.log(`[CheckinReminder] ✓ Push sent — goal="${goal.title}" time=${now.toLocaleTimeString()}`);
+  }
 }

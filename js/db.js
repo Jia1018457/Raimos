@@ -3,22 +3,24 @@
 // ═══════════════════════════════════════════
 
 const DB_NAME = 'raimos_db';
-const DB_VER  = 3;
+const DB_VER  = 4;
 
 const STORES = {
-  chats:         { keyPath: 'id' },
-  messages:      { keyPath: 'id', indexes: [['chatId','chatId']] },
-  contacts:      { keyPath: 'id' },
-  memories:      { keyPath: 'id' },
-  stickers:      { keyPath: 'id' },
-  kwAnims:       { keyPath: 'id' },
-  moments:       { keyPath: 'id' },
-  comments:      { keyPath: 'id', indexes: [['momentId','momentId']] },
-  files:         { keyPath: 'id' },
-  settings:      { keyPath: 'key' },
-  album:         { keyPath: 'id' },
-  wardrobeItems: { keyPath: 'id' },
-  statusNotes:   { keyPath: 'id' },            // AI 状态留言便签
+  chats:          { keyPath: 'id' },
+  messages:       { keyPath: 'id', indexes: [['chatId','chatId']] },
+  contacts:       { keyPath: 'id' },
+  memories:       { keyPath: 'id' },
+  stickers:       { keyPath: 'id' },
+  kwAnims:        { keyPath: 'id' },
+  moments:        { keyPath: 'id' },
+  comments:       { keyPath: 'id', indexes: [['momentId','momentId']] },
+  files:          { keyPath: 'id' },
+  settings:       { keyPath: 'key' },
+  album:          { keyPath: 'id' },
+  wardrobeItems:  { keyPath: 'id' },
+  statusNotes:    { keyPath: 'id' },
+  checkinGoals:   { keyPath: 'id' },
+  checkinRecords: { keyPath: 'id', indexes: [['goalId','goalId']] },
 };
 
 let _db = null;

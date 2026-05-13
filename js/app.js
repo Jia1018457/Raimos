@@ -199,7 +199,7 @@ async function init() {
   updateNavUserAv();
   updateStatusNoteBadge();
   initSplashScreen();
-  initPushNotifications();
+  if (typeof initCheckin === 'function') initCheckin();
 }
 
 // ══════════════════════════════
@@ -251,6 +251,7 @@ function switchPage(id) {
   if (id === 'moments-page') renderMoments();
   if (id === 'companion-page') renderCompanionPage();
   if (id === 'settings-page') { buildSettingsUI(); updateStorageInfo(); }
+  if (id === 'checkin-page' && typeof renderCheckinPage === 'function') renderCheckinPage();
 }
 
 // ══════════════════════════════

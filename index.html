@@ -23,6 +23,7 @@
   <button class="nav-tab" data-page="companion-page" onclick="switchPage('companion-page')" title="陪伴">💗</button>
   <button class="nav-tab" data-page="memory-page" onclick="switchPage('memory-page')" title="记忆库">🧠</button>
   <button class="nav-tab" data-page="wardrobe-page" onclick="switchPage('wardrobe-page')" title="换装衣柜">👗</button>
+  <button class="nav-tab" data-page="checkin-page" onclick="switchPage('checkin-page')" title="打卡日历">📅</button>
   <button class="nav-tab" data-page="settings-page" onclick="switchPage('settings-page')" title="设置">⚙️</button>
   <div class="nav-spacer"></div>
   <button class="nav-tab" id="nav-user-av" onclick="openUserModal()" title="我的账号" style="font-size:22px;position:relative">😊<span id="status-note-badge" style="display:none;position:absolute;top:4px;right:4px;width:8px;height:8px;border-radius:50%;background:#f43f5e;border:1.5px solid var(--bg)"></span></button>
@@ -345,6 +346,23 @@
 <!-- ── WARDROBE PAGE ── -->
 <div class="page" id="wardrobe-page" style="padding:0;overflow:hidden;">
   <iframe id="wardrobe-frame" src="wardrobev4-fixed.html" style="width:100%;height:100%;border:none;display:block;" allowtransparency="true"></iframe>
+</div>
+
+<!-- ── CHECKIN PAGE ── -->
+<div class="page" id="checkin-page">
+  <div class="page-header">
+    <h2>📅 打卡日历</h2>
+    <div style="display:flex;gap:6px;align-items:center">
+      <button class="btn-s" id="ck-edit-goal-btn" onclick="openCkGoalModal(CK.activeGoalId)" title="编辑当前目标" style="display:none">⚙️ 编辑</button>
+      <button class="btn-p" onclick="openCkGoalModal(null)">＋ 新目标</button>
+    </div>
+  </div>
+  <div id="ck-goal-tabs" class="ck-goal-tabs-wrap"></div>
+  <div id="ck-main">
+    <div id="ck-today-section"></div>
+    <div id="ck-calendar" class="ck-calendar-card"></div>
+    <div id="ck-badges" class="ck-badges-section"></div>
+  </div>
 </div>
 
 </div><!-- #pages -->
@@ -920,6 +938,143 @@
   </div>
 </div>
 
+<!-- ══ CHECK-IN MODALS ══ -->
+
+<!-- Daily Check-in Modal -->
+<div class="overlay" id="ck-checkin-modal">
+  <div class="modal">
+    <h2>✅ 今日打卡 <button class="mclose" onclick="closeModal('ck-checkin-modal')">✕</button></h2>
+    <div id="ck-checkin-modal-body"></div>
+    <div class="mbtns">
+      <button class="btn-s" onclick="closeModal('ck-checkin-modal')">取消</button>
+      <button class="btn-p" onclick="doCkCheckin()">📝 完成打卡</button>
+    </div>
+  </div>
+</div>
+
+<!-- View Record Modal -->
+<div class="overlay" id="ck-view-modal">
+  <div class="modal">
+    <h2>📋 打卡记录 <button class="mclose" onclick="closeModal('ck-view-modal')">✕</button></h2>
+    <div id="ck-view-modal-body"></div>
+  </div>
+</div>
+
+<!-- Goal Create/Edit Modal -->
+<div class="overlay" id="ck-goal-modal">
+  <div class="modal wide">
+    <h2 id="ckg-modal-title">🎯 新建打卡目标 <button class="mclose" onclick="closeModal('ck-goal-modal')">✕</button></h2>
+
+    <!-- Basic Info -->
+    <div class="mrow">
+      <label>目标名称</label>
+      <input type="text" id="ckg-title" placeholder="如：每日跑步、背单词…" style="flex:1"/>
+    </div>
+    <div class="mrow">
+      <label>图标 & 颜色</label>
+      <div style="display:flex;gap:8px;align-items:center;flex:1;flex-wrap:wrap">
+        <input type="text" id="ckg-emoji" placeholder="🎯" maxlength="4"
+          style="width:52px;text-align:center;font-size:20px;background:var(--input-bg);border:1.5px solid var(--border);border-radius:8px;padding:5px;font-family:inherit;color:var(--text)"/>
+        <input type="color" id="ckg-color" value="#ff8fab"
+          style="width:44px;height:36px;border:none;border-radius:8px;cursor:pointer;padding:2px;background:var(--input-bg)"/>
+        <span style="font-size:11px;color:var(--text3)">日历颜色</span>
+      </div>
+    </div>
+
+    <!-- Duration -->
+    <div class="mrow">
+      <label>坚持周期</label>
+      <select id="ckg-duration" onchange="ckToggleDuration()" style="flex:1">
+        <option value="ongoing">长期坚持（无期限）</option>
+        <option value="fixed">固定天数挑战</option>
+      </select>
+    </div>
+    <div class="mrow" id="ckg-days-row" style="display:none">
+      <label>挑战天数</label>
+      <input type="number" id="ckg-days" value="30" min="1" max="3650"
+        style="max-width:90px;background:var(--input-bg);border:1.5px solid var(--border);border-radius:8px;padding:6px 10px;font-size:13px;color:var(--text);font-family:inherit"/> 天
+    </div>
+
+    <!-- Daily Items -->
+    <div class="ckg-section">
+      <div class="ckg-section-title">每日分项（可选）</div>
+      <div id="ckg-items" style="max-height:200px;overflow-y:auto;margin-bottom:8px"></div>
+      <button class="btn-s" onclick="ckAddItemRow()">＋ 添加分项</button>
+    </div>
+
+    <!-- AI Settings -->
+    <div class="mrow" style="border-top:1.5px dashed var(--border);padding-top:12px;margin-top:4px">
+      <label>AI 功能</label>
+      <label class="toggle"><input type="checkbox" id="ckg-ai" onchange="ckToggleAiSection()" checked><span class="tslider"></span></label>
+    </div>
+    <div id="ckg-ai-section" style="padding:0 0 8px">
+      <div class="ckg-section">
+        <div class="ckg-section-title">AI 助手设置</div>
+        <div class="mrow"><label>选择 AI</label><select id="ckg-contact" style="flex:1"></select></div>
+        <div class="mrow">
+          <label>打卡鼓励</label>
+          <label class="toggle"><input type="checkbox" id="ckg-encourage" checked><span class="tslider"></span></label>
+          <span style="font-size:11px;color:var(--text3);margin-left:6px">每次打卡完成自动 AI 鼓励</span>
+        </div>
+        <div class="mrow"><label>点评范围</label>
+          <select id="ckg-scope" style="flex:1">
+            <option value="daily">当天打卡留言</option>
+            <option value="milestone">里程碑留言（达到坚持天数）</option>
+            <option value="period">阶段总结留言</option>
+          </select>
+        </div>
+        <div class="mrow"><label>提示词模式</label>
+          <select id="ckg-prompt-mode" onchange="ckTogglePromptMode()" style="flex:1">
+            <option value="assistant">使用助手内置提示词</option>
+            <option value="custom">使用自定义提示词</option>
+          </select>
+        </div>
+        <div class="mrow" id="ckg-custom-prompt-row" style="display:none;align-items:flex-start">
+          <label style="padding-top:5px">自定义提示词</label>
+          <textarea id="ckg-custom-prompt" rows="3" placeholder="可用 {goal} {date} {streak} {total} {progress} {notes} 作变量"
+            style="flex:1;resize:vertical;background:var(--input-bg);border:1.5px solid var(--border);border-radius:10px;padding:8px 10px;font-size:12px;color:var(--text);font-family:inherit;outline:none"></textarea>
+        </div>
+      </div>
+    </div>
+
+    <!-- Reminder Settings -->
+    <div class="mrow" style="border-top:1.5px dashed var(--border);padding-top:12px;margin-top:4px">
+      <label>打卡提醒</label>
+      <label class="toggle"><input type="checkbox" id="ckg-reminder" onchange="ckToggleReminderSection();if(this.checked)ckRequestNotifPerm()"><span class="tslider"></span></label>
+    </div>
+    <div id="ckg-reminder-section" style="display:none;padding:0 0 8px">
+      <div class="ckg-section">
+        <div class="ckg-section-title">提醒设置</div>
+        <div id="ckg-times" style="margin-bottom:8px"></div>
+        <button class="btn-s" onclick="ckAddTimeRow()">＋ 添加提醒时间</button>
+        <div class="mrow" style="margin-top:10px">
+          <label>每天最多提醒</label>
+          <input type="number" id="ckg-remind-count" value="1" min="1" max="10"
+            style="max-width:60px;background:var(--input-bg);border:1.5px solid var(--border);border-radius:8px;padding:6px 10px;font-size:13px;color:var(--text);font-family:inherit"/> 次
+        </div>
+      </div>
+    </div>
+
+    <div class="mbtns">
+      <button class="btn-danger" id="ckg-delete-btn" onclick="deleteCkGoal()" style="display:none">🗑️ 删除目标</button>
+      <button class="btn-s" onclick="closeModal('ck-goal-modal')">取消</button>
+      <button class="btn-p" onclick="saveCkGoal()">💾 保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── CHECK-IN ANIMATION OVERLAY ── -->
+<div id="ck-anim-overlay">
+  <canvas id="ck-confetti"></canvas>
+  <div id="ck-stamp"></div>
+</div>
+
+<!-- ── BADGE UNLOCK NOTIFICATION ── -->
+<div id="ck-badge-unlock"></div>
+
+<!-- ── AI COMMENT TOAST ── -->
+<div id="ck-ai-toast"><div></div></div>
+
 <div id="toast"></div>
 <div id="ptost"><span id="ptost-txt">嗨！</span><button class="ptclose" onclick="$i('ptost').classList.remove('show')">✕</button></div>
 
@@ -974,5 +1129,6 @@
 
 <script src="js/db.js"></script>
 <script src="js/app.js"></script>
+<script src="js/checkin.js"></script>
 </body>
 </html>

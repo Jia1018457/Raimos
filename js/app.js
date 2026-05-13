@@ -38,7 +38,7 @@ let S = {
     autoComment:false, commentFreqMins:360,
     replyMomentComments:false, replyDelay:120, autoLike:false, likeProb:60,
     maxComments:1,
-    postImages:false, imageFreq:50, imageSources:'stickers',
+    postImages:false, imageFreq:50, imageSources:'album',
     imgGenModel:'openai/dall-e-3',
     aiName:'小可', userName:'我', aiAvatar:'🐱', userAvatar:'😊',
     showUserAvatar:true, showAiAvatar:true,
@@ -351,8 +351,8 @@ function openContactModal(editId) {
   if (c?.xPostImages !== null && c?.xPostImages !== undefined) { const el=$i('cm-x-post-images'); if(el)el.checked=!!c.xPostImages; }
   if (c?.xImageFreq !== null && c?.xImageFreq !== undefined) { const el=$i('cm-x-image-freq'); if(el)el.value=c.xImageFreq||50; }
   if (c?.xImageSources !== null && c?.xImageSources !== undefined) {
-    const srcs = (c.xImageSources||'').split(',');
-    ['stickers','search','generate'].forEach(s => { const el=$i(`cm-x-imgsrc-${s}`); if(el)el.checked=srcs.includes(s); });
+    const srcs = (c.xImageSources||'album').split(',');
+    ['album','search','generate'].forEach(s => { const el=$i(`cm-x-imgsrc-${s}`); if(el)el.checked=srcs.includes(s); });
   }
   // AI chat images section
   setCmSection('aichat', c, ['xAiChatImages','xAiChatImageFreq','xAiChatImageSources']);
@@ -360,7 +360,7 @@ function openContactModal(editId) {
   if (c?.xAiChatImageFreq !== null && c?.xAiChatImageFreq !== undefined) { const el=$i('cm-x-ai-chat-freq'); if(el){ el.value=c.xAiChatImageFreq||20; const v=$i('cm-x-ai-chat-freq-v'); if(v)v.textContent=(c.xAiChatImageFreq||20)+'%'; } }
   if (c?.xAiChatImageSources !== null && c?.xAiChatImageSources !== undefined) {
     const srcs2 = (c.xAiChatImageSources||'album').split(',');
-    ['album','stickers','search'].forEach(s => { const el=$i(`cm-x-aichat-src-${s}`); if(el)el.checked=srcs2.includes(s); });
+    ['album','search','generate'].forEach(s => { const el=$i(`cm-x-aichat-src-${s}`); if(el)el.checked=srcs2.includes(s); });
   }
   $i('contact-modal').classList.add('show');
 }
@@ -455,11 +455,11 @@ async function saveContact() {
     xLikeProb: getCmSection('moments') ? parseInt(getV('cm-x-like-prob','60')) : null,
     xPostImages: getCmSection('moments') ? getB2('cm-x-post-images') : null,
     xImageFreq: getCmSection('moments') ? parseInt(getV('cm-x-image-freq','50')) : null,
-    xImageSources: getCmSection('moments') ? ['stickers','search','generate'].filter(s=>$i(`cm-x-imgsrc-${s}`)?.checked).join(',') : null,
+    xImageSources: getCmSection('moments') ? ['album','search','generate'].filter(s=>$i(`cm-x-imgsrc-${s}`)?.checked).join(',') || 'album' : null,
     // AI chat images
     xAiChatImages: getCmSection('aichat') ? getB2('cm-x-ai-chat-images') : null,
     xAiChatImageFreq: getCmSection('aichat') ? parseInt(getV('cm-x-ai-chat-freq','20')) : null,
-    xAiChatImageSources: getCmSection('aichat') ? ['album','stickers','search'].filter(s=>$i(`cm-x-aichat-src-${s}`)?.checked).join(',') || 'album' : null,
+    xAiChatImageSources: getCmSection('aichat') ? ['album','search','generate'].filter(s=>$i(`cm-x-aichat-src-${s}`)?.checked).join(',') || 'album' : null,
   };
   await dbPut('contacts', contact);
   S._contacts[id] = contact;
@@ -940,19 +940,22 @@ async function maybeAiSendImage(chatId, contact, context) {
   const pick = sources[Math.floor(Math.random() * sources.length)];
   try {
     if (pick === 'album') {
-      const url = await pickAlbumPhoto(context);
-      if (url) await addMsg(chatId, { role:'ai', type:'image', imageData:url, content:'[图片]' });
-    } else if (pick === 'stickers') {
+      // 我的相册 = 照片 + 表情包合并，先找相册照片，没有再找表情包
+      const albumUrl = await pickAlbumPhoto(context);
+      if (albumUrl) { await addMsg(chatId, { role:'ai', type:'image', imageData:albumUrl, content:'[图片]' }); return; }
       const stk = await pickSticker(context);
       if (stk) await addMsg(chatId, { role:'ai', type:'sticker', content:stk.label||stk.content, url:stk.url, isImg:stk.isImg });
     } else if (pick === 'search') {
-      const key = s.unsplashKey?.trim();
-      if (!key) return;
+      const key = s.unsplashKey?.trim(); if (!key) return;
       const kw = encodeURIComponent(context.slice(0, 30) || 'cute');
       const r = await fetch(`https://api.unsplash.com/photos/random?query=${kw}&client_id=${key}`);
       const d = await r.json();
       const url = d?.urls?.regular;
       if (url) await addMsg(chatId, { role:'ai', type:'image', imageData:url, content:'[图片]' });
+    } else if (pick === 'generate') {
+      const apiKey = contact?.apiKey || s.apiKey; if (!apiKey) return;
+      const url = await generateMomentImage(context, contact);
+      if (url) await addMsg(chatId, { role:'ai', type:'img_gen', url, content:'[生成图片]' });
     }
   } catch(e) { /* silent fail */ }
 }
@@ -1369,7 +1372,7 @@ async function aiPostMoment(contactId) {
   try {
     const useImages = cs(contact?.xPostImages, S.settings.postImages);
     const imageFreq = cs(contact?.xImageFreq, S.settings.imageFreq) || 50;
-    const imageSources = (cs(contact?.xImageSources, S.settings.imageSources) || 'stickers').split(',').filter(Boolean);
+    const imageSources = (cs(contact?.xImageSources, S.settings.imageSources) || 'album').split(',').filter(Boolean);
     // Generate text
     const res = await fetch(apiUrl + '/api/v1/chat/completions', {
       method:'POST', headers:{'Authorization':`Bearer ${apiKey}`,'Content-Type':'application/json'},
@@ -1385,9 +1388,12 @@ async function aiPostMoment(contactId) {
       // Shuffle sources and try each until one succeeds
       const shuffled = [...imageSources].sort(() => Math.random()-0.5);
       for (const src of shuffled) {
-        if (src === 'stickers' && S._stickers.length) {
-          const sk = S._stickers[Math.floor(Math.random()*S._stickers.length)];
-          if (sk?.dataUrl) { images.push(sk.dataUrl); break; }
+        if (src === 'album') {
+          // 我的相册 = 照片 + 表情包，先找标签匹配的照片，没有再找表情包
+          const albumUrl = await pickAlbumPhoto(text);
+          if (albumUrl) { images.push(albumUrl); break; }
+          const imgStickers = S._stickers.filter(s => s.isImg);
+          if (imgStickers.length) { const sk = imgStickers[Math.floor(Math.random()*imgStickers.length)]; if (sk?.url||sk?.dataUrl) { images.push(sk.url||sk.dataUrl); break; } }
         }
         if (src === 'search' && S.settings.unsplashKey) {
           const imgUrl = await fetchUnsplashImage(text);
@@ -2451,7 +2457,7 @@ function buildSettingsUI() {
       <div class="s-row"><label>发圈带图片</label><label class="toggle"><input type="checkbox" id="s-post-images" ${s.postImages?'checked':''}><span class="tslider"></span></label></div>
       <div class="s-row"><label>带图概率</label><input type="range" id="s-image-freq" min="0" max="100" step="10" value="${s.imageFreq||50}" oninput="$i('s-image-freq-v').textContent=this.value+'%'"><span class="rval" id="s-image-freq-v">${s.imageFreq||50}%</span></div>
       <div class="s-row"><label>图片来源</label><div style="display:flex;gap:10px;flex-wrap:wrap;font-size:12px">
-        <label><input type="checkbox" id="s-imgsrc-stickers" ${(s.imageSources||'').includes('stickers')?'checked':''}> 我的相册</label>
+        <label><input type="checkbox" id="s-imgsrc-album" ${(s.imageSources||'album').includes('album')?'checked':''}> 我的相册</label>
         <label><input type="checkbox" id="s-imgsrc-search" ${(s.imageSources||'').includes('search')?'checked':''}> 联网搜索</label>
         <label><input type="checkbox" id="s-imgsrc-generate" ${(s.imageSources||'').includes('generate')?'checked':''}> 生成图片</label>
       </div></div>
@@ -2462,8 +2468,8 @@ function buildSettingsUI() {
       <div class="s-row"><label>发图概率</label><input type="range" id="s-ai-chat-image-freq" min="0" max="100" step="5" value="${s.aiChatImageFreq||20}" oninput="$i('s-ai-chat-image-freq-v').textContent=this.value+'%'"><span class="rval" id="s-ai-chat-image-freq-v">${s.aiChatImageFreq||20}%</span></div>
       <div class="s-row"><label>图片来源</label><div style="display:flex;gap:10px;flex-wrap:wrap;font-size:12px">
         <label><input type="checkbox" id="s-aichat-src-album" ${(s.aiChatImageSources||'album').includes('album')?'checked':''}> 我的相册</label>
-        <label><input type="checkbox" id="s-aichat-src-stickers" ${(s.aiChatImageSources||'').includes('stickers')?'checked':''}> 表情包</label>
         <label><input type="checkbox" id="s-aichat-src-search" ${(s.aiChatImageSources||'').includes('search')?'checked':''}> 联网搜索</label>
+        <label><input type="checkbox" id="s-aichat-src-generate" ${(s.aiChatImageSources||'').includes('generate')?'checked':''}> 生成图片</label>
       </div></div>
     </div>
     <div class="s-section" hidden><h3>🎲 图片生成</h3>
@@ -2566,7 +2572,7 @@ async function saveAllSettings(){
   s.replyMomentComments=getB('s-reply-comments');s.replyDelay=parseInt(get('s-reply-delay','120'));
   s.autoLike=getB('s-auto-like');s.likeProb=parseInt(get('s-like-prob','60'));
   s.postImages=getB('s-post-images');s.imageFreq=parseInt(get('s-image-freq','50'));
-  s.imageSources=['stickers','search','generate'].filter(x=>getB(`s-imgsrc-${x}`)).join(',');
+  s.imageSources=['album','search','generate'].filter(x=>getB(`s-imgsrc-${x}`)).join(',') || 'album';
   s.fontSize=parseInt(get('s-fontsize','14'));s.bgOpacity=parseFloat(get('s-bgopa','1'));
   const igm=get('s-imggen-model','openai/dall-e-3');
   s.imgGenModel=igm==='custom'?(get('s-imggen-custom-model')||'openai/dall-e-3'):igm;
@@ -2589,7 +2595,7 @@ async function saveAllSettings(){
   // AI 聊天发图
   s.aiChatImages=getB('s-ai-chat-images');
   s.aiChatImageFreq=parseInt(get('s-ai-chat-image-freq','20'));
-  s.aiChatImageSources=['album','stickers','search'].filter(x=>getB(`s-aichat-src-${x}`)).join(',') || 'album';
+  s.aiChatImageSources=['album','search','generate'].filter(x=>getB(`s-aichat-src-${x}`)).join(',') || 'album';
   // 开屏动画
   s.splashEnabled=getB('s-splash-enabled');
   s.splashDuration=parseInt(get('s-splash-dur','4'));

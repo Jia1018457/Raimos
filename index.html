@@ -544,7 +544,7 @@
         <div class="mrow"><label>发圈带图片</label><label class="toggle"><input type="checkbox" id="cm-x-post-images"><span class="tslider"></span></label></div>
         <div class="mrow"><label>带图概率</label><input type="range" id="cm-x-image-freq" min="0" max="100" step="10" value="50" oninput="$i('cm-x-image-freq-v').textContent=this.value+'%'"><span class="rval" id="cm-x-image-freq-v">50%</span></div>
         <div class="mrow"><label>图片来源</label><div style="display:flex;gap:8px;flex-wrap:wrap;font-size:12px">
-          <label><input type="checkbox" id="cm-x-imgsrc-stickers"> 我的相册</label>
+          <label><input type="checkbox" id="cm-x-imgsrc-album"> 我的相册</label>
           <label><input type="checkbox" id="cm-x-imgsrc-search"> 联网搜索</label>
           <label><input type="checkbox" id="cm-x-imgsrc-generate"> 生成图片</label>
         </div></div>
@@ -562,8 +562,8 @@
           <div class="mrow"><label>发图概率</label><input type="range" id="cm-x-ai-chat-freq" min="0" max="100" step="5" value="20" oninput="$i('cm-x-ai-chat-freq-v').textContent=this.value+'%'"><span class="rval" id="cm-x-ai-chat-freq-v">20%</span></div>
           <div class="mrow"><label>图片来源</label><div style="display:flex;gap:8px;flex-wrap:wrap;font-size:12px">
             <label><input type="checkbox" id="cm-x-aichat-src-album" checked> 我的相册</label>
-            <label><input type="checkbox" id="cm-x-aichat-src-stickers"> 表情包</label>
             <label><input type="checkbox" id="cm-x-aichat-src-search"> 联网搜索</label>
+            <label><input type="checkbox" id="cm-x-aichat-src-generate"> 生成图片</label>
           </div></div>
         </div>
       </div>

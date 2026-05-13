@@ -40,27 +40,6 @@ export async function getWeather(lat, lon) {
   }
 }
 
-/**
- * Resolve lat/lon from a Chinese city name via Open-Meteo geocoding (free, no key).
- * Returns { lat, lon } or null on failure.
- */
-export async function geocodeCity(cityName) {
-  if (!cityName) return null;
-  try {
-    const url =
-      `https://geocoding-api.open-meteo.com/v1/search` +
-      `?name=${encodeURIComponent(cityName)}&count=1&language=zh&format=json`;
-    const res = await fetch(url, { signal: AbortSignal.timeout(8_000) });
-    if (!res.ok) return null;
-    const data = await res.json();
-    if (!data.results?.length) return null;
-    const { latitude, longitude } = data.results[0];
-    return { lat: latitude, lon: longitude };
-  } catch {
-    return null;
-  }
-}
-
 /** Format weather object into a short Chinese string. */
 export function weatherText(w) {
   if (!w) return '';

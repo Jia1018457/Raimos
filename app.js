@@ -1217,8 +1217,6 @@ function buildSettingsUI() {
     </div>
     <div class="s-section"><h3>🚀 后台服务（Railway 部署）</h3>
       <div style="font-size:12px;color:var(--text3);padding:0 0 10px">配置后台服务的行为。后台需知道对应的「联系人ID」，在联系人列表里长按联系人可查看ID。</div>
-      <div class="s-row"><label>后台服务地址</label><input type="text" id="s-backend-url" value="${s.backendUrl||''}" placeholder="https://xxx.up.railway.app" style="flex:1"/><button class="btn-s" style="white-space:nowrap;margin-left:6px;flex-shrink:0" onclick="testBackendUrl()">🔗 测试</button></div>
-      <div style="font-size:11px;color:var(--text3);margin-top:-4px;padding-bottom:10px">填入 Railway 部署后得到的网址，点「测试」可验证是否在线。</div>
       <div style="font-weight:700;font-size:11.5px;color:var(--accent);margin-bottom:6px">💌 AI 主动发消息</div>
       <div class="s-row"><label>启用（后台）</label><label class="toggle"><input type="checkbox" id="s-pro-backend" ${s.proBackend?'checked':''}><span class="tslider"></span></label></div>
       <div class="s-row"><label>每天最多</label><input type="number" id="s-pro-backend-max" value="${s.proBackendMax||2}" min="1" max="20" style="max-width:60px"/> 次</div>
@@ -1308,11 +1306,6 @@ async function saveAllSettings(){
   s.momentEndHour=parseInt(get('s-moment-end-h','22'));
   s.weatherLat=get('s-weather-lat');
   s.weatherLon=get('s-weather-lon');
-  s.city=get('s-city');
-  s.momentUseMemory=getB('s-moment-use-memory');
-  s.momentUseRecentChats=getB('s-moment-use-chats');
-  s.momentRecentChatsCount=parseInt(get('s-moment-chat-count','10'));
-  s.backendUrl=get('s-backend-url');
   // sticker lib config is saved separately via saveStickerLibConfig()
   document.documentElement.style.setProperty('--font-size',s.fontSize+'px');
   applyBubble();scheduleProactive();await saveSettings_();toast('✅ 设置已保存');

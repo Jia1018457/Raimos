@@ -77,6 +77,12 @@ let S = {
 
     // ── 表情包库 ──
     stickerLibKey:'', stickerCallPrompt:'',
+
+    // ── 开屏动画 ──
+    splashEnabled: false,
+    splashMediaId: '',
+    splashDuration: 4,   // seconds, for image splash
+    splashType: '',      // 'image' | 'video' | ''
   },
   _momentTimers: {},
   _imgSearchTarget: 'compose',
@@ -172,6 +178,8 @@ async function init() {
   buildComposeEmojiGrid();
   updateStorageInfo();
   updateNavUserAv();
+  updateStatusNoteBadge();
+  initSplashScreen();
 }
 
 // ══════════════════════════════
@@ -1673,6 +1681,129 @@ async function renderAlbum() {
   });
 }
 function openAlbumModal() { renderAlbum(); $i('album-modal').classList.add('show'); }
+
+// ══════════════════════════════════════════════════════
+//  SPLASH SCREEN (开屏动画)
+// ══════════════════════════════════════════════════════
+async function initSplashScreen() {
+  if (!S.settings.splashEnabled) return;
+  const mediaId = S.settings.splashMediaId;
+  const type = S.settings.splashType;
+  const dur = (S.settings.splashDuration || 4) * 1000;
+  const el = $i('splash-screen'); if (!el) return;
+
+  if (mediaId) {
+    const blob = await loadMediaBlob(mediaId);
+    const url = blob ? URL.createObjectURL(blob) : null;
+    if (url && type === 'video') {
+      const v = $i('splash-video'); v.src = url; v.style.display = '';
+      $i('splash-default').style.display = 'none';
+    } else if (url && type === 'image') {
+      const img = $i('splash-img'); img.src = url; img.style.display = '';
+      $i('splash-default').style.display = 'none';
+      setTimeout(dismissSplash, dur);
+    } else {
+      $i('splash-default').style.display = '';
+      setTimeout(dismissSplash, dur);
+    }
+  } else {
+    $i('splash-default').style.display = '';
+    setTimeout(dismissSplash, dur);
+  }
+  el.classList.remove('hidden');
+}
+function dismissSplash() {
+  const el = $i('splash-screen'); if (!el) return;
+  el.style.opacity = '0'; el.style.transition = 'opacity .4s';
+  setTimeout(() => el.classList.add('hidden'), 420);
+}
+async function handleSplashMedia(input) {
+  const file = input.files[0]; if (!file) return;
+  const id = `splash_${uid()}`;
+  const type = file.type.startsWith('video/') ? 'video' : 'image';
+  await saveMediaBlob(id, file, { name: file.name, mime: file.type, kind: 'splash' });
+  // Delete previous
+  if (S.settings.splashMediaId) {
+    await dbDel('files', S.settings.splashMediaId).catch(()=>{});
+  }
+  S.settings.splashMediaId = id;
+  S.settings.splashType = type;
+  S.settings.splashEnabled = true;
+  await saveSetting('splashMediaId', id);
+  await saveSetting('splashType', type);
+  await saveSetting('splashEnabled', true);
+  toast(`✅ ${type === 'video' ? '视频' : '图片'}已设为开屏动画`);
+  const label = $i('splash-file-label');
+  if (label) label.textContent = file.name;
+  input.value = '';
+}
+async function clearSplashMedia() {
+  if (S.settings.splashMediaId) await dbDel('files', S.settings.splashMediaId).catch(()=>{});
+  S.settings.splashMediaId = '';
+  S.settings.splashType = '';
+  await saveSetting('splashMediaId', '');
+  await saveSetting('splashType', '');
+  toast('已清除开屏素材（使用默认动画）');
+  const label = $i('splash-file-label');
+  if (label) label.textContent = '未选择文件';
+}
+
+// ══════════════════════════════════════════════════════
+//  STATUS NOTES (便签)
+// ══════════════════════════════════════════════════════
+async function openStatusNotes() {
+  const drawer = $i('status-notes-drawer');
+  drawer.classList.remove('hidden');
+  await renderStatusNotes();
+  // Mark all as read
+  const notes = await dbGetAll('statusNotes');
+  for (const n of notes) {
+    if (!n.read) { n.read = true; await dbPut('statusNotes', n); }
+  }
+  updateStatusNoteBadge();
+}
+function closeStatusNotes() {
+  $i('status-notes-drawer').classList.add('hidden');
+}
+async function renderStatusNotes() {
+  const list = $i('status-notes-list'); if (!list) return;
+  const notes = await dbGetAll('statusNotes');
+  notes.sort((a, b) => b.ts - a.ts);
+  if (!notes.length) {
+    list.innerHTML = '<div style="text-align:center;padding:40px 20px;color:var(--text3);font-size:13px">还没有留言<br><span style="font-size:28px">📭</span><br>设置状态后让 AI 助手留言吧～</div>';
+    return;
+  }
+  list.innerHTML = '';
+  for (const n of notes) {
+    const card = document.createElement('div');
+    card.className = 'status-note-card' + (n.read ? '' : ' unread');
+    const avHtml = n.aiAvatar?.startsWith('http') || n.aiAvatar?.startsWith('data:')
+      ? `<img src="${esc(n.aiAvatar)}">`
+      : `<span>${n.aiAvatar || '🤖'}</span>`;
+    card.innerHTML = `
+      <div class="status-note-meta">
+        <div class="status-note-avatar">${avHtml}</div>
+        <div class="status-note-name">${esc(n.aiName || 'AI')}</div>
+        <div class="status-note-time">${fmtTimeFull ? fmtTimeFull(n.ts) : new Date(n.ts).toLocaleString()}</div>
+      </div>
+      <div class="status-note-trigger">💬 你的状态：<b>${esc(n.status)}</b></div>
+      <div class="status-note-content">${esc(n.content)}</div>
+    `;
+    const del = document.createElement('button');
+    del.style.cssText = 'float:right;margin:-2px -4px 0 0;background:none;border:none;color:var(--text3);cursor:pointer;font-size:12px;';
+    del.textContent = '✕';
+    del.onclick = async () => { await dbDel('statusNotes', n.id); card.remove(); updateStatusNoteBadge(); };
+    card.querySelector('.status-note-meta').prepend(del);
+    list.appendChild(card);
+  }
+}
+async function updateStatusNoteBadge() {
+  const notes = await dbGetAll('statusNotes');
+  const unread = notes.filter(n => !n.read).length;
+  const badge = $i('status-note-badge');
+  if (badge) badge.style.display = unread > 0 ? '' : 'none';
+}
+
 function renderStickerLib(){const lib=$i('sticker-lib');lib.innerHTML='';S._stickers.forEach((s,i)=>{const d=document.createElement('div');d.style.cssText='position:relative;border:1.5px solid var(--border);border-radius:9px;overflow:hidden;padding:5px;';if(s.isImg)d.innerHTML=`<img src="${s.url}" style="width:100%;border-radius:6px">`;else d.innerHTML=`<div style="font-size:34px;text-align:center;padding:3px">${s.content}</div>`;if(s.label)d.innerHTML+=`<div style="font-size:9.5px;text-align:center;color:var(--text3);margin-top:2px">${esc(s.label)}</div>`;const del=document.createElement('button');del.style.cssText='position:absolute;top:-4px;right:-4px;width:16px;height:16px;border-radius:50%;background:var(--accent);color:#fff;border:none;cursor:pointer;font-size:8px;display:flex;align-items:center;justify-content:center;';del.textContent='✕';del.onclick=async()=>{await dbDel('stickers',s.id);S._stickers.splice(i,1);renderStickerLib();};d.appendChild(del);lib.appendChild(d);});}
 async function addStickerImgs(input){
   for(const file of input.files){
@@ -1886,21 +2017,47 @@ async function doAiMessage() {
   if (!contactId) { toast('请选择一个助手'); return; }
   S.myStatus = status;
   await saveSetting('myStatus', status);
-  const existing = Object.values(S._chats).filter(c => c.contactId === contactId && !c.archived)
-    .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
-  let chatId = existing[0]?.id;
-  if (!chatId) {
-    const c = S._contacts[contactId];
-    chatId = uid();
-    const chat = { id: chatId, name: `与${c?.name || 'AI'}的对话`, contactId, summary: null, archived: false, createdAt: Date.now(), updatedAt: Date.now() };
-    await dbPut('chats', chat); S._chats[chatId] = chat;
-  }
+  updateHeaderStatus();
   closeModal('user-modal');
-  S.currentChat = chatId; S.currentContact = contactId;
-  await saveSetting('currentChat', chatId); await saveSetting('currentContact', contactId);
-  switchPage('chat-page'); await openChat(chatId);
-  const inp = $i('msg-input');
-  if (inp) { inp.value = `我现在的状态：${status}，来和我说说话吧～`; autoH(inp); sendMsg(); }
+  toast('AI 正在写便签…');
+
+  const contact = S._contacts[contactId];
+  const s = S.settings;
+  const useKey = contact?.apiKey || s.apiKey;
+  const useUrl = contact?.apiUrl || s.apiUrl || 'https://openrouter.ai/api/v1/chat/completions';
+  if (!useKey) { toast('请先填写 API Key'); return; }
+
+  try {
+    const res = await fetch(useUrl, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${useKey}`, 'Content-Type': 'application/json', 'HTTP-Referer': 'https://raimos.app', 'X-Title': 'Raimos' },
+      body: JSON.stringify({
+        model: contact?.model || s.model || 'openai/gpt-4o-mini',
+        messages: [
+          { role: 'system', content: contact?.system || `你是${contact?.name || 'AI'}，温柔体贴。` },
+          { role: 'user', content: `我现在的状态是：${status}。请给我写一条温暖的便签留言（不超过60字，像朋友写的便利贴，不加引号）：` }
+        ],
+        temperature: contact?.temp ?? parseFloat(s.temp ?? 0.85),
+        stream: false,
+        max_tokens: 120,
+      }),
+    });
+    const d = await res.json();
+    const content = (d.choices?.[0]?.message?.content || '').trim();
+    if (!content) throw new Error('AI 没有回复');
+
+    const note = {
+      id: uid(), status, contactId,
+      aiName: contact?.name || 'AI',
+      aiAvatar: contact?.avatar || '🤖',
+      content, ts: Date.now(), read: false,
+    };
+    await dbPut('statusNotes', note);
+    updateStatusNoteBadge();
+    toast(`📝 ${contact?.name || 'AI'} 给你留了一张便签！`);
+  } catch (e) {
+    toast('❌ 留言失败：' + e.message);
+  }
 }
 async function uploadUserAv(input) {
   const file = input.files[0]; if (!file) return;
@@ -1974,6 +2131,20 @@ function buildSettingsUI() {
       <div style="font-size:12px;color:var(--text3);margin-bottom:8px">部署后台服务（Railway）后，把访问地址填入下方，前端将对接 AI 主动行为功能。</div>
       <div class="s-row"><label>后台服务地址</label><input type="text" id="s-backend-url" value="${s.backendUrl||''}" placeholder="https://xxx.railway.app"/></div>
       <div style="font-size:11px;color:var(--text3)">💡 部署说明见 <code>backend/README.md</code></div>
+    </div>
+    <div class="s-section" hidden><h3>🎬 开屏动画</h3>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:10px">每次打开 App 时播放一段动画，支持上传视频或图片，留空则显示默认脉冲动画。</div>
+      <div class="s-row"><label>启用开屏</label><label class="toggle"><input type="checkbox" id="s-splash-enabled" ${s.splashEnabled?'checked':''}><span class="tslider"></span></label></div>
+      <div class="s-row"><label>播放时长（图片）</label><input type="number" id="s-splash-dur" value="${s.splashDuration||4}" min="1" max="30" style="max-width:70px"/> 秒</div>
+      <div class="s-row"><label>开屏素材</label>
+        <div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap">
+          <button class="btn-s" onclick="$i('splash-media-file').click()">📁 选择文件</button>
+          <span id="splash-file-label" style="font-size:11px;color:var(--text3)">${s.splashMediaId?'已有素材':'未选择文件'}</span>
+          ${s.splashMediaId?`<button class="btn-s" onclick="clearSplashMedia()" style="color:#e74c3c">✕ 清除</button>`:''}
+        </div>
+      </div>
+      <div style="font-size:11px;color:var(--text3)">支持 mp4/webm 视频（视频播放完自动跳过）或 jpg/png 图片（按时长自动跳过），点击画面可随时跳过。</div>
+      <div style="margin-top:10px"><button class="btn-s" onclick="initSplashScreen()">▶ 预览开屏效果</button></div>
     </div>
     <div class="s-section" hidden><h3>☁️ 云同步</h3>
       <div style="padding:4px 0 10px;font-size:12px;color:var(--text3)">登录后可同步助手、对话、记忆、朋友圈、相册、表情包、关键词动画到云端。</div>
@@ -2168,6 +2339,9 @@ async function saveAllSettings(){
   s.cloudinaryPreset=get('s-cld-preset','').trim();
   // 后台服务
   s.backendUrl=get('s-backend-url','').trim();
+  // 开屏动画
+  s.splashEnabled=getB('s-splash-enabled');
+  s.splashDuration=parseInt(get('s-splash-dur','4'));
   document.documentElement.style.setProperty('--font-size',s.fontSize+'px');
   applyBubble();scheduleProactive();initMomentTimers();await saveSettings_();toast('✅ 设置已保存');
 }

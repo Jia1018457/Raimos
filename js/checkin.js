@@ -381,8 +381,8 @@ async function openCkCheckinModal(date) {
       </div>
     </div>
     <div class="ck-modal-section">
-      <div class="ck-modal-section-title">打卡备注 <span style="font-weight:400;opacity:.6">（选填）</span></div>
-      <textarea id="cki-notes" placeholder="今天的感受、遇到的困难、小小成就…" rows="3"
+      <div class="ck-modal-section-title">打卡备注 <span style="font-weight:400;opacity:.6">（选填${goal.aiEnabled && goal.aiCommentScopes?.includes('notes') ? '，AI 将对备注进行点评' : ''}）</span></div>
+      <textarea id="cki-notes" placeholder="今天的感受、遇到的困难、小小成就…AI 会针对你的备注给出专属点评" rows="3"
         style="width:100%;resize:vertical;background:var(--input-bg);border:1.5px solid var(--border);
                border-radius:10px;padding:8px 10px;font-size:13px;color:var(--text);
                font-family:inherit;outline:none">${prevNotes}</textarea>
@@ -511,7 +511,7 @@ function openCkGoalModal(goalId) {
   $i('ckg-encourage').checked  = g?.aiEncourageEnabled ?? true;
   $i('ckg-reminder').checked   = g?.reminderEnabled ?? false;
   // Backward-compat: old single string → array
-  const scopes = g?.aiCommentScopes || (g?.aiCommentScope ? [g.aiCommentScope] : ['daily']);
+  const scopes = g?.aiCommentScopes || (g?.aiCommentScope ? [g.aiCommentScope] : ['daily', 'notes']);
   $i('ckg-scope-daily').checked  = scopes.includes('daily');
   $i('ckg-scope-notes').checked  = scopes.includes('notes');
   $i('ckg-scope-items').checked  = scopes.includes('items');
@@ -890,9 +890,12 @@ async function ckGenerateAiComment(goalId, date, rec) {
       },
       body: JSON.stringify({
         model,
-        messages: [{ role: 'user', content: prompt }],
+        messages: [
+          ...(contact?.system ? [{ role: 'system', content: contact.system }] : []),
+          { role: 'user', content: prompt },
+        ],
         temperature: 0.92,
-        max_tokens: 250,
+        max_tokens: 300,
       }),
     });
     if (!res.ok) return;

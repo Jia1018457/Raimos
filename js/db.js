@@ -3,7 +3,7 @@
 // ═══════════════════════════════════════════
 
 const DB_NAME = 'raimos_db';
-const DB_VER  = 4;
+const DB_VER  = 5;
 
 const STORES = {
   chats:          { keyPath: 'id' },

@@ -815,10 +815,14 @@ async function makeMomentCard(m) {
         <button class="c-act" onclick="delComment('${m.id}','${c.id}')">删除</button>
       </span>
     </div>`).join('');
+  const tokenBadge = S.settings.showMomentTokens && m.tokens
+    ? `<span style="font-size:10px;color:var(--text3);margin-left:6px" title="Token 消耗">🪙${m.tokens}</span>` : '';
+  const backendBadge = m.byBackend
+    ? `<span style="font-size:9.5px;color:var(--accent);margin-left:4px;opacity:.7">🤖后台</span>` : '';
   card.innerHTML = `
     <div class="moment-header">
       <div class="moment-av">${typeof avHTML==='string'&&avHTML.startsWith('<img')?avHTML:`<span>${avHTML}</span>`}</div>
-      <div><div class="moment-author">${esc(m.author||S.settings.userName||'我')}</div><div class="moment-time">${fmtTimeFull(m.ts)}</div></div>
+      <div><div class="moment-author">${esc(m.author||S.settings.userName||'我')}${backendBadge}</div><div class="moment-time">${fmtTimeFull(m.ts)}${tokenBadge}</div></div>
       <button style="margin-left:auto;background:none;border:none;cursor:pointer;color:var(--text3);font-size:14px" onclick="delMoment('${m.id}')">✕</button>
     </div>
     <div class="moment-text">${fmtText(m.text||'')}</div>
@@ -846,7 +850,22 @@ async function postMoment() {
   await dbPut('moments', m);
   $i('compose-text').value=''; S._composePics=[];
   $i('compose-img-previews').innerHTML=''; $i('compose-emoji').style.display='none';
+  // Sync to Firestore so backend can read moment context for comment replies
+  syncMomentToFirestore(m);
   await renderMoments(); toast('✅ 发布成功！');
+}
+
+// Write a moment to Firestore (images kept as-is; large dataUrls are stored locally only).
+// The backend only needs text + metadata for context, images are optional.
+function syncMomentToFirestore(m) {
+  if (!window._fbUser || !window._fbLib) return;
+  const { doc, setDoc } = window._fbLib;
+  const data = { ...m };
+  // Strip local dataUrl images to avoid Firestore 1MB limit; storage URLs pass through
+  if (data.images) {
+    data.images = data.images.map(u => (u && u.startsWith('https://') ? u : '__local__'));
+  }
+  setDoc(doc(window._fbDb, 'users', window._fbUser.uid, 'moments', m.id), data).catch(() => {});
 }
 
 async function delMoment(id) {
@@ -886,6 +905,13 @@ async function submitComment(momentId) {
   const c={id:uid(),momentId,author:S.settings.userName||'我',text,replyTo:rt?.author||null,ts:Date.now()};
   await dbPut('comments',c); delete _replyingTo[momentId]; inp.value='';
   inp.placeholder='写评论…';
+  // Write to Firestore so backend can auto-reply
+  if (window._fbUser && window._fbLib && S.settings.commentAutoReply) {
+    const { doc, setDoc } = window._fbLib;
+    setDoc(doc(window._fbDb,'users',window._fbUser.uid,'comments',c.id),
+      { ...c, needsAiReply: true, replied: false }
+    ).catch(() => {});
+  }
   const m = await dbGet('moments',momentId);
   if(m){const card=await makeMomentCard(m);const old=$i('mc-'+momentId);if(old)old.replaceWith(card);}
   const cl2=$i('clist-'+momentId),ri2=$i('ri-'+momentId);
@@ -905,8 +931,14 @@ async function aiCommentMoment(momentId) {
     const res = await fetch('https://openrouter.ai/api/v1/chat/completions',{method:'POST',headers:{'Authorization':`Bearer ${S.settings.apiKey}`,'Content-Type':'application/json'},body:JSON.stringify({model:contact?.model||'openai/gpt-4o-mini',max_tokens:80,stream:false,messages:[{role:'system',content:`你是${aiName}，${contact?.system||'可爱温柔的AI'}，用1-2句话自然地评论朋友圈，像真实朋友一样，不要过于正式。`},{role:'user',content:`朋友圈内容: ${m.text||'[图片]'}`}]})});
     const d=await res.json(); const comment=d.choices?.[0]?.message?.content||'';
     if(comment){
-      const c={id:uid(),momentId,author:aiName,text:comment,replyTo:null,ts:Date.now()};
+      const tokens=d.usage?.total_tokens||0;
+      const c={id:uid(),momentId,author:aiName,text:comment,replyTo:null,ts:Date.now(),tokens,byBackend:false};
       await dbPut('comments',c);
+      if(window._fbUser&&window._fbLib){
+        const{doc,setDoc}=window._fbLib;
+        setDoc(doc(window._fbDb,'users',window._fbUser.uid,'comments',c.id),
+          {...c,needsAiReply:false,replied:true}).catch(()=>{});
+      }
       const m2=await dbGet('moments',momentId);
       if(m2){const card=await makeMomentCard(m2);const old=$i('mc-'+momentId);if(old)old.replaceWith(card);}
       const cl2=$i('clist-'+momentId);if(cl2){cl2.style.display='flex';cl2.style.flexDirection='column';}
@@ -1168,13 +1200,45 @@ function buildSettingsUI() {
       <div class="s-row"><label>AI 气泡色</label><div class="color-row" id="cr-ai"></div></div>
       <div class="s-row"><label>我的名称</label><input type="text" id="s-username" value="${s.userName||'我'}"/></div>
     </div>
-    <div class="s-section"><h3>🐾 主动消息</h3>
+    <div class="s-section"><h3>🐾 主动消息（前端本地）</h3>
+      <div style="font-size:12px;color:var(--text3);padding:0 0 8px">前端本地随机发送，无需后台服务。若部署了 Railway 后台，建议在下方「后台服务」里配置更稳定的版本。</div>
       <div class="s-row"><label>启用</label><label class="toggle"><input type="checkbox" id="s-proactive" ${s.proactive?'checked':''}><span class="tslider"></span></label></div>
       <div class="s-row"><label>每天最多</label><input type="number" id="s-pro-max" value="${s.proMax||3}" min="1" max="20" style="max-width:60px"/> 次</div>
       <div class="s-row"><label>活跃时段</label><input type="number" id="s-pro-start" value="${s.proStart??8}" min="0" max="23" style="max-width:55px"/><span style="color:var(--text3);font-size:11px">:00 ~</span><input type="number" id="s-pro-end" value="${s.proEnd??22}" min="0" max="23" style="max-width:55px"/><span style="color:var(--text3);font-size:11px">:00</span></div>
     </div>
+    <div class="s-section"><h3>🚀 后台服务（Railway 部署）</h3>
+      <div style="font-size:12px;color:var(--text3);padding:0 0 10px">配置后台服务的行为。后台需知道对应的「联系人ID」，在联系人列表里长按联系人可查看ID。</div>
+      <div style="font-weight:700;font-size:11.5px;color:var(--accent);margin-bottom:6px">💌 AI 主动发消息</div>
+      <div class="s-row"><label>启用（后台）</label><label class="toggle"><input type="checkbox" id="s-pro-backend" ${s.proBackend?'checked':''}><span class="tslider"></span></label></div>
+      <div class="s-row"><label>每天最多</label><input type="number" id="s-pro-backend-max" value="${s.proBackendMax||2}" min="1" max="20" style="max-width:60px"/> 次</div>
+      <div class="s-row"><label>发消息的助手ID</label><input type="text" id="s-pro-contact" value="${s.proContactId||''}" placeholder="联系人 ID（不是名字）"/></div>
+      <div style="font-weight:700;font-size:11.5px;color:var(--accent);margin:10px 0 6px">🤖 AI 自动回复评论</div>
+      <div class="s-row"><label>启用</label><label class="toggle"><input type="checkbox" id="s-comment-auto" ${s.commentAutoReply?'checked':''}><span class="tslider"></span></label></div>
+      <div class="s-row"><label>回复评论的助手ID</label><input type="text" id="s-comment-contact" value="${s.commentContactId||''}" placeholder="联系人 ID"/></div>
+      <div style="font-weight:700;font-size:11.5px;color:var(--accent);margin:10px 0 6px">📸 AI 自动发朋友圈</div>
+      <div class="s-row"><label>启用</label><label class="toggle"><input type="checkbox" id="s-moment-auto" ${s.momentAutoPost?'checked':''}><span class="tslider"></span></label></div>
+      <div class="s-row"><label>发圈的助手ID</label><input type="text" id="s-moment-contact" value="${s.momentContactId||''}" placeholder="联系人 ID"/></div>
+      <div class="s-row"><label>频率模式</label>
+        <select id="s-moment-freq-mode">
+          <option value="perDay">每天 N 次</option>
+          <option value="perWeek">每周 N 次</option>
+        </select>
+      </div>
+      <div class="s-row"><label>N =</label><input type="number" id="s-moment-freq-count" value="${s.momentFreqCount||1}" min="1" max="10" style="max-width:60px"/> 次</div>
+      <div class="s-row"><label>发圈时段</label>
+        <input type="number" id="s-moment-start-h" value="${s.momentStartHour??s.proStart??8}" min="0" max="23" style="max-width:55px"/>
+        <span style="color:var(--text3);font-size:11px">:00 ~</span>
+        <input type="number" id="s-moment-end-h" value="${s.momentEndHour??s.proEnd??22}" min="0" max="23" style="max-width:55px"/>
+        <span style="color:var(--text3);font-size:11px">:00</span>
+      </div>
+      <div style="font-weight:700;font-size:11.5px;color:var(--accent);margin:10px 0 6px">🌤️ 天气（Open-Meteo 免费）</div>
+      <div class="s-row"><label>纬度</label><input type="number" id="s-weather-lat" value="${s.weatherLat||''}" placeholder="例 31.23" step="0.01"/></div>
+      <div class="s-row"><label>经度</label><input type="number" id="s-weather-lon" value="${s.weatherLon||''}" placeholder="例 121.47" step="0.01"/></div>
+      <div style="font-size:11px;color:var(--text3);margin-top:4px">不填则发圈时不附带天气信息。可在「高德地图」或「百度地图」右键→复制经纬度。</div>
+    </div>
     <div class="s-section"><h3>🎲 图片生成</h3>
       <div class="s-row"><label>生图模型</label><select id="s-imggen-model"><option value="openai/dall-e-3">DALL-E 3</option><option value="stabilityai/stable-diffusion-xl-base-1.0">SDXL</option></select></div>
+      <div class="s-row"><label>朋友圈显示Token消耗</label><label class="toggle"><input type="checkbox" id="s-show-moment-tokens" ${s.showMomentTokens?'checked':''}><span class="tslider"></span></label></div>
     </div>
     <div class="s-section"><h3>💾 数据管理</h3>
       <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:9px">
@@ -1192,6 +1256,7 @@ function buildSettingsUI() {
     const tm = $i('s-tts-mode'); if(tm)tm.value=s.ttsMode||'browser';
     const vr = $i('s-voice-reply'); if(vr)vr.value=s.voiceReplyMode||'text';
     const ig = $i('s-imggen-model'); if(ig)ig.value=s.imgGenModel||'openai/dall-e-3';
+    const mfm = $i('s-moment-freq-mode'); if(mfm)mfm.value=s.momentFreqMode||'perDay';
     onTtsModeChange(); initVoices();
     renderColorPickers($i('cr-user'),$i('cr-ai'));
     updateStorageInfo();
@@ -1216,7 +1281,22 @@ async function saveAllSettings(){
   s.proStart=parseInt(get('s-pro-start','8'));s.proEnd=parseInt(get('s-pro-end','22'));
   s.fontSize=parseInt(get('s-fontsize','14'));s.bgOpacity=parseFloat(get('s-bgopa','1'));
   s.imgGenModel=get('s-imggen-model','openai/dall-e-3');
+  s.showMomentTokens=getB('s-show-moment-tokens');
   s.userName=get('s-username','我');
+  // Backend service settings
+  s.proBackend=getB('s-pro-backend');
+  s.proBackendMax=parseInt(get('s-pro-backend-max','2'));
+  s.proContactId=get('s-pro-contact');
+  s.commentAutoReply=getB('s-comment-auto');
+  s.commentContactId=get('s-comment-contact');
+  s.momentAutoPost=getB('s-moment-auto');
+  s.momentContactId=get('s-moment-contact');
+  s.momentFreqMode=get('s-moment-freq-mode','perDay');
+  s.momentFreqCount=parseInt(get('s-moment-freq-count','1'));
+  s.momentStartHour=parseInt(get('s-moment-start-h','8'));
+  s.momentEndHour=parseInt(get('s-moment-end-h','22'));
+  s.weatherLat=get('s-weather-lat');
+  s.weatherLon=get('s-weather-lon');
   // sticker lib config is saved separately via saveStickerLibConfig()
   document.documentElement.style.setProperty('--font-size',s.fontSize+'px');
   applyBubble();scheduleProactive();await saveSettings_();toast('✅ 设置已保存');
@@ -1445,6 +1525,100 @@ function updateAuthUI(user) {
     btn.onclick = user ? () => syncToCloud() : () => openAuthModal();
   }
   if (ai) ai.textContent = user ? ('已登录：' + user.email) : '未登录';
+  if (user) startBackendListeners(user.uid);
+  else stopBackendListeners();
+}
+
+// ─── Backend Firestore listeners ───────────────────────────────────────────────
+let _backendUnsubs = [];
+
+function stopBackendListeners() {
+  _backendUnsubs.forEach(u => u());
+  _backendUnsubs = [];
+}
+
+function startBackendListeners(uid) {
+  stopBackendListeners(); // clear any existing
+  if (!window._fbLib || !window._fbDb) return;
+  const { onSnapshot, query, where, collection } = window._fbLib;
+  const fsDb = window._fbDb;
+  const startTs = Date.now();
+
+  // 1. Listen for backend-generated comments (AI replies to moments)
+  const commentsUnsub = onSnapshot(
+    query(
+      collection(fsDb, 'users', uid, 'comments'),
+      where('byBackend', '==', true),
+      where('ts', '>', startTs)
+    ),
+    async snapshot => {
+      for (const change of snapshot.docChanges()) {
+        if (change.type !== 'added') continue;
+        const c = { id: change.doc.id, ...change.doc.data() };
+        await dbPut('comments', c);
+        // Re-render the moment card if visible
+        const m = await dbGet('moments', c.momentId);
+        if (m) {
+          const old = $i('mc-' + c.momentId);
+          if (old) { const card = await makeMomentCard(m); old.replaceWith(card); }
+        }
+        toast(`💬 ${c.author} 回复了朋友圈`);
+      }
+    },
+    err => console.warn('[BackendListener] comments:', err.message)
+  );
+  _backendUnsubs.push(commentsUnsub);
+
+  // 2. Listen for backend-generated Moments (AI auto-posts)
+  const momentsUnsub = onSnapshot(
+    query(
+      collection(fsDb, 'users', uid, 'moments'),
+      where('byBackend', '==', true),
+      where('ts', '>', startTs)
+    ),
+    async snapshot => {
+      for (const change of snapshot.docChanges()) {
+        if (change.type !== 'added') continue;
+        const m = { id: change.doc.id, ...change.doc.data() };
+        await dbPut('moments', m);
+        // Refresh moments page if currently open
+        if ($i('moments-page')?.classList.contains('active')) renderMoments();
+        toast(`✨ ${m.author} 发了一条朋友圈`);
+      }
+    },
+    err => console.warn('[BackendListener] moments:', err.message)
+  );
+  _backendUnsubs.push(momentsUnsub);
+
+  // 3. Listen for proactive messages from backend
+  const proMsgUnsub = onSnapshot(
+    query(
+      collection(fsDb, 'users', uid, 'proactiveMsgs'),
+      where('read', '==', false)
+    ),
+    async snapshot => {
+      for (const change of snapshot.docChanges()) {
+        if (change.type !== 'added') continue;
+        const msg = { id: change.doc.id, ...change.doc.data() };
+        if (msg.ts <= startTs - 60_000) continue; // skip messages older than 1 min at startup
+
+        // Mark as read in Firestore
+        change.doc.ref.update({ read: true }).catch(() => {});
+
+        // Find or infer the chat for this contact
+        const chatId = Object.values(S._chats).find(c => c.contactId === msg.contactId)?.id;
+        if (chatId) {
+          await addMsg(chatId, { role: 'ai', type: 'text', content: msg.text });
+          if (S.currentChat === chatId) { await renderMsgs(); scrollTo_(false); }
+        }
+
+        // Show toast notification
+        toast(`💌 ${msg.contactName || 'AI'}: ${msg.text.slice(0, 40)}`);
+      }
+    },
+    err => console.warn('[BackendListener] proactiveMsgs:', err.message)
+  );
+  _backendUnsubs.push(proMsgUnsub);
 }
 
 // ── 上传 dataUrl 到 Firebase Storage，返回下载 URL ──

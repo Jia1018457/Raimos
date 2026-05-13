@@ -30,3 +30,29 @@ self.addEventListener('fetch', e => {
     fetch(e.request).catch(() => caches.match(e.request))
   );
 });
+
+// ── Web Push ──
+self.addEventListener('push', e => {
+  let d = {};
+  try { d = e.data?.json() || {}; } catch(err) { d = { body: e.data?.text() || '' }; }
+  e.waitUntil(
+    self.registration.showNotification(d.title || 'Raimos', {
+      body: d.body || '',
+      icon: '/icon-192.png',
+      badge: '/icon-192.png',
+      tag: d.tag || 'raimos',
+      renotify: true,
+      data: d,
+    })
+  );
+});
+
+self.addEventListener('notificationclick', e => {
+  e.notification.close();
+  e.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(wClients => {
+      const open = wClients.find(c => c.url.includes(self.location.origin));
+      return open ? open.focus() : clients.openWindow('/');
+    })
+  );
+});

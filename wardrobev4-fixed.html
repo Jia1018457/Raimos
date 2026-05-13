@@ -1154,6 +1154,7 @@ function deleteItem(id){
   if(curTgt==='user'){uLayers=uLayers.filter(l=>l.id!==id);}
   else{const aid=curTgt.replace('ai_','');if(aiMap[aid])aiMap[aid]=aiMap[aid].filter(l=>l.id!==id);}
   rCloset();rWQ();rLL();rFigs();
+  if(typeof notifyWardrobeChanged==='function')notifyWardrobeChanged();
 }
 
 // ── TRANSFORM (衣物位置/大小记忆) ──
@@ -1279,6 +1280,7 @@ function saveImageImport(){
     if(importDisplayData)item.displayUrl=importDisplayData;
     wardrobe.push(item);
     syncStampsFromWardrobe();
+    if(typeof notifyWardrobeChanged==='function')notifyWardrobeChanged();
     closeImageImport();rCloset();
     alert(`✅ “${name}”已导入衣柜！在换装界面点击衣服后可直接拖拽调整位置和大小～`);
   };
@@ -2256,6 +2258,7 @@ function saveCvs(){
   const id=Date.now();
   wardrobe.push({id,name,category:cat,tags,color,dataUrl});
   syncStampsFromWardrobe();
+  if(typeof notifyWardrobeChanged==='function')notifyWardrobeChanged();
   document.getElementById('inp-n').value='';document.getElementById('inp-t').value='';
   localStorage.removeItem('rDraft');closeCvs();
   alert(`✅ "${name}"已保存到衣柜！`);
@@ -2363,6 +2366,44 @@ function showAIResult(text){
 // ═══════════════════════════════════════
 rFigs();rLL();rWQ();rPhotoAISel();rAITBtns();
 syncStampsFromWardrobe();
+
+// ═══════════════════════════════════════
+// 云同步 postMessage 桥
+// 父窗口发 {type:'GET_WARDROBE'} → 返回衣柜数组
+// 父窗口发 {type:'SET_WARDROBE', items:[…]} → 恢复衣柜
+// ═══════════════════════════════════════
+window.addEventListener('message', e => {
+  if (!e.data) return;
+  if (e.data.type === 'GET_WARDROBE') {
+    // 回传衣柜数据给父窗口
+    const items = wardrobe.map(w => ({
+      id: w.id, name: w.name, category: w.category,
+      tags: w.tags || [], color: w.color || '',
+      dataUrl: w.dataUrl || ''
+    }));
+    (e.source || window.parent).postMessage({ type: 'WARDROBE_DATA', items }, '*');
+  } else if (e.data.type === 'SET_WARDROBE') {
+    // 从云端恢复衣柜数据
+    const items = e.data.items || [];
+    wardrobe = items.map(w => ({
+      id: w.id, name: w.name || '未命名', category: w.category || '其他',
+      tags: w.tags || [], color: w.color || '',
+      dataUrl: w.dataUrl || w.storageUrl || ''
+    }));
+    rLL(); rWQ();
+    syncStampsFromWardrobe();
+  }
+});
+
+// 衣柜变动时自动通知父窗口（用于实时同步到 IndexedDB）
+function notifyWardrobeChanged() {
+  const items = wardrobe.map(w => ({
+    id: w.id, name: w.name, category: w.category,
+    tags: w.tags || [], color: w.color || '',
+    dataUrl: w.dataUrl || ''
+  }));
+  window.parent.postMessage({ type: 'WARDROBE_DATA', items }, '*');
+}
 </script>
 </body>
 </html>

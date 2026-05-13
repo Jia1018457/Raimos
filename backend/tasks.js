@@ -15,6 +15,39 @@ import { sendPushToUser } from './push.js';
 
 const UID = process.env.RAIMOS_UID;
 
+// ─── Web Push ────────────────────────────────────────────────────────────────
+export function initVapid() {
+  const pub = process.env.VAPID_PUBLIC_KEY;
+  const priv = process.env.VAPID_PRIVATE_KEY;
+  if (pub && priv) {
+    webPush.setVapidDetails('mailto:raimos@app.local', pub, priv);
+    console.log('[Push] VAPID configured ✓');
+  } else {
+    // Generate keys on first run and log for the user to add as env vars
+    const keys = webPush.generateVAPIDKeys();
+    console.log('[Push] VAPID keys not set. Add these to your env vars:');
+    console.log(`  VAPID_PUBLIC_KEY=${keys.publicKey}`);
+    console.log(`  VAPID_PRIVATE_KEY=${keys.privateKey}`);
+  }
+}
+
+async function sendPush(title, body, tag = 'raimos') {
+  if (!process.env.VAPID_PUBLIC_KEY || !process.env.VAPID_PRIVATE_KEY) return;
+  try {
+    const snap = await db.doc(`users/${UID}/pushSubscriptions/web`).get();
+    if (!snap.exists) return;
+    const sub = snap.data();
+    await webPush.sendNotification(sub, JSON.stringify({ title, body, tag }));
+  } catch(e) {
+    if (e.statusCode === 410 || e.statusCode === 404) {
+      // Subscription expired — clean up
+      await db.doc(`users/${UID}/pushSubscriptions/web`).delete().catch(() => {});
+    } else {
+      console.warn('[Push] send failed:', e.message);
+    }
+  }
+}
+
 // ─── Tiny helpers ────────────────────────────────────────────────────────────
 
 function genId() {
@@ -292,6 +325,7 @@ async function sendProactiveMessage(settings) {
     byBackend: true,
   });
 
+  await sendPush(`💬 ${contact.name}`, content.slice(0, 80), 'proactive-msg');
   console.log(`[ProactiveMsg] ✓ ${contact.name}: "${content.slice(0, 40)}"`);
 }
 
@@ -487,6 +521,7 @@ async function postProactiveMoment(settings) {
     contactId: settings.momentContactId,
   });
 
+  await sendPush(`🌸 ${contact.name} 发了朋友圈`, finalContent.slice(0, 80), 'proactive-moment');
   console.log(`[ProactiveMoment] ✓ Posted by ${contact.name}: "${content.slice(0, 50)}"`);
 }
 

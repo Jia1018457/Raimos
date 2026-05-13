@@ -33,6 +33,8 @@ let S = {
     temp:0.85, ctx:20, imgSize:800, sumThresh:40,
     proactive:false, proMax:3, proStart:8, proEnd:22,
     imgGenModel:'openai/dall-e-3',
+    city:'', momentUseMemory:true, momentUseRecentChats:false, momentRecentChatsCount:10,
+    backendUrl:'',
     aiName:'小可', userName:'我', aiAvatar:'🐱', userAvatar:'😊',
     userBubble:'#ff8fab', aiBubble:'#ffffff',
     theme:'light', chatBg:'#fdf6f0', chatBgImg:'', bgOpacity:1, fontSize:14,
@@ -1160,6 +1162,13 @@ function buildSettingsUI() {
       <div class="s-row"><label>Tavily Key (搜索)</label><input type="password" id="s-tavily" value="${s.tavilyKey||''}" placeholder="可选，联网搜索"/></div>
       <div class="s-row"><label>Unsplash Key (图片)</label><input type="password" id="s-unsplash" value="${s.unsplashKey||''}" placeholder="可选，朋友圈搜图"/></div>
     </div>
+    <div class="s-section"><h3>👤 个人信息</h3>
+      <div class="s-row"><label>所在城市</label><input type="text" id="s-city" value="${s.city||''}" placeholder="例：上海、北京、广州"/></div>
+      <div style="font-size:11px;color:var(--text3);margin-top:-4px;padding-bottom:10px">用于发朋友圈时附带当地天气，填城市名即可（支持中文）。若已填经纬度则优先使用经纬度。</div>
+      <div class="s-row"><label>生成朋友圈时参考记忆库</label><label class="toggle"><input type="checkbox" id="s-moment-use-memory" ${s.momentUseMemory!==false?'checked':''}><span class="tslider"></span></label></div>
+      <div class="s-row"><label>生成朋友圈时参考最近聊天</label><label class="toggle"><input type="checkbox" id="s-moment-use-chats" ${s.momentUseRecentChats?'checked':''}><span class="tslider"></span></label></div>
+      <div class="s-row"><label>参考聊天条数</label><input type="number" id="s-moment-chat-count" value="${s.momentRecentChatsCount||10}" min="1" max="50" style="max-width:60px"/> 条</div>
+    </div>
     <div class="s-section"><h3>☁️ 云同步</h3>
       <div style="padding:4px 0 10px;font-size:12px;color:var(--text3)">登录后可同步：助手、对话、记忆、朋友圈、评论、表情包、关键词动画、换装衣柜、陪伴设置。图片自动上传至 Firebase Storage。</div>
       <div style="display:flex;gap:7px;flex-wrap:wrap;">
@@ -1302,6 +1311,16 @@ async function saveAllSettings(){
   applyBubble();scheduleProactive();await saveSettings_();toast('✅ 设置已保存');
 }
 
+async function testBackendUrl(){
+  const url=($i('s-backend-url')?.value||'').trim();
+  if(!url){toast('请先填写后台服务地址');return;}
+  try{
+    const res=await fetch(url,{signal:AbortSignal.timeout(8000)});
+    const d=await res.json();
+    if(d.status==='ok')toast(`✅ 连接成功！UID: ${d.uid||'未知'}`);
+    else toast('⚠️ 服务返回异常');
+  }catch(e){toast('❌ 无法连接：'+e.message);}
+}
 async function updateStorageInfo(){
   const est=await estimateUsage();
   const si=$i('storage-info');const sb=$i('storage-bar');

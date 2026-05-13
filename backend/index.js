@@ -11,7 +11,7 @@
  */
 
 import http from 'http';
-import { startCommentReplyListener, startProactiveMessaging, startProactiveMoments } from './tasks.js';
+import { startCommentReplyListener, startProactiveMessaging, startProactiveMoments, initVapid } from './tasks.js';
 
 const PORT = Number(process.env.PORT || 3000);
 
@@ -27,13 +27,28 @@ if (!process.env.RAIMOS_UID) {
 async function main() {
   console.log('[Raimos Backend] Initializing…');
 
+  // Init VAPID keys for Web Push
+  initVapid();
+
   // Start all tasks
   startCommentReplyListener();          // real-time listener, no await needed
   await startProactiveMessaging();
   await startProactiveMoments();
 
-  // Minimal HTTP server — Railway requires an open port for health checks
+  const vapidPublicKey = process.env.VAPID_PUBLIC_KEY || '';
+
+  // HTTP server — health check + VAPID public key endpoint
   const server = http.createServer((req, res) => {
+    const origin = req.headers.origin || '*';
+    if (req.method === 'OPTIONS') {
+      res.writeHead(204, { 'Access-Control-Allow-Origin': origin, 'Access-Control-Allow-Methods': 'GET,POST,OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' });
+      res.end(); return;
+    }
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    if (req.url === '/vapid-public-key') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ publicKey: vapidPublicKey })); return;
+    }
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ status: 'ok', ts: Date.now(), uid: process.env.RAIMOS_UID }));
   });

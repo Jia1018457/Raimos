@@ -525,6 +525,15 @@
         <div class="mrow"><label>发圈频率</label>
           <select id="cm-x-moment-freq-mode" style="max-width:80px"><option value="perDay">每天</option><option value="perWeek" selected>每周</option></select>
           <input type="number" id="cm-x-moment-freq-count" value="3" min="1" max="30" style="max-width:50px"/> 次</div>
+        <div class="mrow"><label>朋友圈专属提示词</label>
+          <div style="flex:1">
+            <select id="cm-x-moment-prompt-mode" style="font-size:12px;margin-bottom:4px">
+              <option value="add">追加到系统词</option>
+              <option value="replace">替换系统词</option>
+            </select>
+            <textarea id="cm-x-moment-prompt" rows="2" placeholder="留空继承全局设置" style="width:100%;font-size:12px;resize:vertical"></textarea>
+          </div>
+        </div>
         <div class="mrow"><label>AI 自动评论</label><label class="toggle"><input type="checkbox" id="cm-x-auto-comment"><span class="tslider"></span></label></div>
         <div class="mrow"><label>评论检查间隔</label><input type="number" id="cm-x-comment-freq" value="360" min="1" max="10000" style="max-width:70px"/> 分钟</div>
         <div class="mrow"><label>单帖最多评论句数</label><input type="number" id="cm-x-max-comments" value="1" min="1" max="5" style="max-width:55px"/> 句</div>

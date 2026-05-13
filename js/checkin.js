@@ -44,6 +44,8 @@ async function initCheckin() {
   CK.goals = await ckGetGoals();
   if (CK.goals.length && !CK.activeGoalId) CK.activeGoalId = CK.goals[0].id;
   setupCheckinReminders();
+  // Catch up any missed reminders from when the app was closed
+  await ckCatchUpReminders();
 }
 
 // ══════════════════════════════
@@ -857,7 +859,13 @@ async function ckShowAiComment(goalId, date) {
 // ══════════════════════════════
 //  REMINDERS
 // ══════════════════════════════
+
+// 1. in-page setTimeout (app open)
+// 2. SW Periodic Background Sync (Android Chrome PWA, app closed)
+// 3. catch-up on open (missed reminder detected on app launch)
+
 function setupCheckinReminders() {
+  // ── Clear existing timers ──
   CK.reminderTimers.forEach(t => clearTimeout(t));
   CK.reminderTimers = [];
 
@@ -878,6 +886,55 @@ function setupCheckinReminders() {
       CK.reminderTimers.push(t);
     });
   });
+
+  // ── Sync reminder schedule to Service Worker ──
+  ckSyncRemindersToSW();
+
+  // ── Register Periodic Background Sync (Android Chrome PWA) ──
+  ckRegisterPeriodicSync();
+}
+
+// Push the reminder list into the SW via postMessage
+// The SW stores it in Cache Storage and uses it when periodicsync fires
+function ckSyncRemindersToSW() {
+  if (!navigator.serviceWorker?.controller) return;
+  const reminders = CK.goals
+    .filter(g => g.reminderEnabled && g.reminderTimes?.length)
+    .map(g => ({ goalId: g.id, title: g.title, emoji: g.emoji, times: g.reminderTimes }));
+  navigator.serviceWorker.controller.postMessage({ type: 'SET_CK_REMINDERS', reminders });
+}
+
+// Register periodicsync so SW can wake every ~hour when PWA is installed
+async function ckRegisterPeriodicSync() {
+  try {
+    const reg = await navigator.serviceWorker?.ready;
+    if (!reg?.periodicSync) return;
+    const status = await navigator.permissions.query({ name: 'periodic-background-sync' });
+    if (status.state !== 'granted') return;
+    await reg.periodicSync.register('checkin-reminder', { minInterval: 60 * 60 * 1000 });
+  } catch { /* not supported */ }
+}
+
+// On app open: check if any reminder time already passed today and goal not checked in
+// This handles the case where the app was closed during reminder time
+async function ckCatchUpReminders() {
+  const now   = new Date();
+  const hhmm  = now.getHours() * 60 + now.getMinutes();
+  const today = ckTodayStr();
+
+  for (const goal of CK.goals) {
+    if (!goal.reminderEnabled || !goal.reminderTimes?.length) continue;
+    const rec = await ckGetRecordByDate(goal.id, today);
+    if (rec?.completed) continue;
+
+    // Any reminder time that already passed today (within last 4 hours)?
+    const fired = goal.reminderTimes.some(t => {
+      const [hh, mm] = t.split(':').map(Number);
+      const tMins = hh * 60 + mm;
+      return tMins <= hhmm && hhmm - tMins <= 240;
+    });
+    if (fired) ckFireReminder(goal);
+  }
 }
 
 function ckFireReminder(goal) {
@@ -889,6 +946,13 @@ function ckFireReminder(goal) {
     setTimeout(() => ptost.classList.remove('show'), 6000);
   }
   if (Notification?.permission === 'granted') {
+    try {
+      self?.registration?.showNotification?.('Raimos 打卡提醒', {
+        body: `「${goal.title}」今天还没打卡哦，加油坚持！`,
+        icon: '/icon-192.png',
+        tag:  'ck-reminder-' + goal.id,
+      });
+    } catch {}
     try {
       new Notification('Raimos 打卡提醒', {
         body: `「${goal.title}」今天还没打卡哦，加油坚持！`,

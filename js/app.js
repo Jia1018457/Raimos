@@ -43,7 +43,9 @@ let S = {
     aiName:'小可', userName:'我', aiAvatar:'🐱', userAvatar:'😊',
     showUserAvatar:true, showAiAvatar:true,
     userBubble:'#ff8fab', aiBubble:'#ffffff',
+    userTextColor:'', aiTextColor:'', fontColor:'',
     theme:'light', chatBg:'#fdf6f0', chatBgImg:'', bgOpacity:1, fontSize:14,
+    autoMemEnabled:true, autoMemInterval:5,
     welcomeIcon:'🐻', welcomeTitle:'你好呀！', welcomeSub:'点左上角 ＋ 新建对话，或先去⚙️设置里填 OpenRouter API Key 哦～',
 
     // ── 陪伴系统 ──
@@ -67,6 +69,7 @@ let S = {
     companionPomoBreak:5,
     companionCharLeft:3,    // % from left edge of stage
     companionCharBottom:4,  // % from bottom edge of stage
+    companionCharUrl:'', companionBgUrl:'',
 
     // ── Cloudinary 图床 ──
     cloudinaryCloud:'', cloudinaryPreset:'',
@@ -489,7 +492,9 @@ async function saveContact() {
 }
 async function delContact(id) {
   if (!confirm('删除这个助手？')) return;
-  await dbDel('contacts', id); delete S._contacts[id]; renderContacts();
+  await dbDel('contacts', id); delete S._contacts[id];
+  fbDel('contacts', id);
+  renderContacts();
 }
 function toggleContactSystem() {
   const inherit = $i('cm-system-inherit').checked;
@@ -596,10 +601,12 @@ async function openChat(id) {
 
 async function deleteCurrentChat() {
   if (!S.currentChat) return; if (!confirm('删除此对话？')) return;
-  await dbDel('chats', S.currentChat);
-  const msgs = await dbGetAll('messages', 'chatId', S.currentChat);
-  for (const m of msgs) await dbDel('messages', m.id);
-  delete S._chats[S.currentChat]; S.currentChat = null;
+  const chatId = S.currentChat;
+  await dbDel('chats', chatId);
+  fbDel('chats', chatId);
+  const msgs = await dbGetAll('messages', 'chatId', chatId);
+  for (const m of msgs) { await dbDel('messages', m.id); fbDel('messages', m.id); }
+  delete S._chats[chatId]; S.currentChat = null;
   renderChatList(); showWelcome(); closeCtxMenu();
 }
 async function archiveChat() {
@@ -1117,7 +1124,7 @@ async function addMemManual() {
   await dbPut('memories',mem); S._memories.push(mem);
   renderMemories(); closeModal('add-mem-modal'); toast('✅ 记忆已添加');
 }
-async function delMem(i) { await dbDel('memories',S._memories[i].id); S._memories.splice(i,1); renderMemories(); }
+async function delMem(i) { const id=S._memories[i].id; await dbDel('memories',id); fbDel('memories',id); S._memories.splice(i,1); renderMemories(); }
 
 async function getRelevantMems(chatId, contactId) {
   const pool = S._memories.filter(m => !m.contactId || m.contactId === contactId);
@@ -1135,7 +1142,11 @@ async function getRelevantMems(chatId, contactId) {
 }
 
 async function autoMemCheck(chatId, contactId) {
+  if (!S.settings.autoMemEnabled) return;
   const msgs = await dbGetAll('messages','chatId',chatId);
+  const interval = Math.max(1, parseInt(S.settings.autoMemInterval)||5);
+  const aiMsgCount = msgs.filter(m=>m.role==='ai').length;
+  if (aiMsgCount % interval !== 0) return;
   const lastText = msgs.slice(-4).map(m=>`${m.role==='user'?'用户':'AI'}: ${m.content||'[媒体]'}`).join('\n');
   if (!S.settings.apiKey) return;
   try {
@@ -1235,7 +1246,7 @@ async function makeMomentCard(m) {
       <div class="moment-actions">
         <button class="m-act-btn" onclick="likeMoment('${m.id}')">❤️ ${m.likes||0}</button>
         <button class="m-act-btn" onclick="toggleComments('${m.id}')">💬 ${comments.length} 评论</button>
-        ${S.settings.apiKey?`<button class="m-act-btn" onclick="aiCommentMoment('${m.id}',null)">🤖 让AI评论</button>`:''}
+        ${S.settings.apiKey?`<button class="m-act-btn" onclick="openAiCommentModal('${m.id}')">🤖 让AI评论</button>`:''}
       </div>
       <div class="comments-list" id="clist-${m.id}" style="display:none">${commHTML}</div>
       <div class="reply-input-wrap" id="ri-${m.id}" style="display:none">
@@ -1257,11 +1268,20 @@ async function postMoment() {
   await renderMoments(); toast('✅ 发布成功！');
 }
 
+async function fbDel(collection, docId) {
+  if (!window._fbUser || !window._fbDb || !window._fbLib) return;
+  try {
+    const { doc, deleteDoc } = window._fbLib;
+    await deleteDoc(doc(window._fbDb, 'users', window._fbUser.uid, collection, docId));
+  } catch(e) { console.warn('fbDel error', e); }
+}
+
 async function delMoment(id) {
   if (!confirm('删除这条动态？')) return;
   await dbDel('moments',id);
+  fbDel('moments', id);
   const comments = await dbGetAll('comments','momentId',id);
-  for (const c of comments) await dbDel('comments',c.id);
+  for (const c of comments) { await dbDel('comments',c.id); fbDel('comments', c.id); }
   await renderMoments();
 }
 
@@ -1332,6 +1352,7 @@ async function submitComment(momentId) {
 }
 async function delComment(momentId, commentId) {
   await dbDel('comments',commentId);
+  fbDel('comments', commentId);
   const m = await dbGet('moments',momentId);
   if(m){const card=await makeMomentCard(m);const old=$i('mc-'+momentId);if(old)old.replaceWith(card);}
 }
@@ -1351,6 +1372,22 @@ function openAiPostModal() {
   if (!contacts.length) { toast('请先添加 AI 助手'); return; }
   sel.innerHTML = contacts.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
   $i('ai-post-modal').classList.add('show');
+}
+function openAiCommentModal(momentId) {
+  const contacts = Object.values(S._contacts);
+  if (!contacts.length) { aiCommentMoment(momentId, null); return; }
+  const sel = $i('acm-contact');
+  if (sel) sel.innerHTML = contacts.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
+  const modal = $i('ai-comment-modal');
+  if (modal) { modal.dataset.momentId = momentId; modal.classList.add('show'); }
+  else aiCommentMoment(momentId, null);
+}
+function doAiComment() {
+  const modal = $i('ai-comment-modal'); if (!modal) return;
+  const momentId = modal.dataset.momentId;
+  const contactId = $i('acm-contact')?.value || null;
+  closeModal('ai-comment-modal');
+  aiCommentMoment(momentId, contactId);
 }
 async function doAiPost() {
   const contactId = $i('apm-contact')?.value;
@@ -1578,6 +1615,16 @@ async function composeGenImg() {
 function toggleComposeEmoji() {
   const ce=$i('compose-emoji');
   ce.style.display=ce.style.display==='none'?'block':'none';
+}
+function toggleComposeMoment() {
+  const el=$i('compose-moment'); if(!el)return;
+  const collapsed=el.classList.toggle('collapsed');
+  const btn=el.querySelector('.compose-moment-toggle'); if(btn)btn.textContent=collapsed?'▸':'▾';
+}
+function toggleInputCollapse() {
+  const wrap=$i('input-wrap'); if(!wrap)return;
+  const collapsed=wrap.classList.toggle('collapsed');
+  const btn=$i('input-collapse-btn'); if(btn)btn.textContent=collapsed?'▸':'▾';
 }
 function buildComposeEmojiGrid() {
   const grid=$i('compose-emoji-grid');
@@ -1852,14 +1899,13 @@ async function pickAlbumPhoto(keywords) {
   const photos = await dbGetAll('album');
   if (!photos.length) return null;
   const kws = (keywords||'').toLowerCase().split(/[\s,，]+/).filter(Boolean);
-  // Score each photo by label match
   const scored = photos.map(p => {
     const lbl = (p.label||'').toLowerCase();
     const score = kws.reduce((s,k) => s + (lbl.includes(k)?1:0), 0);
     return {p, score};
   });
   scored.sort((a,b) => b.score - a.score || Math.random() - 0.5);
-  return scored[0]?.p || null;
+  return scored[0]?.p?.url || null;
 }
 
 /** Pick best-matching sticker by label */
@@ -2184,7 +2230,15 @@ function initMinimap(){
 function toggleTheme(){const d=document.documentElement.getAttribute('data-theme')==='dark';document.documentElement.setAttribute('data-theme',d?'light':'dark');S.settings.theme=d?'light':'dark';$i('theme-btn').textContent=d?'🌙':'☀️';saveSetting('theme',S.settings.theme);}
 function applyTheme(){document.documentElement.setAttribute('data-theme',S.settings.theme||'light');const btn=$i('theme-btn');if(btn)btn.textContent=S.settings.theme==='dark'?'☀️':'🌙';}
 function applyBg(){const ca=$i('chat-area');if(!ca)return;ca.style.background=S.settings.chatBg||'var(--bg)';ca.style.backgroundImage=S.settings.chatBgImg?`url(${S.settings.chatBgImg})`:'none';if(S.settings.chatBgImg){ca.style.backgroundSize='cover';ca.style.backgroundPosition='center';}}
-function applyBubble(){document.documentElement.style.setProperty('--user-bubble',S.settings.userBubble||'#ff8fab');document.documentElement.style.setProperty('--ai-bubble',S.settings.aiBubble||'#ffffff');const lum=getLum(S.settings.userBubble||'#ff8fab');document.documentElement.style.setProperty('--user-text',lum>.55?'#3d2c35':'#fff');}
+function applyBubble(){
+  document.documentElement.style.setProperty('--user-bubble',S.settings.userBubble||'#ff8fab');
+  document.documentElement.style.setProperty('--ai-bubble',S.settings.aiBubble||'#ffffff');
+  const lum=getLum(S.settings.userBubble||'#ff8fab');
+  const autoUserText=lum>.55?'#3d2c35':'#fff';
+  document.documentElement.style.setProperty('--user-text',S.settings.userTextColor||autoUserText);
+  if(S.settings.aiTextColor) document.documentElement.style.setProperty('--ai-text',S.settings.aiTextColor);
+  if(S.settings.fontColor) document.documentElement.style.setProperty('--text',S.settings.fontColor);
+}
 function getLum(hex){try{const r=parseInt(hex.slice(1,3),16)/255,g=parseInt(hex.slice(3,5),16)/255,b=parseInt(hex.slice(5,7),16)/255;return .299*r+.587*g+.114*b;}catch{return 0;}}
 
 const BG_PRESETS=[{c:'#fdf6f0',l:'默认粉'},{c:'#fff0f3',l:'粉白'},{c:'#f0fff4',l:'薄荷'},{c:'#f0f8ff',l:'天蓝'},{c:'#f5f0ff',l:'薰衣草'},{c:'#fffde7',l:'奶油'},{c:'#1a1220',l:'深紫'},{c:'#0d1b2a',l:'深蓝'},{c:'#0d2818',l:'深绿'}];
@@ -2371,6 +2425,8 @@ function buildSettingsUI() {
       <div class="s-row"><label>参考最近聊天</label><label class="toggle"><input type="checkbox" id="s-ref-chat" ${s.refChatEnabled?'checked':''}><span class="tslider"></span></label></div>
       <div class="s-row"><label>参考条数</label><input type="number" id="s-ref-chat-count" value="${s.refChatCount||5}" min="1" max="50" style="max-width:70px"/> 条</div>
       <div class="s-row"><label>参考记忆库</label><label class="toggle"><input type="checkbox" id="s-ref-mem" ${s.refMemEnabled!==false?'checked':''}><span class="tslider"></span></label></div>
+      <div class="s-row"><label>AI 自动记忆</label><label class="toggle"><input type="checkbox" id="s-auto-mem" ${s.autoMemEnabled!==false?'checked':''}><span class="tslider"></span></label></div>
+      <div class="s-row"><label>记忆频率</label><input type="number" id="s-auto-mem-interval" value="${s.autoMemInterval||5}" min="1" max="50" style="max-width:70px"/><span style="font-size:11px;color:var(--text3)"> 条AI回复检查一次</span></div>
     </div>
     <div class="s-section" hidden><h3>🖼️ Cloudinary 图床</h3>
       <div style="font-size:12px;color:var(--text3);margin-bottom:8px">用于图片云端存储（头像、表情包、相册等）。<a href="https://cloudinary.com" target="_blank" style="color:var(--accent)">免费注册</a>后填入下方信息。Upload preset 选 unsigned 模式。</div>
@@ -2445,6 +2501,9 @@ function buildSettingsUI() {
       <div class="s-row"><label>背景透明度</label><input type="range" id="s-bgopa" min="0" max="1" step="0.05" value="${s.bgOpacity??1}" oninput="$i('s-bgopa-v').textContent=Math.round(this.value*100)+'%';document.documentElement.style.setProperty('--bg-opacity',this.value)"><span class="rval" id="s-bgopa-v">${Math.round((s.bgOpacity??1)*100)}%</span></div>
       <div class="s-row"><label>用户气泡色</label><div class="color-row" id="cr-user"></div></div>
       <div class="s-row"><label>AI 气泡色</label><div class="color-row" id="cr-ai"></div></div>
+      <div class="s-row"><label>我的气泡文字色</label><div style="display:flex;align-items:center;gap:6px"><input type="color" id="s-user-text-color" value="${s.userTextColor||'#ffffff'}" oninput="S.settings.userTextColor=this.value;applyBubble();saveSetting('userTextColor',this.value)"><button class="btn-s" style="font-size:11px;padding:2px 7px" onclick="S.settings.userTextColor='';applyBubble();saveSetting('userTextColor','');$i('s-user-text-color').value='#ffffff'">自动</button></div></div>
+      <div class="s-row"><label>AI 气泡文字色</label><div style="display:flex;align-items:center;gap:6px"><input type="color" id="s-ai-text-color" value="${s.aiTextColor||'#3d2c35'}" oninput="S.settings.aiTextColor=this.value;applyBubble();saveSetting('aiTextColor',this.value)"><button class="btn-s" style="font-size:11px;padding:2px 7px" onclick="S.settings.aiTextColor='';applyBubble();saveSetting('aiTextColor','');$i('s-ai-text-color').value='#3d2c35'">自动</button></div></div>
+      <div class="s-row"><label>全局字体颜色</label><div style="display:flex;align-items:center;gap:6px"><input type="color" id="s-font-color" value="${s.fontColor||'#3d2c35'}" oninput="S.settings.fontColor=this.value;applyBubble();saveSetting('fontColor',this.value)"><button class="btn-s" style="font-size:11px;padding:2px 7px" onclick="S.settings.fontColor='';applyBubble();saveSetting('fontColor','');$i('s-font-color').value='#3d2c35'">自动</button></div></div>
       <div class="s-row"><label>我的名称</label><input type="text" id="s-username" value="${s.userName||'我'}"/></div>
       <div class="s-row"><label>显示我的头像</label><label class="toggle"><input type="checkbox" id="s-show-user-av" ${s.showUserAvatar!==false?'checked':''}><span class="tslider"></span></label></div>
       <div class="s-row"><label>显示 AI 头像</label><label class="toggle"><input type="checkbox" id="s-show-ai-av" ${s.showAiAvatar!==false?'checked':''}><span class="tslider"></span></label></div>
@@ -2622,6 +2681,7 @@ async function saveAllSettings(){
   s.postImages=getB('s-post-images');s.imageFreq=parseInt(get('s-image-freq','50'));
   s.imageSources=['album','search','generate'].filter(x=>getB(`s-imgsrc-${x}`)).join(',') || 'album';
   s.fontSize=parseInt(get('s-fontsize','14'));s.bgOpacity=parseFloat(get('s-bgopa','1'));
+  s.userTextColor=get('s-user-text-color','');s.aiTextColor=get('s-ai-text-color','');s.fontColor=get('s-font-color','');
   const igm=get('s-imggen-model','openai/dall-e-3');
   s.imgGenModel=igm==='custom'?(get('s-imggen-custom-model')||'openai/dall-e-3'):igm;
   s.imgGenCustomModel=get('s-imggen-custom-model');
@@ -2634,6 +2694,8 @@ async function saveAllSettings(){
   s.refChatEnabled=getB('s-ref-chat');
   s.refChatCount=parseInt(get('s-ref-chat-count','5'));
   s.refMemEnabled=getB('s-ref-mem');
+  s.autoMemEnabled=getB('s-auto-mem');
+  s.autoMemInterval=parseInt(get('s-auto-mem-interval','5'));
   // Cloudinary
   s.cloudinaryCloud=get('s-cld-cloud','').trim();
   s.cloudinaryPreset=get('s-cld-preset','').trim();
@@ -3313,7 +3375,12 @@ async function applyCompanionBackground() {
   if (S._companion.bgObjUrl) { try { URL.revokeObjectURL(S._companion.bgObjUrl); } catch(e) {} S._companion.bgObjUrl = null; }
   wrap.innerHTML = '';
   if ((s.companionBgType || 'builtin') === 'upload' && s.companionBgMediaId) {
-    const url = await loadMediaUrl(s.companionBgMediaId);
+    let url = await loadMediaUrl(s.companionBgMediaId);
+    if (!url && s.companionBgUrl) {
+      const img = document.createElement('img'); img.src = s.companionBgUrl;
+      img.style.cssText = 'width:100%;height:100%;object-fit:cover;position:absolute;inset:0;';
+      wrap.appendChild(img); wrap.style.background = 'none'; return;
+    }
     if (!url) { wrap.style.background = 'linear-gradient(135deg,#ffe6ef,#fff4ea)'; return; }
     S._companion.bgObjUrl = url;
     const blob = await loadMediaBlob(s.companionBgMediaId);
@@ -3347,7 +3414,12 @@ async function applyCompanionCharacter() {
   if (S._companion.charObjUrl) { try { URL.revokeObjectURL(S._companion.charObjUrl); } catch(e) {} S._companion.charObjUrl = null; }
   wrap.innerHTML = '';
   if ((s.companionCharType || 'builtin') === 'upload' && s.companionCharMediaId) {
-    const url = await loadMediaUrl(s.companionCharMediaId);
+    let url = await loadMediaUrl(s.companionCharMediaId);
+    if (!url && s.companionCharUrl) {
+      const img = document.createElement('img'); img.src = s.companionCharUrl;
+      img.style.cssText = 'width:100%;height:100%;object-fit:contain;';
+      wrap.appendChild(img); return;
+    }
     if (!url) { wrap.innerHTML = '<div class="comp-emoji">😊</div>'; return; }
     S._companion.charObjUrl = url;
     const blob = await loadMediaBlob(s.companionCharMediaId);
@@ -3446,12 +3518,14 @@ async function handleCompanionMedia(input) {
   const target = S._companion.uploadTarget; if (!target) return;
   const id = `comp_${target}_${uid()}`;
   await saveMediaBlob(id, file, { name:file.name, mime:file.type, kind:target });
-  // Upload image/video char to Cloudinary for cloud sync
-  if (target === 'char' && file.type.startsWith('image/')) {
-    toast('上传形象图片中…');
+  // Upload image to Cloudinary for cloud sync
+  if ((target === 'char' || target === 'bg') && file.type.startsWith('image/')) {
+    toast('上传图片到云端中…');
     const dataUrl = await new Promise(r=>{const fr=new FileReader();fr.onload=e=>r(e.target.result);fr.readAsDataURL(file);});
-    const url = await uploadToCloudinary(dataUrl, 'raimos/companion').catch(()=>null);
-    if (url) { S.settings.companionCharUrl = url; await saveSetting('companionCharUrl', url); }
+    const folder = target === 'char' ? 'raimos/companion' : 'raimos/companion-bg';
+    const url = await uploadToCloudinary(dataUrl, folder).catch(()=>null);
+    if (target === 'char' && url) { S.settings.companionCharUrl = url; await saveSetting('companionCharUrl', url); }
+    if (target === 'bg' && url) { S.settings.companionBgUrl = url; await saveSetting('companionBgUrl', url); }
   }
   if (target === 'char') {
     S.settings.companionCharType = 'upload'; S.settings.companionCharMediaId = id;

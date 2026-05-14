@@ -766,6 +766,9 @@ body.comp-immersive #comp-panel{display:none;}
    DAILY CHECK-IN MODULE
 ═══════════════════════════════════════ */
 
+/* ── PWA Sync Hint Banner ── */
+#pwa-sync-hint{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 14px;background:color-mix(in srgb,var(--accent) 12%,transparent);border-bottom:1.5px solid color-mix(in srgb,var(--accent) 25%,transparent);font-size:12px;color:var(--text2);flex-shrink:0;}
+
 /* ── Goal Tabs ── */
 .ck-goal-tabs-wrap{display:flex;gap:6px;padding:8px 12px;overflow-x:auto;flex-shrink:0;border-bottom:1.5px solid var(--border);background:var(--bg2);scrollbar-width:none;}
 .ck-goal-tabs-wrap::-webkit-scrollbar{display:none;}

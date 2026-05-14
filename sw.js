@@ -105,7 +105,7 @@ async function swCheckReminders() {
 
   const now   = new Date();
   const hhmm  = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
-  const today = now.toISOString().slice(0, 10);
+  const today = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
 
   // Load today's checked-in goals from IndexedDB via client message
   // (SW can't open IndexedDB easily across origins, so we show the notification

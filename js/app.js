@@ -2468,6 +2468,11 @@ function buildSettingsUI() {
         <button class="btn-s" onclick="restoreFromCloud()">⬇️ 从云端恢复</button>
       </div>
       <div id="auth-info" style="margin-top:8px;font-size:12px;color:var(--text3)"></div>
+      <div id="pwa-install-section" style="margin-top:14px;padding-top:12px;border-top:1.5px solid var(--border)">
+        <div style="font-size:13px;font-weight:800;color:var(--text);margin-bottom:6px">📱 安装到桌面</div>
+        <div id="pwa-install-hint" style="font-size:12px;color:var(--text3);line-height:1.6;margin-bottom:8px"></div>
+        <button id="pwa-install-btn" class="btn-p" style="display:none" onclick="triggerPwaInstall()">⬇️ 安装 App</button>
+      </div>
     </div>
     <div class="s-section" hidden><h3>🗣️ 语音</h3>
       <div class="s-row"><label>TTS 模式</label><select id="s-tts-mode" onchange="onTtsModeChange()"><option value="browser">浏览器 TTS (免费)</option><option value="custom">自定义 TTS 接口</option></select></div>
@@ -2614,6 +2619,7 @@ function buildSettingsUI() {
     updateStorageInfo();
     const ai = $i('auth-info');
     if (ai) ai.textContent = window._fbUser ? ('已登录：' + window._fbUser.email) : '未登录';
+    updatePwaInstallUI();
     initSettingsSubpages();
   },0);
 }
@@ -3039,6 +3045,17 @@ async function resetPassword() {
   }
 }
 
+// Returns true when running as installed standalone PWA (iOS or Android)
+function isPwaStandalone() {
+  return window.navigator.standalone === true ||
+         window.matchMedia('(display-mode: standalone)').matches;
+}
+
+// Returns true on iOS (iPhone/iPad) regardless of browser
+function isIos() {
+  return /iphone|ipad|ipod/i.test(navigator.userAgent);
+}
+
 function updateAuthUI(user) {
   const txt = $i('auth-status-txt');
   const btn = $i('auth-action-btn');
@@ -3049,12 +3066,65 @@ function updateAuthUI(user) {
     btn.onclick = user ? () => syncToCloud() : () => openAuthModal();
   }
   if (ai) ai.textContent = user ? ('已登录：' + user.email) : '未登录';
+
+  // Show sync hint banner when running as standalone PWA and not logged in
+  const hint = $i('pwa-sync-hint');
+  if (hint) hint.style.display = (!user && isPwaStandalone()) ? 'flex' : 'none';
+
   if (user && sessionStorage.getItem('raimosWelcomeShownAfterLogin') !== user.uid) {
     sessionStorage.setItem('raimosWelcomeShownAfterLogin', user.uid);
     S.currentChat = null; S.chatListContactFilter = null;
     switchPage('chat-page'); showWelcome(); renderChatList();
     toast('欢迎回来，先选择一个聊天吧');
   }
+}
+
+// ── PWA Install ──
+let _pwaInstallPrompt = null;
+
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  _pwaInstallPrompt = e;
+  updatePwaInstallUI();
+});
+
+window.addEventListener('appinstalled', () => {
+  _pwaInstallPrompt = null;
+  updatePwaInstallUI();
+  toast('✅ App 已安装到桌面！');
+});
+
+function updatePwaInstallUI() {
+  const hint = $i('pwa-install-hint');
+  const btn  = $i('pwa-install-btn');
+  if (!hint) return;
+
+  if (isPwaStandalone()) {
+    hint.textContent = '✅ 已作为独立 App 运行。注意：手机端 App 的数据存储与浏览器相互独立，需要重新登录才能同步云端数据。';
+    if (btn) btn.style.display = 'none';
+  } else if (_pwaInstallPrompt) {
+    hint.textContent = '点击下方按钮可将 Raimos 安装到桌面，获得类似原生 App 的体验（隐藏网址栏）。';
+    if (btn) btn.style.display = '';
+  } else if (isIos()) {
+    const isSafari = /safari/i.test(navigator.userAgent) && !/crios|fxios|opios/i.test(navigator.userAgent);
+    if (isSafari) {
+      hint.innerHTML = '在 Safari 中点击底部分享按钮 <strong>「分享」→「添加到主屏幕」</strong> 即可安装。<br><br>⚠️ <strong>安装后首次打开需要重新登录</strong>，因为 iOS 系统对桌面 App 的数据存储是独立的。';
+    } else {
+      hint.innerHTML = '⚠️ iOS 上只有 <strong>Safari</strong> 支持「添加到主屏幕」安装。<br>请用 Safari 打开本页面，然后点击底部分享按钮 →「添加到主屏幕」。';
+    }
+    if (btn) btn.style.display = 'none';
+  } else {
+    hint.textContent = '在支持 PWA 的浏览器（Chrome、Edge 等）中，安装提示会在地址栏右侧或菜单中出现。';
+    if (btn) btn.style.display = 'none';
+  }
+}
+
+async function triggerPwaInstall() {
+  if (!_pwaInstallPrompt) return;
+  _pwaInstallPrompt.prompt();
+  const { outcome } = await _pwaInstallPrompt.userChoice;
+  if (outcome === 'accepted') _pwaInstallPrompt = null;
+  updatePwaInstallUI();
 }
 
 async function syncToCloud() {

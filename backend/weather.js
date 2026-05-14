@@ -23,7 +23,7 @@ export async function geocodeCity(city) {
     if (!res.ok) return null;
     const d = await res.json();
     const r = d.results?.[0];
-    return r ? { lat: r.latitude, lon: r.longitude } : null;
+    return r ? { lat: r.latitude, lon: r.longitude, timezone: r.timezone || 'Asia/Shanghai' } : null;
   } catch {
     return null;
   }

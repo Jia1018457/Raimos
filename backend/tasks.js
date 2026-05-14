@@ -103,7 +103,29 @@ function resolveApiKey(settings) {
   };
 }
 
-// ─── Hour helpers ─────────────────────────────────────────────────────────────
+// ─── Date/time helpers ────────────────────────────────────────────────────────
+
+// Returns localised { dateStr, timeStr, partOfDay } for a given IANA timezone.
+// The server runs in UTC so we always pass an explicit timezone.
+function getLocalDatetime(timezone) {
+  const tz  = timezone || 'Asia/Shanghai';
+  const now  = new Date();
+  try {
+    const dateStr = new Intl.DateTimeFormat('zh-CN', {
+      timeZone: tz, year: 'numeric', month: 'long', day: 'numeric', weekday: 'long',
+    }).format(now);
+    const timeStr = new Intl.DateTimeFormat('zh-CN', {
+      timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: false,
+    }).format(now);
+    const h = parseInt(new Intl.DateTimeFormat('en', {
+      timeZone: tz, hour: 'numeric', hour12: false,
+    }).format(now), 10);
+    const partOfDay = h < 6 ? '深夜' : h < 9 ? '清晨' : h < 12 ? '上午' : h < 14 ? '中午' : h < 18 ? '下午' : h < 21 ? '傍晚' : '晚上';
+    return { dateStr, timeStr, partOfDay };
+  } catch {
+    return { dateStr: '', timeStr: '', partOfDay: '' };
+  }
+}
 
 function currentHour() { return new Date().getHours(); }
 
@@ -427,11 +449,12 @@ async function postProactiveMoment(settings) {
 
   // --- Context gathering ---
   let weatherInfo = '';
-  // Try city name first (new), fall back to lat/lon (legacy)
+  let timezone = 'Asia/Shanghai'; // default; overridden if geocoding returns one
   const city = settings.city || '';
   if (city) {
     const geo = await geocodeCity(city);
     if (geo) {
+      if (geo.timezone) timezone = geo.timezone;
       const w = await getWeather(geo.lat, geo.lon);
       if (w) weatherInfo = `${city}当前天气：${weatherText(w)}`;
     }
@@ -465,13 +488,11 @@ async function postProactiveMoment(settings) {
     ? `可用相册照片标签（格式：标签→图片编号）：${albumPhotos.map((p,i)=>`${p.label||'无标签'}→${i}`).join('；')}`
     : '';
 
-  const now     = new Date();
-  const timeStr = `${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}`;
-  const h       = now.getHours();
-  const partOfDay = h < 6 ? '深夜' : h < 12 ? '早上' : h < 18 ? '下午' : '晚上';
+  // Build date/time in user's local timezone (server runs UTC; use Intl to convert)
+  const { dateStr, timeStr, partOfDay } = getLocalDatetime(timezone);
 
   const contextLines = [
-    `现在是${partOfDay} ${timeStr}。`,
+    `现在是${dateStr}${partOfDay}${timeStr}。`,
     weatherInfo,
     memCtx    ? `关于用户的记忆片段：${memCtx}` : '',
     chatCtx,

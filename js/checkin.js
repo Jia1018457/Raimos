@@ -321,8 +321,8 @@ function ckStreakFromRecords(records) {
   let streak = 0;
   const now = new Date();
   for (let i = 0; i < 366; i++) {
-    const d = new Date(now); d.setDate(d.getDate() - i);
-    const ds = d.toISOString().slice(0, 10);
+    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
+    const ds = ckDateStr(d);
     if (doneSet.has(ds)) { streak++; }
     else if (i > 0) break;
   }
@@ -1099,7 +1099,12 @@ async function ckRequestNotifPerm() {
 //  UTIL
 // ══════════════════════════════
 function ckTodayStr() {
-  return new Date().toISOString().slice(0, 10);
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+function ckDateStr(d) {
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 }
 
 // ══════════════════════════════

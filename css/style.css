@@ -102,7 +102,8 @@ body{font-family:'Nunito','Noto Sans SC',sans-serif;background:var(--bg);color:v
 .msg-av.user-av{background:linear-gradient(135deg,var(--accent),var(--accent-dark));}
 .msg-sender{font-size:10.5px;font-weight:700;color:var(--text3);}
 .bw{display:flex;align-items:flex-end;gap:4px;max-width:74%;}
-.msg-group.user .bw{flex-direction:row-reverse;}
+.msg-group.user .bw{flex-direction:row-reverse;max-width:55%;}
+.msg-group.ai .bw{max-width:90%;}
 .bubble{padding:8px 12px;border-radius:16px;font-size:var(--font-size);line-height:1.65;position:relative;word-break:break-word;box-shadow:0 1px 5px var(--shadow);}
 .msg-group.user .bubble{background:var(--user-bubble);color:var(--user-text);border-bottom-right-radius:4px;}
 .msg-group.ai .bubble{background:var(--ai-bubble);color:var(--ai-text);border-bottom-left-radius:4px;border:1px solid var(--border);}
@@ -174,6 +175,12 @@ body{font-family:'Nunito','Noto Sans SC',sans-serif;background:var(--bg);color:v
 
 /* INPUT */
 #input-wrap{background:var(--bg3);border-top:1.5px solid var(--border);padding:9px 12px;display:flex;flex-direction:column;gap:6px;flex-shrink:0;}
+#input-wrap.collapsed #input-row,#input-wrap.collapsed #input-hints,#input-wrap.collapsed #img-preview-row,#input-wrap.collapsed #emoji-picker{display:none!important;}
+#input-collapse-btn{position:absolute;right:8px;width:22px;height:22px;border-radius:50%;border:1.5px solid var(--border);background:var(--bg3);color:var(--text3);cursor:pointer;font-size:11px;display:flex;align-items:center;justify-content:center;z-index:5;top:-12px;}
+#input-wrap{position:relative;}
+#compose-moment.collapsed .compose-tools,#compose-moment.collapsed #compose-img-previews,#compose-moment.collapsed #compose-emoji{display:none!important;}
+.compose-moment-toggle{background:none;border:none;cursor:pointer;color:var(--text3);font-size:11px;padding:2px 6px;border-radius:6px;border:1.5px solid var(--border);}
+.compose-moment-toggle:hover{background:var(--hover);}
 #rec-bar{display:none;align-items:center;gap:7px;background:#ff4d6d11;border:1.5px solid #ff4d6d44;border-radius:11px;padding:6px 11px;}
 #rec-bar.show{display:flex;}
 .rec-dot{width:8px;height:8px;border-radius:50%;background:#ff4d6d;animation:rp .8s infinite;}

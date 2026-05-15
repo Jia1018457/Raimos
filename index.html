@@ -59,7 +59,7 @@
     <div class="hdr-avatar" id="hdr-avatar" onclick="openAvatarModal()">🐱</div>
     <div class="hdr-info">
       <div class="hdr-name" id="hdr-name" onclick="renameChat()">选择或新建对话</div>
-      <div class="hdr-status"><div class="status-pulse"></div><span class="hdr-status-emoji" id="hdr-status-emoji"></span><span id="hdr-status-text">在线</span></div>
+      <div class="hdr-status" id="hdr-status"><div class="status-pulse"></div><span class="hdr-status-emoji" id="hdr-status-emoji"></span><span id="hdr-status-text">在线</span><span id="hdr-typing-indicator" style="display:none"></span></div>
     </div>
     <button class="hbtn" onclick="openCtxMenu(event)" title="更多">⋯</button>
   </div>
@@ -82,6 +82,7 @@
 
   <div id="input-wrap">
     <button id="input-collapse-btn" onclick="toggleInputCollapse()" title="收起/展开输入框">▾</button>
+    <button id="input-expand-btn" onclick="toggleExpandInput()" title="展开/收起输入框">⤢</button>
     <div id="rec-bar">
       <div class="rec-dot"></div><span id="rec-timer">0:00</span>
       <div class="rec-wave" id="rec-wave"></div>

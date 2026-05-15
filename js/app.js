@@ -41,7 +41,7 @@ let S = {
     postImages:false, imageFreq:50, imageSources:'album',
     imgGenModel:'openai/dall-e-3',
     aiName:'小可', userName:'我', aiAvatar:'🐱', userAvatar:'😊',
-    showUserAvatar:true, showAiAvatar:true,
+    showUserAvatar:true, showAiAvatar:true, showBubble:true,
     userBubble:'#ff8fab', aiBubble:'#ffffff',
     userTextColor:'', aiTextColor:'', fontColor:'',
     theme:'light', chatBg:'#fdf6f0', chatBgImg:'', bgOpacity:1, fontSize:14,
@@ -177,6 +177,7 @@ async function init() {
   applyTheme();
   applyBg();
   applyBubble();
+  applyBubbleSetting();
   buildSettingsUI();
   renderChatList();
   renderContacts();
@@ -256,7 +257,9 @@ function cs(cv, gv) { return (cv === null || cv === undefined) ? gv : cv; }
 function switchPage(id) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
-  $i(id).classList.add('active');
+  const pageEl = $i(id);
+  if (!pageEl) return;
+  pageEl.classList.add('active');
   document.querySelector(`[data-page="${id}"]`)?.classList.add('active');
   if (id === 'memory-page') renderMemories();
   if (id === 'contacts-page') renderContacts();
@@ -264,6 +267,39 @@ function switchPage(id) {
   if (id === 'companion-page') renderCompanionPage();
   if (id === 'settings-page') { buildSettingsUI(); updateStorageInfo(); }
   if (id === 'checkin-page' && typeof renderCheckinPage === 'function') renderCheckinPage();
+  if (id === 'explore-page') renderExplorePage();
+  if (id === 'my-page') renderMyPage();
+}
+
+// ══════════════════════════════
+//  EXPLORE PAGE
+// ══════════════════════════════
+function renderExplorePage() {
+  // Cards are static in HTML; nothing dynamic needed
+}
+
+// ══════════════════════════════
+//  MY PAGE
+// ══════════════════════════════
+function renderMyPage() {
+  const av = S.settings.userAvatar || '😊';
+  const avEl = $i('my-page-avatar');
+  if (avEl) {
+    if (av.startsWith('data:')) { avEl.innerHTML = `<img src="${av}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`; }
+    else { avEl.textContent = av; }
+  }
+  const nameEl = $i('my-page-name');
+  if (nameEl) nameEl.textContent = S.settings.userName || '我的';
+  const subEl = $i('my-tile-auth-sub');
+  if (subEl) subEl.textContent = window._fbUser ? ('已登录：' + window._fbUser.email) : '未登录';
+}
+
+function openMyOrModal() {
+  if (window.innerWidth <= 768) {
+    switchPage('my-page');
+  } else {
+    openUserModal();
+  }
 }
 
 // ══════════════════════════════
@@ -380,6 +416,7 @@ function openContactModal(editId) {
     ['album','search','generate'].forEach(s => { const el=$i(`cm-x-aichat-src-${s}`); if(el)el.checked=srcs2.includes(s); });
   }
   $i('contact-modal').classList.add('show');
+  setTimeout(addExpandBtns, 50);
 }
 function editContact(id) { openContactModal(id); }
 function openInlineAvatarPicker(prefix) {
@@ -706,7 +743,7 @@ function renderChatList(filter = '') {
         <div class="ci-preview" id="ci-prev-${chat.id}">加载中…</div>
       </div>
       <div class="ci-time">${fmtTime(chat.updatedAt||chat.createdAt)}</div>
-      <button class="chat-item-menu" onclick="event.stopPropagation();S.currentChat='${chat.id}';openCtxMenu(event)">⋮</button>`;
+      <button class="chat-item-menu" onclick="event.stopPropagation();openChatItemMenu(event,'${chat.id}')">⋮</button>`;
     div.addEventListener('click', e => { if (e.target.classList.contains('chat-item-menu')) return; S.currentChat = chat.id; S.currentContact = chat.contactId || null; switchPage('chat-page'); openChat(chat.id); });
     list.appendChild(div);
     dbGetAll('messages', 'chatId', chat.id).then(msgs => {
@@ -879,12 +916,16 @@ function makeVoiceHTML(msg) {
 //  SEND
 // ══════════════════════════════
 async function sendMsg() {
+  // If currently recording on mobile, stop recording and send as voice
+  if (S.isRecording && _voiceIsTouch) {
+    stopRec(); return;
+  }
   const chat = S._chats[S.currentChat]; if (!chat) { toast('请先选择或新建对话'); return; }
   const text = $i('msg-input').value.trim();
   const files = [...S.pendingFiles];
   if (!text && !files.length) return;
   if (S.isStreaming) return;
-  $i('msg-input').value = ''; autoH($i('msg-input'));
+  $i('msg-input').value = ''; autoH($i('msg-input')); onInputTyping();
 
   if (S.editingMsgId) {
     const msgs = await dbGetAll('messages', 'chatId', S.currentChat);
@@ -1780,9 +1821,9 @@ async function archiveMoments() {
 //  VOICE
 // ══════════════════════════════
 let recStream=null;
-function startRec(e){if(e)e.preventDefault();if(S.isRecording)return;navigator.mediaDevices.getUserMedia({audio:true}).then(stream=>{recStream=stream;S.mediaRecorder=new MediaRecorder(stream);S.audioChunks=[];S.isRecording=true;S.recSecs=0;S.mediaRecorder.ondataavailable=e=>S.audioChunks.push(e.data);S.mediaRecorder.start();$i('btn-voice').classList.add('recording');$i('rec-bar').classList.add('show');S.recTimer=setInterval(()=>{S.recSecs++;const m=Math.floor(S.recSecs/60),s=S.recSecs%60;$i('rec-timer').textContent=`${m}:${s.toString().padStart(2,'0')}`;},1000);}).catch(e=>toast('无法访问麦克风: '+e.message));}
-function stopRec(){if(!S.isRecording)return;S.isRecording=false;clearInterval(S.recTimer);$i('btn-voice').classList.remove('recording');$i('rec-bar').classList.remove('show');$i('rec-timer').textContent='0:00';S.mediaRecorder.stop();S.mediaRecorder.onstop=async()=>{const blob=new Blob(S.audioChunks,{type:'audio/webm'});recStream?.getTracks().forEach(t=>t.stop());const dur=`${Math.floor(S.recSecs/60)}:${(S.recSecs%60).toString().padStart(2,'0')}`;const url=URL.createObjectURL(blob);const transcript=await sttBrowser();const chat=S._chats[S.currentChat];if(!chat)return;const vmsg={role:'user',type:'voice',url,dur,transcript,content:transcript?`[语音] ${transcript}`:'[语音消息]'};await addMsg(S.currentChat,vmsg);await renderMsgs();scrollTo_(false);if(transcript)await callAI(S.currentChat);};}
-function cancelRec(){if(!S.isRecording)return;S.isRecording=false;clearInterval(S.recTimer);S.mediaRecorder?.stop();recStream?.getTracks().forEach(t=>t.stop());$i('btn-voice').classList.remove('recording');$i('rec-bar').classList.remove('show');}
+function startRec(e){if(e)e.preventDefault();if(S.isRecording)return;navigator.mediaDevices.getUserMedia({audio:true}).then(stream=>{recStream=stream;S.mediaRecorder=new MediaRecorder(stream);S.audioChunks=[];S.isRecording=true;S.recSecs=0;S.mediaRecorder.ondataavailable=e=>S.audioChunks.push(e.data);S.mediaRecorder.start();$i('btn-voice').classList.add('recording');$i('rec-bar').classList.add('show');const fb=$i('btn-file');if(fb){fb.innerHTML='⏹';fb.title='停止录音';}S.recTimer=setInterval(()=>{S.recSecs++;const m=Math.floor(S.recSecs/60),s=S.recSecs%60;$i('rec-timer').textContent=`${m}:${s.toString().padStart(2,'0')}`;},1000);}).catch(e=>toast('无法访问麦克风: '+e.message));}
+function stopRec(){if(!S.isRecording)return;S.isRecording=false;clearInterval(S.recTimer);$i('btn-voice').classList.remove('recording');$i('rec-bar').classList.remove('show');$i('rec-timer').textContent='0:00';const fb=$i('btn-file');if(fb){fb.innerHTML='📎';fb.title='发文件/图片';}S.mediaRecorder.stop();S.mediaRecorder.onstop=async()=>{const blob=new Blob(S.audioChunks,{type:'audio/webm'});recStream?.getTracks().forEach(t=>t.stop());const dur=`${Math.floor(S.recSecs/60)}:${(S.recSecs%60).toString().padStart(2,'0')}`;const url=URL.createObjectURL(blob);const transcript=await sttBrowser();const chat=S._chats[S.currentChat];if(!chat)return;const vmsg={role:'user',type:'voice',url,dur,transcript,content:transcript?`[语音] ${transcript}`:'[语音消息]'};await addMsg(S.currentChat,vmsg);await renderMsgs();scrollTo_(false);if(transcript)await callAI(S.currentChat);};}
+function cancelRec(){if(!S.isRecording)return;S.isRecording=false;clearInterval(S.recTimer);S.mediaRecorder?.stop();recStream?.getTracks().forEach(t=>t.stop());$i('btn-voice').classList.remove('recording');$i('rec-bar').classList.remove('show');const fb=$i('btn-file');if(fb){fb.innerHTML='📎';fb.title='发文件/图片';}}
 function sttBrowser(){return new Promise(resolve=>{if(!('webkitSpeechRecognition'in window||'SpeechRecognition'in window)){resolve('');return;}const SR=window.SpeechRecognition||window.webkitSpeechRecognition;const r=new SR();r.lang='zh-CN';r.interimResults=false;r.start();r.onresult=e=>resolve(e.results[0][0].transcript);r.onerror=()=>resolve('');r.onend=()=>resolve('');setTimeout(()=>{try{r.stop();}catch(e){}},5000);});}
 async function playVoice(id){const msgs=await dbGetAll('messages','chatId',S.currentChat);const msg=msgs.find(m=>m.id===id);if(msg?.url)new Audio(msg.url).play();}
 
@@ -1823,6 +1864,82 @@ async function uploadToCloudinary(fileOrDataUrl, folder='raimos') {
 //  FILES
 // ══════════════════════════════
 function triggerFile(){$i('file-upload').click();}
+function triggerFileOrStopRec() {
+  if (S.isRecording) { stopRecToInput(); }
+  else { triggerFile(); }
+}
+
+// ── Voice: unified desktop (hold) / mobile (tap-toggle) ──
+let _voiceIsTouch = false, _voiceTouchHeld = false;
+function onVoiceClick(e) {
+  // click fires after mousedown+mouseup on desktop; on touch devices we handle separately
+  if (_voiceIsTouch) return;
+}
+function onVoiceMouseDown(e) {
+  if (_voiceIsTouch) return;
+  e.preventDefault();
+  startRec();
+}
+function onVoiceMouseUp(e) {
+  if (_voiceIsTouch) return;
+  if (S.isRecording) stopRec();
+}
+function onVoiceTouchStart(e) {
+  _voiceIsTouch = true;
+  _voiceTouchHeld = false;
+  e.preventDefault();
+}
+function onVoiceTouchEnd(e) {
+  e.preventDefault();
+  if (!S.isRecording) {
+    startRecMobile();
+  } else {
+    stopRecToInput();
+  }
+}
+function startRecMobile() {
+  navigator.mediaDevices.getUserMedia({audio:true}).then(stream => {
+    recStream = stream;
+    S.mediaRecorder = new MediaRecorder(stream);
+    S.audioChunks = [];
+    S.isRecording = true; S.recSecs = 0;
+    S.mediaRecorder.ondataavailable = e => S.audioChunks.push(e.data);
+    S.mediaRecorder.start();
+    $i('btn-voice').classList.add('recording');
+    $i('rec-bar').classList.add('show');
+    // Change file button to stop icon
+    const fb = $i('btn-file');
+    if (fb) { fb.innerHTML = '⏹'; fb.title = '停止录音'; }
+    S.recTimer = setInterval(() => {
+      S.recSecs++;
+      const m = Math.floor(S.recSecs/60), s = S.recSecs%60;
+      $i('rec-timer').textContent = `${m}:${s.toString().padStart(2,'0')}`;
+    }, 1000);
+  }).catch(e => toast('无法访问麦克风: ' + e.message));
+}
+function stopRecToInput() {
+  if (!S.isRecording) return;
+  S.isRecording = false;
+  clearInterval(S.recTimer);
+  $i('btn-voice').classList.remove('recording');
+  $i('rec-bar').classList.remove('show');
+  $i('rec-timer').textContent = '0:00';
+  // Restore file button
+  const fb = $i('btn-file');
+  if (fb) { fb.innerHTML = '📎'; fb.title = '发文件/图片'; }
+  S.mediaRecorder.stop();
+  S.mediaRecorder.onstop = async () => {
+    const blob = new Blob(S.audioChunks, {type:'audio/webm'});
+    recStream?.getTracks().forEach(t => t.stop());
+    const transcript = await sttBrowser();
+    if (transcript) {
+      const inp = $i('msg-input');
+      inp.value = transcript;
+      autoH(inp);
+      onInputTyping();
+    }
+  };
+}
 async function handleFiles(input){for(const file of input.files){if(file.type.startsWith('image/')){const c=await compressImg(file,parseInt(S.settings.imgSize)||800);const url=URL.createObjectURL(file);S.pendingFiles.push({role:'user',type:'image',url,imageData:c,content:'[图片]'});addImgPreview(url);}else{const sz=file.size>1048576?`${(file.size/1048576).toFixed(1)}MB`:`${(file.size/1024).toFixed(0)}KB`;S.pendingFiles.push({role:'user',type:'file',fileName:file.name,fileSize:sz,content:`[文件: ${file.name}]`});toast(`📎 ${file.name}`);}}input.value='';}
 function addImgPreview(url){const w=$i('img-preview-row');w.classList.add('show');const idx=S.pendingFiles.filter(f=>f.type==='image').length-1;const d=document.createElement('div');d.className='img-prev';d.innerHTML=`<img src="${url}"><button class="img-prev-del" onclick="rmImgPrev(${idx})">✕</button>`;w.appendChild(d);}
 function rmImgPrev(idx){S.pendingFiles=S.pendingFiles.filter((f,i)=>f.type!=='image'||i!==idx);const w=$i('img-preview-row');w.innerHTML='';S.pendingFiles.filter(f=>f.type==='image').forEach((f,i)=>addImgPreview(f.url));if(!S.pendingFiles.some(f=>f.type==='image'))w.classList.remove('show');}
@@ -2287,6 +2404,7 @@ function applyBubble(){
   if(S.settings.fontColor) document.documentElement.style.setProperty('--text',S.settings.fontColor);
 }
 function getLum(hex){try{const r=parseInt(hex.slice(1,3),16)/255,g=parseInt(hex.slice(3,5),16)/255,b=parseInt(hex.slice(5,7),16)/255;return .299*r+.587*g+.114*b;}catch{return 0;}}
+function applyBubbleSetting(){const ca=$i('chat-area');if(!ca)return;ca.classList.toggle('chat-no-bubble',S.settings.showBubble===false);}
 
 const BG_PRESETS=[{c:'#fdf6f0',l:'默认粉'},{c:'#fff0f3',l:'粉白'},{c:'#f0fff4',l:'薄荷'},{c:'#f0f8ff',l:'天蓝'},{c:'#f5f0ff',l:'薰衣草'},{c:'#fffde7',l:'奶油'},{c:'#1a1220',l:'深紫'},{c:'#0d1b2a',l:'深蓝'},{c:'#0d2818',l:'深绿'}];
 function openBgModal(){const bg=$i('bg-grid');bg.innerHTML='';BG_PRESETS.forEach(p=>{const d=document.createElement('div');d.className='bg-tile'+(S.settings.chatBg===p.c?' sel':'');d.style.background=p.c;d.style.border='1.5px solid #ccc';d.title=p.l;d.onclick=()=>{S.settings.chatBg=p.c;S.settings.chatBgImg='';applyBg();saveSetting('chatBg',p.c);saveSetting('chatBgImg','');document.querySelectorAll('.bg-tile').forEach(t=>t.classList.remove('sel'));d.classList.add('sel');};bg.appendChild(d);});const cust=document.createElement('div');cust.className='bg-tile';cust.style.background='conic-gradient(red,yellow,lime,cyan,blue,magenta,red)';cust.style.position='relative';cust.innerHTML='<input type="color" style="opacity:0;position:absolute;inset:0;cursor:pointer;width:100%;height:100%" oninput="S.settings.chatBg=this.value;S.settings.chatBgImg=\'\';applyBg();saveSetting(\'chatBg\',this.value)">';bg.appendChild(cust);$i('bg-modal').classList.add('show');}
@@ -2462,7 +2580,7 @@ function buildSettingsUI() {
       <div class="s-row"><label>API Key</label><input type="password" id="s-key" value="${s.apiKey||''}" placeholder="sk-or-… 助手未填时使用此Key"/></div>
       <div class="s-row"><label>API 地址</label><input type="text" id="s-apiurl" value="${s.apiUrl||''}" placeholder="留空用 OpenRouter，助手未填时使用"/></div>
       <div class="s-row"><label>默认模型</label><input type="text" id="s-model" value="${s.model||'openai/gpt-4o'}" placeholder="openai/gpt-4o"/></div>
-      <div class="s-row"><label>默认系统提示词</label><textarea id="s-systemprompt" placeholder="助手未设提示词时使用…" style="min-height:56px">${s.systemPrompt||''}</textarea></div>
+      <div class="s-row"><label>默认系统提示词</label><textarea id="s-systemprompt" placeholder="助手未设提示词时使用…" style="min-height:56px" data-expandable="true" data-expand-title="全局系统提示词">${s.systemPrompt||''}</textarea></div>
       <div class="s-row"><label>Tavily Key (搜索)</label><input type="password" id="s-tavily" value="${s.tavilyKey||''}" placeholder="可选，联网搜索"/></div>
       <div class="s-row"><label>Unsplash Key (图片)</label><input type="password" id="s-unsplash" value="${s.unsplashKey||''}" placeholder="可选，朋友圈搜图"/></div>
     </div>
@@ -2559,6 +2677,7 @@ function buildSettingsUI() {
       <div class="s-row"><label>我的名称</label><input type="text" id="s-username" value="${s.userName||'我'}"/></div>
       <div class="s-row"><label>显示我的头像</label><label class="toggle"><input type="checkbox" id="s-show-user-av" ${s.showUserAvatar!==false?'checked':''}><span class="tslider"></span></label></div>
       <div class="s-row"><label>显示 AI 头像</label><label class="toggle"><input type="checkbox" id="s-show-ai-av" ${s.showAiAvatar!==false?'checked':''}><span class="tslider"></span></label></div>
+      <div class="s-row"><label>显示聊天气泡</label><label class="toggle"><input type="checkbox" id="s-show-bubble" ${s.showBubble!==false?'checked':''}><span class="tslider"></span></label><span style="font-size:11px;color:var(--text3)">关闭后文字全宽平铺</span></div>
     </div>
     <div class="s-section" hidden><h3>🐾 主动消息</h3>
       <div style="font-size:11px;color:var(--text3);margin-bottom:8px">需要部署后台服务（Railway）才能离线触发</div>
@@ -2599,7 +2718,7 @@ function buildSettingsUI() {
               <option value="replace" ${s.momentPromptMode==='replace'?'selected':''}>替换系统词</option>
             </select>
           </div>
-          <textarea id="s-moment-prompt" rows="3" placeholder="留空则使用系统提示词。填写后AI发圈/评论时使用此词。" style="width:100%;font-size:12px;resize:vertical">${esc(s.momentPrompt||'')}</textarea>
+          <textarea id="s-moment-prompt" rows="3" placeholder="留空则使用系统提示词。填写后AI发圈/评论时使用此词。" style="width:100%;font-size:12px;resize:vertical" data-expandable="true" data-expand-title="朋友圈专属提示词">${esc(s.momentPrompt||'')}</textarea>
         </div>
       </div>
       <div class="s-row"><label>朋友圈Token显示</label><label class="toggle"><input type="checkbox" id="s-show-moment-token" ${s.showMomentToken?'checked':''}><span class="tslider"></span></label></div>
@@ -2668,6 +2787,7 @@ function buildSettingsUI() {
     if (ai) ai.textContent = window._fbUser ? ('已登录：' + window._fbUser.email) : '未登录';
     updatePwaInstallUI();
     initSettingsSubpages();
+    addExpandBtns();
   },0);
 }
 
@@ -2742,6 +2862,7 @@ async function saveAllSettings(){
   s.imgGenApiKey=get('s-imggen-api-key');
   s.userName=get('s-username','我');
   s.showUserAvatar=getB('s-show-user-av'); s.showAiAvatar=getB('s-show-ai-av');
+  s.showBubble=getB('s-show-bubble'); applyBubbleSetting();
   // 个人信息
   s.city=get('s-city','').trim();
   s.refChatEnabled=getB('s-ref-chat');
@@ -2802,11 +2923,35 @@ function openCtxMenu(e){
   if(imggenItem)imggenItem.textContent=(S.imgGenMode?'🎨 图片生成 ✓':'🎨 图片生成');
   const mmItem=$i('ctx-minimap-item');
   if(mmItem)mmItem.textContent=($i('chat-minimap')?.classList.contains('show')?'🗺️ 迷你地图 ✓':'🗺️ 迷你地图');
-  m.style.top=Math.min(e.clientY||100,window.innerHeight-240)+'px';
-  m.style.left=Math.min(e.clientX||100,window.innerWidth-175)+'px';
-  m.classList.add('show');e.stopPropagation();
+  positionMenu(m, e.clientX||100, e.clientY||100);
+  m.classList.add('show'); e.stopPropagation();
 }
 function closeCtxMenu(){$i('ctx-menu').classList.remove('show');}
+
+function positionMenu(m, x, y) {
+  const mw = 175; // estimated menu width
+  const mh = m.id === 'ctx-menu' ? 260 : 170; // estimated height
+  const lx = Math.min(x, window.innerWidth - mw - 8);
+  const ty = y + mh + 8 > window.innerHeight ? Math.max(5, y - mh) : y;
+  m.style.left = Math.max(5, lx) + 'px';
+  m.style.top = ty + 'px';
+}
+
+let _chatItemMenuId = null;
+function openChatItemMenu(e, chatId) {
+  _chatItemMenuId = chatId;
+  S.currentChat = chatId;
+  const m = $i('chat-item-menu');
+  const pi = $i('cim-pin-item');
+  if (pi) pi.textContent = S._chats[chatId]?.pinned ? '📌 取消置顶' : '📌 置顶';
+  positionMenu(m, e.clientX || 100, e.clientY || 100);
+  m.classList.add('show'); e.stopPropagation();
+}
+function closeChatItemMenu() { $i('chat-item-menu')?.classList.remove('show'); }
+function pinChatItemMenu() { closeChatItemMenu(); pinChat(); }
+function archiveChatItemMenu() { closeChatItemMenu(); archiveChat(); }
+function renameChatItemMenu() { closeChatItemMenu(); renameChat(); }
+function deleteChatItemMenu() { closeChatItemMenu(); deleteCurrentChat(); }
 
 async function pinChat(){
   if(!S.currentChat)return;
@@ -2943,6 +3088,38 @@ function animLightning(canvas,ctx,dur){let f=0;function bolt(x1,y1,x2,y2,sp){if(
 function animBubbles(ctx,canvas,dur){const bs=[];const bcols=['rgba(255,143,171,.6)','rgba(150,200,255,.5)','rgba(200,255,200,.5)','rgba(255,220,150,.5)','rgba(220,150,255,.5)'];for(let i=0;i<40;i++)bs.push({x:Math.random()*canvas.width,y:canvas.height+Math.random()*200,r:10+Math.random()*40,vy:-.5-Math.random()*1.5,vx:(Math.random()-.5)*.5,life:1,col:bcols[~~(Math.random()*bcols.length)]});let fr=0;const loop=()=>{ctx.clearRect(0,0,canvas.width,canvas.height);bs.forEach(b=>{b.x+=b.vx;b.y+=b.vy;b.life-=.005;ctx.globalAlpha=b.life;ctx.beginPath();ctx.arc(b.x,b.y,b.r,0,Math.PI*2);ctx.strokeStyle=b.col;ctx.lineWidth=2;ctx.stroke();ctx.beginPath();ctx.arc(b.x-b.r*.3,b.y-b.r*.3,b.r*.2,0,Math.PI*2);ctx.fillStyle='rgba(255,255,255,.4)';ctx.fill();ctx.globalAlpha=1;});fr++;if(fr<dur/16&&bs.some(b=>b.life>0))S._animRaf=requestAnimationFrame(loop);else ctx.clearRect(0,0,canvas.width,canvas.height);};S._animRaf=requestAnimationFrame(loop);}
 
 // ══════════════════════════════
+//  PROMPT EXPAND
+// ══════════════════════════════
+let _expandTargetEl = null;
+function openPromptExpand(taId, title) {
+  _expandTargetEl = $i(taId);
+  if (!_expandTargetEl) return;
+  $i('prompt-expand-title').innerHTML = `📝 ${title || '编辑提示词'} <button class="mclose" onclick="closePromptExpand()">✕</button>`;
+  $i('prompt-expand-ta').value = _expandTargetEl.value;
+  $i('prompt-expand-modal').classList.add('show');
+  setTimeout(() => $i('prompt-expand-ta').focus(), 100);
+}
+function closePromptExpand() { $i('prompt-expand-modal').classList.remove('show'); _expandTargetEl = null; }
+function confirmPromptExpand() {
+  if (_expandTargetEl) {
+    _expandTargetEl.value = $i('prompt-expand-ta').value;
+    _expandTargetEl.dispatchEvent(new Event('input'));
+  }
+  closePromptExpand();
+}
+function addExpandBtns() {
+  document.querySelectorAll('textarea[data-expandable]').forEach(ta => {
+    if (ta.dataset.expandAdded) return;
+    ta.dataset.expandAdded = '1';
+    const btn = document.createElement('button');
+    btn.type = 'button'; btn.className = 'expand-btn'; btn.title = '全屏编辑';
+    btn.innerHTML = '⛶';
+    btn.onclick = () => openPromptExpand(ta.id, ta.dataset.expandTitle || '提示词编辑');
+    ta.insertAdjacentElement('afterend', btn);
+  });
+}
+
+// ══════════════════════════════
 //  TYPING INDICATOR
 // ══════════════════════════════
 function showTyping(){const ca=$i('chat-area');const d=document.createElement('div');d.id='typing';d.className='msg-group ai';d.innerHTML='<div class="bubble"><div class="typing-dots"><div class="tdot"></div><div class="tdot"></div><div class="tdot"></div></div></div>';ca.appendChild(d);scrollTo_(false);}
@@ -2958,6 +3135,16 @@ function fmtTimeFull(ts){return ts?`${fmtDate(ts)} ${fmtTime(ts)}`:''}
 function fmtText(t){return esc(t).replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>').replace(/\*(.*?)\*/g,'<em>$1</em>').replace(/`([^`]+)`/g,'<code style="background:rgba(0,0,0,.08);padding:1px 5px;border-radius:4px;font-family:monospace">$1</code>').replace(/\n/g,'<br>');}
 function onKey(e){if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)){e.preventDefault();sendMsg();}}
 function autoH(el){el.style.height='auto';el.style.height=Math.min(el.scrollHeight,100)+'px';}
+function onInputTyping() {
+  const inp = $i('msg-input');
+  const wrap = inp?.parentElement;
+  if (!wrap) return;
+  if (inp.value.trim().length > 0) {
+    wrap.classList.add('is-typing');
+  } else {
+    wrap.classList.remove('is-typing');
+  }
+}
 function toast(msg,dur=2000){const t=$i('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),dur);}
 function closeModal(id){$i(id).classList.remove('show');}
 
@@ -2969,6 +3156,8 @@ function outsideClick(e) {
   if (emojiPicker && emojiPicker.contains(e.target)) return;
   if (emojiPicker) emojiPicker.classList.remove('show');
   if (!$i('ctx-menu').contains(e.target)) closeCtxMenu();
+  const cim = $i('chat-item-menu');
+  if (cim && !cim.contains(e.target)) closeChatItemMenu();
 }
 
 // ══════════════════════════════

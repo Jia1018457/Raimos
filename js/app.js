@@ -228,6 +228,8 @@ async function init() {
   initMomentTimers();
   updateWelcome();
   if (S.currentChat && S._chats[S.currentChat]) openChat(S.currentChat);
+  // Restore mini companion window if it was open
+  if (S.settings.companionMiniOpen) setTimeout(() => companionShowMini(), 500);
   document.addEventListener('click', outsideClick);
   const rw = $i('rec-wave');
   for (let i = 0; i < 14; i++) {
@@ -299,7 +301,7 @@ function switchPage(id) {
   document.querySelector(`[data-page="${id}"]`)?.classList.add('active');
   if (id === 'memory-page') renderMemories();
   if (id === 'contacts-page') renderContacts();
-  if (id === 'moments-page') renderMoments();
+  if (id === 'moments-page') { renderMoments(); saveSetting('lastMomentsVisit', Date.now()); }
   if (id === 'companion-page') { renderCompanionPage(); if (window._refreshLinkedTaskSelect) window._refreshLinkedTaskSelect(); }
   if (id === 'settings-page') { buildSettingsUI(); updateStorageInfo(); }
   if (id === 'checkin-page' && typeof renderCheckinPage === 'function') renderCheckinPage();
@@ -1298,10 +1300,32 @@ async function renderMoments() {
   const feed = $i('moments-feed'); feed.innerHTML = '';
   const moments = await dbGetAll('moments');
   moments.sort((a,b)=>b.ts-a.ts);
-  if (!moments.length) { feed.innerHTML='<div style="text-align:center;padding:40px;color:var(--text3);font-size:13.5px">朋友圈还是空的<br>发布第一条动态吧！🌸</div>'; return; }
+  if (!moments.length) { feed.innerHTML='<div style="text-align:center;padding:40px;color:var(--text3);font-size:13.5px">朋友圈还是空的<br>发布第一条动态吧！🌸</div>'; _renderMomentsNotif([]); return; }
   for (const m of moments) {
     const card = await makeMomentCard(m);
     feed.appendChild(card);
+  }
+  _renderMomentsNotif(moments);
+}
+
+async function _renderMomentsNotif(moments) {
+  const notifEl = $i('moments-notif'); if (!notifEl) return;
+  const lastVisit = S.settings.lastMomentsVisit || 0;
+  const myName = S.settings.userName || '我';
+  const allComments = await dbGetAll('comments');
+  const newComments = allComments.filter(c => c.ts > lastVisit && c.author !== myName && c.replyTo === myName);
+  const newLikes = moments.filter(m => m.author === myName && m.ts < lastVisit && (m.lastLikeTs||0) > lastVisit);
+  const msgs = [];
+  if (newComments.length) {
+    const names = [...new Set(newComments.map(c=>c.author))];
+    msgs.push(`💬 ${names.slice(0,3).join('、')}${names.length>3?'等':''}评论了你`);
+  }
+  if (msgs.length) {
+    notifEl.textContent = msgs.join('　') + '　点击查看 →';
+    notifEl.style.display = 'block';
+    notifEl.onclick = () => { notifEl.style.display='none'; saveSetting('lastMomentsVisit', Date.now()); };
+  } else {
+    notifEl.style.display = 'none';
   }
 }
 
@@ -1338,7 +1362,7 @@ async function makeMomentCard(m) {
     ${imgGrid}
     <div class="moment-footer">
       <div class="moment-actions">
-        <button class="m-act-btn" onclick="likeMoment('${m.id}')">❤️ ${m.likes||0}</button>
+        <button class="m-act-btn${_hasLiked(m)?` liked`:``}" onclick="likeMoment('${m.id}')">❤️ ${m.likes||0}</button>
         <button class="m-act-btn" onclick="toggleComments('${m.id}')">💬 ${comments.length} 评论</button>
         ${S.settings.apiKey?`<button class="m-act-btn" onclick="openAiCommentModal('${m.id}')">🤖 让AI评论</button>`:''}
       </div>
@@ -1351,15 +1375,81 @@ async function makeMomentCard(m) {
   return card;
 }
 
-async function postMoment() {
-  const text = $i('compose-text').value.trim();
-  const images = [...S._composePics].map(p=>p.dataUrl);
+async function postMoment(src) {
+  const isModal = src === 'modal';
+  const textEl = isModal ? $i('compose-modal-text') : $i('compose-text');
+  const text = textEl?.value?.trim() || '';
+  const pics = isModal ? (S._composeModalPics||[]) : (S._composePics||[]);
+  const images = pics.map(p=>p.dataUrl);
   if (!text && !images.length) { toast('请输入内容或添加图片'); return; }
   const m = { id:uid(), author:S.settings.userName||'我', avatar:S.settings.userAvatar||'😊', text, images, ts:Date.now(), likes:0 };
   await dbPut('moments', m);
-  $i('compose-text').value=''; S._composePics=[];
-  $i('compose-img-previews').innerHTML=''; $i('compose-emoji').style.display='none';
+  if (isModal) {
+    if (textEl) textEl.value='';
+    S._composeModalPics=[];
+    const prev=$i('compose-modal-img-previews'); if(prev) prev.innerHTML='';
+    const em=$i('compose-modal-emoji'); if(em) em.style.display='none';
+    closeModal('compose-moment-modal');
+  } else {
+    if (textEl) textEl.value='';
+    S._composePics=[];
+    const prev=$i('compose-img-previews'); if(prev) prev.innerHTML='';
+    const em=$i('compose-emoji'); if(em) em.style.display='none';
+  }
   await renderMoments(); toast('✅ 发布成功！');
+}
+
+function openComposeMomentModal() {
+  S._composeModalPics = [];
+  const prev = $i('compose-modal-img-previews'); if(prev) prev.innerHTML='';
+  const ta = $i('compose-modal-text'); if(ta) ta.value='';
+  const em = $i('compose-modal-emoji'); if(em) em.style.display='none';
+  buildComposeModalEmojiGrid();
+  $i('compose-moment-modal').classList.add('show');
+}
+
+function buildComposeModalEmojiGrid() {
+  const grid=$i('compose-modal-emoji-grid'); if(!grid||grid.children.length) return;
+  const emojis=['😊','😂','🥰','😍','😭','😤','😎','🥺','😅','🤔','🎉','✨','💕','🌸','🐱','🐻','🎵','🌈','⭐','🍕','☕','🌙'];
+  emojis.forEach(e=>{const b=document.createElement('button');b.textContent=e;b.style.cssText='font-size:22px;padding:3px;border:none;background:none;cursor:pointer;border-radius:6px;';b.onclick=()=>{const ta=$i('compose-modal-text');if(ta)ta.value+=e;};grid.appendChild(b);});
+}
+
+function toggleComposeModalEmoji() {
+  const ce=$i('compose-modal-emoji'); if(!ce) return;
+  ce.style.display=ce.style.display==='none'?'block':'none';
+}
+
+function toggleMomentsManageMenu(e) {
+  e.stopPropagation();
+  const menu=$i('moments-manage-menu'); if(!menu) return;
+  const show=menu.style.display==='none';
+  menu.style.display=show?'flex':'none';
+  if(show) setTimeout(()=>document.addEventListener('click',closeMomentsManageMenu,{once:true}),0);
+}
+function closeMomentsManageMenu() { const m=$i('moments-manage-menu');if(m)m.style.display='none'; }
+
+function toggleMomentsNewMenu(e) {
+  e.stopPropagation();
+  const menu=$i('moments-new-menu'); if(!menu) return;
+  const show=menu.style.display==='none';
+  menu.style.display=show?'flex':'none';
+  if(show) setTimeout(()=>document.addEventListener('click',closeMomentsNewMenu,{once:true}),0);
+}
+function closeMomentsNewMenu() { const m=$i('moments-new-menu');if(m)m.style.display='none'; }
+
+function importMomentsFile() { $i('moments-import-file')?.click(); }
+async function doImportMoments(input) {
+  const file=input.files[0];if(!file)return;
+  const fr=new FileReader();
+  fr.onload=async e=>{
+    try{
+      const d=JSON.parse(e.target.result);
+      if(d.moments)for(const m of d.moments)await dbPut('moments',m);
+      if(d.comments)for(const c of d.comments)await dbPut('comments',c);
+      await renderMoments();toast('✅ 朋友圈导入成功');
+    }catch(err){toast('❌ 文件格式有误');}
+  };
+  fr.readAsText(file);input.value='';
 }
 
 async function fbDel(collection, docId) {
@@ -1379,9 +1469,19 @@ async function delMoment(id) {
   await renderMoments();
 }
 
+function _hasLiked(m) {
+  const liked = JSON.parse(localStorage.getItem('raimosMomentLikes')||'{}');
+  return !!liked[m.id];
+}
 async function likeMoment(id) {
   const m = await dbGet('moments',id); if(!m) return;
-  m.likes = (m.likes||0)+1; await dbPut('moments',m);
+  const liked = JSON.parse(localStorage.getItem('raimosMomentLikes')||'{}');
+  if (liked[id]) { toast('已经点过赞了 ❤️'); return; }
+  m.likes = (m.likes||0)+1;
+  m.lastLikeTs = Date.now();
+  await dbPut('moments',m);
+  liked[id] = true;
+  localStorage.setItem('raimosMomentLikes', JSON.stringify(liked));
   await renderMoments();
 }
 
@@ -1485,8 +1585,9 @@ function doAiComment() {
 }
 async function doAiPost() {
   const contactId = $i('apm-contact')?.value;
+  const imgPrompt = $i('apm-img-prompt')?.value?.trim() || '';
   closeModal('ai-post-modal');
-  await aiPostMoment(contactId);
+  await aiPostMoment(contactId, imgPrompt || null);
 }
 async function fetchUnsplashImage(query) {
   const key = S.settings.unsplashKey; if (!key) return null;
@@ -1558,7 +1659,7 @@ function buildDatetimeCtx() {
   return `现在是${dateStr} ${partOfDay}${timeStr}`;
 }
 
-async function aiPostMoment(contactId) {
+async function aiPostMoment(contactId, extraImgPrompt) {
   const contact = contactId ? S._contacts[contactId] : Object.values(S._contacts)[0];
   if (!contact || !S.settings.apiKey) { toast('需要配置助手和 API Key'); return; }
   const aiName = contact.name || S.settings.aiName || 'AI';
@@ -1571,16 +1672,16 @@ async function aiPostMoment(contactId) {
     const imageFreq = cs(contact?.xImageFreq, S.settings.imageFreq) || 50;
     const imageSources = (cs(contact?.xImageSources, S.settings.imageSources) || 'album').split(',').filter(Boolean);
 
-    // Build real date/time + weather context so AI won't hallucinate
+    // Build real date/time + weather context as background reference only
     const datetimeCtx = buildDatetimeCtx();
     const weatherCtx  = await fetchWeatherCtx();
-    const envCtx = [datetimeCtx, weatherCtx].filter(Boolean).join('。') + '。';
+    const envCtx = [datetimeCtx, weatherCtx ? `（参考背景：${weatherCtx}，仅供参考，不要主动播报天气）` : ''].filter(Boolean).join('。') + '。';
 
     // Generate text
     const res = await fetch(apiUrl + '/api/v1/chat/completions', {
       method:'POST', headers:{'Authorization':`Bearer ${apiKey}`,'Content-Type':'application/json'},
       body: JSON.stringify({ model: contact.model||S.settings.model||'openai/gpt-4o-mini', max_tokens:120, stream:false,
-        messages:[{role:'system',content:`你是${aiName}，${buildMomentSysPrompt(contact)}。写一条自然、真实的朋友圈动态，50字以内，不要用"AI"或"助手"自称，像真人朋友一样分享日常/心情/想法，可带emoji。`},{role:'user',content:`${envCtx}\n写一条今天的朋友圈动态。`}]
+        messages:[{role:'system',content:`你是${aiName}，${buildMomentSysPrompt(contact)}。写一条自然、真实的朋友圈动态，50字以内，不要用"AI"或"助手"自称，像真人朋友一样分享日常/心情/想法，可带emoji。不要写成天气预报或天气播报。`},{role:'user',content:`${envCtx}\n写一条今天的朋友圈动态。`}]
       })
     });
     const d = await res.json(); const text = d.choices?.[0]?.message?.content?.trim();
@@ -1599,12 +1700,12 @@ async function aiPostMoment(contactId) {
           if (imgStickers.length) { const sk = imgStickers[Math.floor(Math.random()*imgStickers.length)]; if (sk?.url||sk?.dataUrl) { images.push(sk.url||sk.dataUrl); break; } }
         }
         if (src === 'search' && S.settings.unsplashKey) {
-          const imgUrl = await fetchUnsplashImage(text);
+          const imgUrl = await fetchUnsplashImage(extraImgPrompt || text);
           if (imgUrl) { images.push(imgUrl); break; }
         }
         if (src === 'generate' && apiKey) {
           toast('🎨 生成配图中…');
-          const imgUrl = await generateMomentImage(text, contact);
+          const imgUrl = await generateMomentImage(extraImgPrompt || text, contact);
           if (imgUrl) { images.push(imgUrl); break; }
         }
       }
@@ -1726,38 +1827,57 @@ async function aiReplyComment(momentId, commentObj, contactId) {
   } catch(e){}
 }
 
-function composePicLocal() { $i('compose-pic-file').click(); }
-async function handleComposePic(input) {
+function composePicLocal(src) {
+  if (src === 'modal') { $i('compose-pic-modal-file')?.click(); return; }
+  $i('compose-pic-file').click();
+}
+async function handleComposePic(input, src) {
+  const isModal = src === 'modal';
+  if (!S._composeModalPics) S._composeModalPics = [];
   for (const file of input.files) {
     const compressed = await compressImg(file, parseInt(S.settings.imgSize)||800);
     toast('上传图片中…');
     let url = await uploadToCloudinary(compressed, 'raimos/moments').catch(()=>null);
     url = url || compressed;
-    S._composePics.push({dataUrl:url});
-    addComposePicPreview(url, S._composePics.length-1);
+    if (isModal) { S._composeModalPics.push({dataUrl:url}); addComposePicPreview(url, S._composeModalPics.length-1, 'modal'); }
+    else { S._composePics.push({dataUrl:url}); addComposePicPreview(url, S._composePics.length-1); }
   }
   input.value='';
 }
-function addComposePicPreview(url, idx) {
-  const wrap=$i('compose-img-previews');
+function addComposePicPreview(url, idx, src) {
+  const isModal = src === 'modal';
+  const wrap=$i(isModal?'compose-modal-img-previews':'compose-img-previews');
+  if (!wrap) return;
   const div=document.createElement('div');div.className='cip';
-  div.innerHTML=`<img src="${url}"><button class="cip-del" onclick="removeComposePic(${idx})">✕</button>`;
+  div.innerHTML=`<img src="${url}"><button class="cip-del" onclick="removeComposePic(${idx},'${src||''}')">✕</button>`;
   wrap.appendChild(div);
 }
-function removeComposePic(idx) {
-  S._composePics.splice(idx,1);
-  const wrap=$i('compose-img-previews');wrap.innerHTML='';
-  S._composePics.forEach((p,i)=>addComposePicPreview(p.dataUrl,i));
+function removeComposePic(idx, src) {
+  const isModal = src === 'modal';
+  if (isModal) {
+    S._composeModalPics.splice(idx,1);
+    const wrap=$i('compose-modal-img-previews');wrap.innerHTML='';
+    S._composeModalPics.forEach((p,i)=>addComposePicPreview(p.dataUrl,i,'modal'));
+  } else {
+    S._composePics.splice(idx,1);
+    const wrap=$i('compose-img-previews');wrap.innerHTML='';
+    S._composePics.forEach((p,i)=>addComposePicPreview(p.dataUrl,i));
+  }
 }
-async function composeGenImg() {
-  const p=prompt('描述要生成的图片:'); if(!p)return;
+async function composeGenImg(src) {
+  const p=prompt('描述要生成的图片（可留空自动生成）:');
+  if(p===null)return;
   if(!S.settings.apiKey){toast('需要API Key');return;}
   toast('🎨 生成中…');
   try {
-    const res=await fetch('https://openrouter.ai/api/v1/images/generations',{method:'POST',headers:{'Authorization':`Bearer ${S.settings.apiKey}`,'Content-Type':'application/json'},body:JSON.stringify({model:S.settings.imgGenModel||'openai/dall-e-3',prompt:p,n:1,size:'1024x1024'})});
+    const prompt_=p||'a beautiful lifestyle photo';
+    const res=await fetch('https://openrouter.ai/api/v1/images/generations',{method:'POST',headers:{'Authorization':`Bearer ${S.settings.apiKey}`,'Content-Type':'application/json'},body:JSON.stringify({model:S.settings.imgGenModel||'openai/dall-e-3',prompt:prompt_,n:1,size:'1024x1024'})});
     const d=await res.json();const url=d.data?.[0]?.url;
-    if(url){S._composePics.push({dataUrl:url});addComposePicPreview(url,S._composePics.length-1);}
-    else throw new Error('生成失败');
+    if(url){
+      const isModal = src === 'modal' || src === 'compose-modal';
+      if (isModal) { if(!S._composeModalPics)S._composeModalPics=[]; S._composeModalPics.push({dataUrl:url}); addComposePicPreview(url,S._composeModalPics.length-1,'modal'); }
+      else { S._composePics.push({dataUrl:url}); addComposePicPreview(url,S._composePics.length-1); }
+    } else throw new Error('生成失败');
   }catch(e){toast('❌ '+e.message);}
 }
 function toggleComposeEmoji() {
@@ -1823,6 +1943,9 @@ function confirmImgSearch() {
   if(!S._imgSearchSelected.length){toast('请选择图片');return;}
   if(S._imgSearchTarget==='compose'){
     S._imgSearchSelected.forEach(url=>{S._composePics.push({dataUrl:url});addComposePicPreview(url,S._composePics.length-1);});
+  } else if(S._imgSearchTarget==='compose-modal'){
+    if(!S._composeModalPics)S._composeModalPics=[];
+    S._imgSearchSelected.forEach(url=>{S._composeModalPics.push({dataUrl:url});addComposePicPreview(url,S._composeModalPics.length-1,'modal');});
   } else {
     S._imgSearchSelected.forEach(url=>{S.pendingFiles.push({role:'user',type:'image',url,imageData:url,content:'[图片]'});addImgPreview(url);});
   }
@@ -2344,7 +2467,7 @@ async function addTextSticker(){const t=window.prompt('输入文字/emoji表情�
 // ══════════════════════════════
 //  MSG ACTIONS
 // ══════════════════════════════
-async function copyMsg(id){const msgs=await dbGetAll('messages','chatId',S.currentChat);const msg=msgs.find(m=>m.id===id);if(!msg)return;const txt=(msg.altVersions?.length&&msg.altIdx!=null)?msg.altVersions[msg.altIdx]?.content:msg.content;if(txt)navigator.clipboard.writeText(txt).then(()=>{haptic([5,3,5]);toast('✓ 已复制');});}
+async function copyMsg(id){const msgs=await dbGetAll('messages','chatId',S.currentChat);const msg=msgs.find(m=>m.id===id);if(!msg)return;const txt=(msg.altVersions?.length&&msg.altIdx!=null)?msg.altVersions[msg.altIdx]?.content:msg.content;if(!txt)return;try{await navigator.clipboard.writeText(txt);haptic([5,3,5]);toast('✓ 已复制');}catch(e){const ta=document.createElement('textarea');ta.value=txt;ta.style.cssText='position:fixed;top:-9999px;left:-9999px;opacity:0';document.body.appendChild(ta);ta.focus();ta.select();try{document.execCommand('copy');haptic([5,3,5]);toast('✓ 已复制');}catch(e2){toast('❌ 复制失败，请长按手动复制');}finally{document.body.removeChild(ta);}}}
 async function deleteMsg(id){if(!confirm('删除这条消息？（不影响上下文其他内容）'))return;await dbDel('messages',id);fbDel('messages',id);haptic(15);await renderMsgs();}
 async function replyMsg(id){const msgs=await dbGetAll('messages','chatId',S.currentChat);const msg=msgs.find(m=>m.id===id);if(!msg)return;S.replyTo=msg;$i('reply-bar-txt').textContent=(msg.content||'[媒体]').slice(0,50);$i('reply-bar').classList.add('show');$i('msg-input').focus();}
 function cancelReply(){S.replyTo=null;$i('reply-bar').classList.remove('show');}
@@ -4014,6 +4137,7 @@ function applyCompanionBgFit() {
   const wrap = $i('comp-bg'); if (!wrap) return;
   const fit = S.settings.companionBgFit || 'cover';
   wrap.classList.toggle('fit-contain', fit === 'contain');
+  wrap.classList.toggle('fit-cover', fit === 'cover');
 }
 
 async function applyCompanionCharacter() {
@@ -4596,6 +4720,8 @@ async function companionEnterPiP() {
         if (orig && wrap) wrap.insertBefore(orig, wrap.firstChild);
         if (orig) orig.style.cssText = '';
         _pipWin = null;
+        // Re-apply background/character after returning from PiP
+        void renderCompanionStage();
       });
       toast('✅ 画中画已开启，可置顶在所有窗口前');
       return;
@@ -4643,20 +4769,27 @@ function companionShowMini() {
   const win = $i('comp-mini-win'); if (!win) return;
   win.style.display = 'flex';
   S._companion.mini = true;
+  saveSetting('companionMiniOpen', true);
   // Render mini content
   _miniRender();
-  // Start drag
+  // Start drag — but don't intercept clicks on buttons
   const header = $i('comp-mini-header'); if (!header) return;
   const onDown = e => {
-    _miniDragging = true;
+    if (e.target.tagName === 'BUTTON') return;
+    _miniDragging = false;
     const t = e.touches?.[0] || e;
     const r = win.getBoundingClientRect();
     _miniDragX = t.clientX - r.left; _miniDragY = t.clientY - r.top;
-    e.preventDefault();
+    // Only mark as dragging on move, not on down — prevents click suppression
   };
   const onMove = e => {
-    if (!_miniDragging) return;
     const t = e.touches?.[0] || e;
+    const dx = t.clientX - _miniDragX, dy = t.clientY - _miniDragY;
+    const r = win.getBoundingClientRect();
+    if (!_miniDragging && (Math.abs(t.clientX - (r.left + _miniDragX)) > 4 || Math.abs(t.clientY - (r.top + _miniDragY)) > 4)) {
+      _miniDragging = true;
+    }
+    if (!_miniDragging) return;
     const nx = t.clientX - _miniDragX, ny = t.clientY - _miniDragY;
     win.style.left = Math.max(0, Math.min(window.innerWidth - win.offsetWidth, nx)) + 'px';
     win.style.top = Math.max(0, Math.min(window.innerHeight - win.offsetHeight, ny)) + 'px';
@@ -4665,7 +4798,7 @@ function companionShowMini() {
   };
   const onUp = () => { _miniDragging = false; };
   header.addEventListener('mousedown', onDown);
-  header.addEventListener('touchstart', onDown, { passive: false });
+  header.addEventListener('touchstart', onDown, { passive: true });
   document.addEventListener('mousemove', onMove);
   document.addEventListener('touchmove', onMove, { passive: false });
   document.addEventListener('mouseup', onUp);
@@ -4678,17 +4811,41 @@ function companionHideMini() {
   const win = $i('comp-mini-win'); if (!win) return;
   win.style.display = 'none';
   S._companion.mini = false;
+  saveSetting('companionMiniOpen', false);
   if (_miniTimerInt) { clearInterval(_miniTimerInt); _miniTimerInt = null; }
 }
-function _miniRender() {
+async function _miniRender() {
   const stage = $i('comp-mini-stage'); if (!stage) return;
-  const charType = S.settings.companionCharType || 'builtin';
-  const charVal = charType === 'builtin' ? (S.settings.companionCharBuiltin || '😊') : '';
-  const bg = S.settings.companionBgBuiltin || 'bg1';
+  const s = S.settings;
+  const charType = s.companionCharType || 'builtin';
+  const bgType = s.companionBgType || 'builtin';
   const bgColors = { bg1:'linear-gradient(135deg,#FCE4EC,#F8BBD0)', bg2:'linear-gradient(135deg,#E3F2FD,#BBDEFB)', bg3:'linear-gradient(135deg,#E8F5E9,#C8E6C9)', bg4:'linear-gradient(135deg,#EDE7F6,#D1C4E9)', bg5:'linear-gradient(135deg,#FFF8E1,#FFECB3)' };
+
+  // Determine background
+  let bgStyle = bgColors[s.companionBgBuiltin || 'bg1'] || bgColors.bg1;
+  let bgImgEl = '';
+  if (bgType === 'upload' && s.companionBgMediaId) {
+    const url = await loadMediaUrl(s.companionBgMediaId).catch(()=>null) || s.companionBgUrl || '';
+    if (url) bgImgEl = `<img src="${url}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;pointer-events:none;">`;
+    bgStyle = 'transparent';
+  }
+
+  // Determine character
+  let charEl = '';
+  if (charType === 'builtin') {
+    charEl = `<div class="mini-char">${s.companionCharBuiltin || '😊'}</div>`;
+  } else if (charType === 'upload' && s.companionCharMediaId) {
+    const url = await loadMediaUrl(s.companionCharMediaId).catch(()=>null) || s.companionCharUrl || '';
+    charEl = url
+      ? `<div class="mini-char"><img src="${url}" style="width:100%;height:100%;object-fit:contain;max-width:80px;max-height:80px;filter:drop-shadow(0 6px 10px rgba(0,0,0,.15))"></div>`
+      : `<div class="mini-char">😊</div>`;
+  } else {
+    charEl = `<div class="mini-char">😊</div>`;
+  }
+
   stage.innerHTML = `
-    <div id="comp-mini-bg" style="position:absolute;inset:0;background:${bgColors[bg]||bgColors.bg1}"></div>
-    <div class="mini-char">${charType==='builtin'?charVal:'🖼️'}</div>
+    <div id="comp-mini-bg" style="position:absolute;inset:0;background:${bgStyle}">${bgImgEl}</div>
+    ${charEl}
     <div class="mini-bubble" id="comp-mini-bubble"></div>
     <div class="mini-timer" id="comp-mini-timer">00:00</div>
   `;

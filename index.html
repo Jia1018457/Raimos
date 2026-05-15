@@ -125,13 +125,33 @@
 <div class="page" id="moments-page">
   <div class="page-header">
     <h2>🌸 朋友圈</h2>
-    <div style="display:flex;gap:6px;flex-wrap:wrap;">
-      <button class="btn-p" onclick="openAiPostModal()" title="让AI发一条朋友圈">🤖 AI发圈</button>
-      <button class="btn-s" onclick="exportMoments()">📤 导出</button>
-      <button class="btn-s" onclick="archiveMoments()">📁 归档清空</button>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+      <!-- Desktop: existing buttons; hidden on mobile -->
+      <button class="btn-p desk-only" onclick="openAiPostModal()" title="让AI发一条朋友圈">🤖 AI发圈</button>
+      <!-- Manage dropdown (all devices) -->
+      <div class="moments-manage-wrap" id="moments-manage-wrap">
+        <button class="btn-s" onclick="toggleMomentsManageMenu(event)">⋯ 管理</button>
+        <div class="moments-manage-menu" id="moments-manage-menu" style="display:none">
+          <button onclick="exportMoments();closeMomentsManageMenu()">📤 导出</button>
+          <button onclick="importMomentsFile();closeMomentsManageMenu()">📥 导入朋友圈</button>
+          <button onclick="archiveMoments();closeMomentsManageMenu()">📁 清空归档</button>
+        </div>
+      </div>
+      <input type="file" id="moments-import-file" accept=".json" style="display:none" onchange="doImportMoments(this)"/>
+      <!-- Mobile-only: + compose button -->
+      <div class="moments-manage-wrap mob-only" style="position:relative">
+        <button class="btn-p" onclick="toggleMomentsNewMenu(event)" title="发布动态">＋</button>
+        <div class="moments-new-menu" id="moments-new-menu" style="display:none">
+          <button onclick="openComposeMomentModal();closeMomentsNewMenu()">✏️ 自己发圈</button>
+          <button onclick="openAiPostModal();closeMomentsNewMenu()">🤖 AI发圈</button>
+        </div>
+      </div>
     </div>
   </div>
-  <div id="compose-moment">
+  <!-- Unread notification banner -->
+  <div id="moments-notif" style="display:none" class="moments-notif-bar"></div>
+  <!-- Compose area: hidden on mobile -->
+  <div id="compose-moment" class="desk-only-block">
     <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
       <textarea id="compose-text" placeholder="分享一下今天的心情…" rows="2" oninput="autoH(this)" style="flex:1;margin:0"></textarea>
       <button class="compose-moment-toggle" onclick="toggleComposeMoment()" title="收起/展开发布栏">▾</button>
@@ -140,9 +160,9 @@
     <div class="compose-tools">
       <button class="compose-btn" onclick="composePicLocal()">🖼️ 本地图片</button>
       <button class="compose-btn" onclick="openImgSearchModal('compose')">🔍 搜索图片</button>
-      <button class="compose-btn" onclick="composeGenImg()">🎨 生成图片</button>
+      <button class="compose-btn" onclick="composeGenImg('compose')">🎨 生成图片</button>
       <button class="compose-btn" onclick="toggleComposeEmoji()">😊 表情</button>
-      <button class="compose-post-btn" onclick="postMoment()">发布 →</button>
+      <button class="compose-post-btn" onclick="postMoment('compose')">发布 →</button>
     </div>
     <div id="compose-emoji" style="display:none;margin-top:6px;background:var(--hover);border-radius:10px;padding:8px;">
       <div id="compose-emoji-grid" style="display:flex;flex-wrap:wrap;gap:3px;max-height:100px;overflow-y:auto;"></div>
@@ -786,6 +806,28 @@
   </div>
 </div>
 
+<!-- 手机端发朋友圈 Modal -->
+<div class="overlay" id="compose-moment-modal">
+  <div class="modal">
+    <h2>✏️ 发朋友圈 <button class="mclose" onclick="closeModal('compose-moment-modal')">✕</button></h2>
+    <textarea id="compose-modal-text" placeholder="分享一下今天的心情…" rows="4" oninput="autoH(this)" style="width:100%;margin-bottom:8px"></textarea>
+    <div id="compose-modal-img-previews" class="compose-img-previews" style="margin-bottom:8px"></div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
+      <button class="btn-s" onclick="composePicLocal('modal')">🖼️ 本地</button>
+      <button class="btn-s" onclick="openImgSearchModal('compose-modal')">🔍 搜索</button>
+      <button class="btn-s" onclick="composeGenImg('compose-modal')">🎨 生成</button>
+      <button class="btn-s" onclick="toggleComposeModalEmoji()">😊 表情</button>
+    </div>
+    <div id="compose-modal-emoji" style="display:none;margin-bottom:8px;background:var(--hover);border-radius:10px;padding:8px;">
+      <div id="compose-modal-emoji-grid" style="display:flex;flex-wrap:wrap;gap:3px;max-height:100px;overflow-y:auto;"></div>
+    </div>
+    <div class="mbtns">
+      <button class="btn-s" onclick="closeModal('compose-moment-modal')">取消</button>
+      <button class="btn-p" onclick="postMoment('modal')">🌸 发布</button>
+    </div>
+  </div>
+</div>
+
 <!-- 朋友圈导出格式 Modal -->
 <div class="overlay" id="export-moments-modal">
   <div class="modal">
@@ -810,7 +852,11 @@
     <div class="mrow"><label>选择助手</label>
       <select id="apm-contact" style="flex:1"></select>
     </div>
-    <div style="font-size:12px;color:var(--text3);margin:8px 0">AI 将根据助手人设自动生成一条朋友圈内容并发布。</div>
+    <div class="mrow" style="align-items:flex-start">
+      <label style="padding-top:6px">配图提示词</label>
+      <textarea id="apm-img-prompt" rows="2" placeholder="可选：描述想要什么样的配图，留空则自动判断" style="flex:1;font-size:12px;resize:vertical"></textarea>
+    </div>
+    <div style="font-size:12px;color:var(--text3);margin:4px 0 8px">AI 将根据助手人设自动生成一条朋友圈内容并发布。</div>
     <div class="mbtns">
       <button class="btn-s" onclick="closeModal('ai-post-modal')">取消</button>
       <button class="btn-p" onclick="doAiPost()">🌸 立即发圈</button>
@@ -1283,6 +1329,7 @@
 
 <input type="file" id="file-upload" accept="image/*,application/pdf,.txt,.md,.doc,.docx" multiple style="display:none" onchange="handleFiles(this)"/>
 <input type="file" id="compose-pic-file" accept="image/*" multiple style="display:none" onchange="handleComposePic(this)"/>
+<input type="file" id="compose-pic-modal-file" accept="image/*" multiple style="display:none" onchange="handleComposePic(this,'modal')"/>
 <input type="file" id="companion-media-file" accept="image/*,video/*,audio/*" style="display:none" onchange="handleCompanionMedia(this)"/>
 <input type="file" id="splash-media-file" accept="image/*,video/*" style="display:none" onchange="handleSplashMedia(this)"/>
 

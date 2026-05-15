@@ -60,8 +60,8 @@ async function renderCheckinPage() {
   CK.goals = await ckGetGoals();
   if (CK.goals.length && !CK.activeGoalId) CK.activeGoalId = CK.goals[0].id;
 
-  const editBtn = $i('ck-edit-goal-btn');
-  if (editBtn) editBtn.style.display = CK.activeGoalId ? 'inline-flex' : 'none';
+  const moreBtn = $i('ck-more-btn');
+  if (moreBtn) moreBtn.style.display = CK.activeGoalId ? 'inline-flex' : 'none';
 
   renderCkGoalTabs();
   await renderCkCalendar();
@@ -89,8 +89,8 @@ function renderCkGoalTabs() {
 
 async function ckSwitchGoal(goalId) {
   CK.activeGoalId = goalId;
-  const editBtn = $i('ck-edit-goal-btn');
-  if (editBtn) editBtn.style.display = goalId ? 'inline-flex' : 'none';
+  const moreBtn = $i('ck-more-btn');
+  if (moreBtn) moreBtn.style.display = goalId ? 'inline-flex' : 'none';
   renderCkGoalTabs();
   await renderCkCalendar();
   await renderCkTodaySection();
@@ -215,6 +215,11 @@ async function renderCkTodaySection() {
   const total  = await ckGetTotalDays(CK.activeGoalId);
   const color  = goal.color || '#ff8fab';
 
+  const isTimer    = goal.goalType === 'timer';
+  const targetMins = goal.targetMinutes || 30;
+  const loggedMins = rec?.minutesLogged || 0;
+  const timerPct   = isTimer ? Math.min(100, Math.round((loggedMins / targetMins) * 100)) : null;
+
   const totalItems = (goal.items || []).length;
   const doneItems  = totalItems > 0 ? (goal.items || []).filter(it => rec?.items?.[it.id]) : [];
   const doneCount  = doneItems.length;
@@ -222,12 +227,15 @@ async function renderCkTodaySection() {
 
   let doneHtml = '';
   if (rec?.completed) {
+    const completedSub = isTimer
+      ? `今日已完成 ${loggedMins} 分钟`
+      : (totalItems ? `${doneCount}/${totalItems} 项完成 · ${rec.progress||100}%` : `${rec.progress||100}% 完成`);
     doneHtml = `
       <div class="ck-done-banner">
         <div class="ck-done-stamp" style="--stamp-color:${color}">✓</div>
         <div class="ck-done-text">
           <div class="ck-done-title">今日已打卡！</div>
-          ${totalItems ? `<div class="ck-done-sub">${doneCount}/${totalItems} 项完成 · ${rec.progress||100}%</div>` : `<div class="ck-done-sub">${rec.progress||100}% 完成</div>`}
+          <div class="ck-done-sub">${completedSub}</div>
           ${rec.notes ? `<div class="ck-done-notes">"${rec.notes}"</div>` : ''}
         </div>
       </div>
@@ -250,19 +258,40 @@ async function renderCkTodaySection() {
         <button class="btn-p" onclick="openCkCheckinModal('${today}')">➕ 继续打卡</button>
         <button class="btn-s" onclick="openCkViewModal(null,'${today}')">📝 查看记录</button>
       </div>`;
+  } else if (isTimer && loggedMins > 0) {
+    // Timer goal in progress (not yet completed)
+    doneHtml = `
+      <div class="ck-checkin-cta" onclick="openCkCheckinModal('${today}')">
+        <div class="ck-cta-left">
+          <div class="ck-cta-icon" style="--goal-color:${color}">⏱️</div>
+          <div>
+            <div class="ck-cta-title">继续计时</div>
+            <div class="ck-cta-sub">已累积 ${loggedMins} 分钟，目标 ${targetMins} 分钟</div>
+          </div>
+        </div>
+        <div class="ck-cta-arrow">›</div>
+      </div>
+      <div class="ck-timer-progress-wrap">
+        <div class="ck-timer-bar-row">
+          <div class="ck-timer-bar"><div class="ck-timer-bar-fill" style="width:${timerPct}%;background:${color}"></div></div>
+          <span class="ck-timer-label">${loggedMins}/${targetMins} 分钟</span>
+        </div>
+      </div>`;
   } else {
     let itemsPreview = '';
     if (goal.items?.length) {
       itemsPreview = `<div class="ck-items-preview">${goal.items.map(it =>
         `<span class="ck-item-chip">${it.label}</span>`).join('')}</div>`;
     }
+    const ctaTitle = isTimer ? '开始计时' : '立即打卡';
+    const ctaSub   = isTimer ? `今日目标 ${targetMins} 分钟，还没开始哦` : '今天还没打卡哦，坚持是最好的习惯';
     doneHtml = `
       <div class="ck-checkin-cta" onclick="openCkCheckinModal('${today}')">
         <div class="ck-cta-left">
-          <div class="ck-cta-icon" style="--goal-color:${color}">📝</div>
+          <div class="ck-cta-icon" style="--goal-color:${color}">${isTimer ? '⏱️' : '📝'}</div>
           <div>
-            <div class="ck-cta-title">立即打卡</div>
-            <div class="ck-cta-sub">今天还没打卡哦，坚持是最好的习惯</div>
+            <div class="ck-cta-title">${ctaTitle}</div>
+            <div class="ck-cta-sub">${ctaSub}</div>
           </div>
         </div>
         <div class="ck-cta-arrow">›</div>
@@ -399,14 +428,21 @@ async function openCkCheckinModal(date) {
   }
 
   const prevProgress = existingRec?.progress ?? 100;
+  const isTimer    = goal.goalType === 'timer';
+  const targetMins = goal.targetMinutes || 30;
+  const prevMins   = existingRec?.minutesLogged || 0;
 
-  $i('ck-checkin-modal-body').innerHTML = `
-    <div class="ck-modal-goal-badge" style="--goal-color:${goal.color||'#ff8fab'}">
-      <span>${goal.emoji||'🎯'}</span> ${goal.title}
-      <span class="ck-modal-date-tag">${dateLabel}</span>
-    </div>
-    ${isSubsequent ? `<div style="font-size:12px;color:var(--text3);padding:2px 0 8px">第 ${(existingRec?.submissions?.length||0)+1} 次打卡记录</div>` : ''}
-    ${itemsHtml}
+  const progressSection = isTimer ? `
+    <div class="ck-modal-section">
+      <div class="ck-modal-section-title">本次时长</div>
+      <div class="ck-progress-row" style="align-items:center;gap:8px">
+        <input type="number" id="cki-minutes" value="30" min="0" max="1440"
+          style="max-width:90px;background:var(--input-bg);border:1.5px solid var(--border);
+                 border-radius:8px;padding:6px 10px;font-size:13px;color:var(--text);
+                 font-family:inherit;outline:none"/> 分钟
+        <span style="font-size:12px;color:var(--text3)">已累积: ${prevMins}/${targetMins} 分钟</span>
+      </div>
+    </div>` : `
     <div class="ck-modal-section">
       <div class="ck-modal-section-title">完成进度</div>
       <div class="ck-progress-row">
@@ -415,7 +451,16 @@ async function openCkCheckinModal(date) {
           style="flex:1;accent-color:${goal.color||'var(--accent)'}"/>
         <span id="cki-progress-v" class="ck-progress-val">${prevProgress}%</span>
       </div>
+    </div>`;
+
+  $i('ck-checkin-modal-body').innerHTML = `
+    <div class="ck-modal-goal-badge" style="--goal-color:${goal.color||'#ff8fab'}">
+      <span>${goal.emoji||'🎯'}</span> ${goal.title}
+      <span class="ck-modal-date-tag">${dateLabel}</span>
     </div>
+    ${isSubsequent ? `<div style="font-size:12px;color:var(--text3);padding:2px 0 8px">第 ${(existingRec?.submissions?.length||0)+1} 次打卡记录</div>` : ''}
+    ${itemsHtml}
+    ${progressSection}
     <div class="ck-modal-section">
       <div class="ck-modal-section-title">本次备注 <span style="font-weight:400;opacity:.6">（选填${goal.aiEnabled && goal.aiCommentScopes?.includes('notes') ? '，AI 将参考备注点评' : ''}）</span></div>
       <textarea id="cki-notes" placeholder="今天的感受、遇到的困难、小小成就…" rows="3"
@@ -431,15 +476,33 @@ async function doCkCheckin() {
   const goal = CK.goals.find(g => g.id === CK.activeGoalId);
   if (!goal || !CK._checkinDate) return;
 
+  const isTimer    = goal.goalType === 'timer';
+  const targetMins = goal.targetMinutes || 30;
+
   const totalItems = (goal.items || []).length;
   const newItems = {};
   (goal.items || []).forEach(item => {
     newItems[item.id] = $i(`cki-${item.id}`)?.checked ?? false;
   });
-  const progress = parseInt($i('cki-progress')?.value ?? '100');
   const notes    = ($i('cki-notes')?.value || '').trim();
 
   const existing = await ckGetRecordByDate(CK.activeGoalId, CK._checkinDate);
+
+  let progress, minutesLogged, completed;
+  if (isTimer) {
+    const addedMins = parseInt($i('cki-minutes')?.value || '0');
+    minutesLogged = (existing?.minutesLogged || 0) + addedMins;
+    progress  = Math.min(100, Math.round((minutesLogged / targetMins) * 100));
+    completed = minutesLogged >= targetMins;
+  } else {
+    progress  = parseInt($i('cki-progress')?.value ?? '100');
+    // Merge items (union — once checked, stays checked)
+    const mergedItems_ = { ...(existing?.items || {}), ...Object.fromEntries(
+      Object.entries(newItems).filter(([,v]) => v)
+    )};
+    const doneCount_ = totalItems > 0 ? Object.values(mergedItems_).filter(Boolean).length : 0;
+    completed = (totalItems === 0 || doneCount_ >= totalItems) || (totalItems === 0 && progress > 0);
+  }
 
   // Merge items (union — once checked, stays checked)
   const mergedItems = { ...(existing?.items || {}), ...Object.fromEntries(
@@ -447,9 +510,10 @@ async function doCkCheckin() {
   )};
   const doneCount = totalItems > 0 ? Object.values(mergedItems).filter(Boolean).length : 0;
   const allDone   = totalItems === 0 || doneCount >= totalItems;
+  if (!isTimer) completed = allDone || (totalItems === 0 && progress > 0);
 
   // Append this submission to history
-  const submission = { ts: new Date().toISOString(), items: newItems, notes, progress };
+  const submission = { ts: new Date().toISOString(), items: newItems, notes, progress, ...(isTimer ? { minutesThisSession: parseInt($i('cki-minutes')?.value || '0') } : {}) };
   const submissions = [...(existing?.submissions || []), submission];
 
   const rec = {
@@ -457,12 +521,13 @@ async function doCkCheckin() {
     goalId:      CK.activeGoalId,
     date:        CK._checkinDate,
     items:       mergedItems,
-    progress:    Math.max(existing?.progress || 0, progress),
+    progress:    isTimer ? progress : Math.max(existing?.progress || 0, progress),
     notes,
     submissions,
-    completed:   allDone || (totalItems === 0 && progress > 0),
+    completed,
     aiComment:   existing?.aiComment || '',
     completedAt: new Date().toISOString(),
+    ...(isTimer ? { minutesLogged } : {}),
   };
 
   await dbPut('checkinRecords', rec);
@@ -475,7 +540,14 @@ async function doCkCheckin() {
     await playCkStampAnim(goal);
   } else if (!existing && CK._checkinDate === today) {
     if (typeof haptic === 'function') haptic([8, 5, 8]);
-    toast(`✅ 已记录！${totalItems > 0 ? `${doneCount}/${totalItems} 项` : `${progress}% 完成`}`);
+    if (isTimer) {
+      toast(`✅ 已记录 ${parseInt($i('cki-minutes')?.value||'0')} 分钟！累计 ${minutesLogged}/${targetMins} 分钟`);
+    } else {
+      toast(`✅ 已记录！${totalItems > 0 ? `${doneCount}/${totalItems} 项` : `${progress}% 完成`}`);
+    }
+  } else if (isTimer && rec.completed && !existing?.completed) {
+    if (typeof haptic === 'function') haptic([20, 10, 20, 10, 40]);
+    await playCkStampAnim(goal);
   }
 
   await renderCheckinPage();
@@ -584,11 +656,17 @@ function openCkGoalModal(goalId) {
   // Show delete button only when editing
   $i('ckg-delete-btn').style.display = goalId ? 'inline-flex' : 'none';
 
+  const typeEl = $i('ckg-goal-type');
+  if (typeEl) typeEl.value = g?.goalType || 'count';
+  const targetMinsEl = $i('ckg-target-mins');
+  if (targetMinsEl) targetMinsEl.value = g?.targetMinutes || 30;
+
   ckRenderItems(g?.items || []);
   ckRenderTimes(g?.reminderTimes || ['20:00']);
   ckBuildContactSel(g?.contactId || '');
   ckPreviewContact(g?.contactId || '');
   ckToggleDuration();
+  ckToggleGoalType();
   ckToggleAiSection();
   ckToggleReminderSection();
   ckTogglePromptMode();
@@ -673,6 +751,11 @@ function ckPreviewContact(contactId) {
 function ckToggleDuration() {
   $i('ckg-days-row').style.display = $i('ckg-duration').value === 'fixed' ? 'flex' : 'none';
 }
+function ckToggleGoalType() {
+  const type = $i('ckg-goal-type')?.value || 'count';
+  const row  = $i('ckg-target-mins-row');
+  if (row) row.style.display = type === 'timer' ? 'flex' : 'none';
+}
 function ckToggleAiSection() {
   const enabled = $i('ckg-ai').checked;
   $i('ckg-ai-section').style.display = enabled ? 'flex' : 'none';
@@ -711,6 +794,8 @@ async function saveCkGoal() {
       reminderEnabled:    $i('ckg-reminder').checked,
       reminderTimes:      ckGetTimes(),
       reminderCount:      parseInt($i('ckg-remind-count').value || '1'),
+      goalType:           $i('ckg-goal-type')?.value || 'count',
+      targetMinutes:      parseInt($i('ckg-target-mins')?.value || '30'),
       createdAt:          existing?.createdAt || new Date().toISOString(),
     };
 
@@ -750,6 +835,142 @@ async function deleteCkGoal() {
   closeModal('ck-goal-modal');
   await renderCheckinPage();
   toast('目标已删除');
+}
+
+// ── 更多操作菜单 ──
+function openCkMoreMenu(event) {
+  const items = [
+    { label: '⚙️ 编辑目标', action: () => openCkGoalModal(CK.activeGoalId) },
+    { label: '📤 导出记录', action: () => openCkExportModal() },
+    { label: '📋 查看打卡历史', action: () => openCkViewModal(null, ckTodayStr()) },
+  ];
+  if (typeof openCtxMenuFromItems === 'function') {
+    openCtxMenuFromItems(event, items);
+  } else {
+    // fallback: simple prompt
+    const opts = items.map((it,i) => `${i+1}. ${it.label}`).join('\n');
+    const choice = parseInt(window.prompt('选择操作：\n'+opts)) - 1;
+    if (choice >= 0 && choice < items.length) items[choice].action();
+  }
+}
+
+function openCkExportModal() {
+  const goal = CK.goals.find(g => g.id === CK.activeGoalId);
+  if (!goal) { if (typeof toast === 'function') toast('请先选择打卡目标'); return; }
+  const nameEl = document.getElementById('ck-export-goal-name');
+  if (nameEl) nameEl.textContent = `${goal.emoji || '🎯'} ${goal.title}`;
+  document.getElementById('ck-export-modal')?.classList.add('show');
+}
+
+async function exportCkData(format) {
+  const goal = CK.goals.find(g => g.id === CK.activeGoalId);
+  if (!goal) return;
+  const records = await ckGetRecords(CK.activeGoalId);
+  records.sort((a, b) => a.date.localeCompare(b.date));
+  if (typeof closeModal === 'function') closeModal('ck-export-modal');
+
+  const totalDays = records.filter(r => r.completed).length;
+  const streak    = ckStreakFromRecords(records);
+
+  let content, mime, filename;
+  const safeTitle = goal.title.replace(/[\\/:*?"<>|]/g, '_');
+
+  if (format === 'json') {
+    content  = JSON.stringify({ goal, records }, null, 2);
+    mime     = 'application/json';
+    filename = `打卡_${safeTitle}_${new Date().toISOString().slice(0,10)}.json`;
+  } else if (format === 'csv') {
+    const esc = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const rows = [['日期','是否完成','进度(%)','备注','打卡次数','AI点评']];
+    records.forEach(r => rows.push([r.date, r.completed?'是':'否', r.progress??100, r.notes||'', r.submissions?.length||1, r.aiComment||'']));
+    content  = '﻿' + rows.map(r => r.map(esc).join(',')).join('\r\n');
+    mime     = 'text/csv;charset=utf-8';
+    filename = `打卡_${safeTitle}_${new Date().toISOString().slice(0,10)}.csv`;
+  } else if (format === 'markdown') {
+    content  = `# ${goal.emoji||'🎯'} ${goal.title}\n\n`;
+    content += `> 开始：${goal.startDate} | 累计 **${totalDays}** 天 | 连续 **${streak}** 天\n\n`;
+    content += `## 打卡记录\n\n`;
+    content += `| 日期 | 状态 | 进度 | 备注 |\n|------|------|------|------|\n`;
+    records.forEach(r => {
+      content += `| ${r.date} | ${r.completed?'✅ 完成':'🔲'} | ${r.progress??100}% | ${r.notes||''} |\n`;
+    });
+    mime     = 'text/markdown;charset=utf-8';
+    filename = `打卡_${safeTitle}_${new Date().toISOString().slice(0,10)}.md`;
+  } else if (format === 'html') {
+    const rows = records.map(r => `
+      <tr>
+        <td>${r.date}</td><td class="${r.completed?'done':''}">${r.completed?'✅ 完成':'🔲'}</td>
+        <td>${r.progress??100}%</td><td>${r.notes||''}</td>
+        <td style="font-size:11px;color:#888">${r.aiComment||''}</td>
+      </tr>`).join('');
+    content = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${goal.title} 打卡记录</title>
+<style>body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;max-width:820px;margin:0 auto;padding:24px;color:#333}
+h1{color:#e91e63;margin-bottom:4px}.stats{background:#fdf0f5;padding:10px 16px;border-radius:8px;margin:12px 0;font-size:13px}
+table{width:100%;border-collapse:collapse;margin-top:16px}th,td{padding:8px 10px;text-align:left;border-bottom:1px solid #eee;font-size:13px}
+th{background:#fdf0f5;font-weight:600}.done{color:#27ae60}
+.btn{background:#e91e63;color:#fff;border:none;padding:8px 18px;border-radius:8px;cursor:pointer;font-size:13px;margin:10px 4px 0 0}
+@media print{.btn{display:none}}</style></head><body>
+<h1>${goal.emoji||'🎯'} ${goal.title}</h1>
+<div class="stats">开始日期：${goal.startDate} &nbsp;·&nbsp; 累计打卡 <strong>${totalDays}</strong> 天 &nbsp;·&nbsp; 当前连续 <strong>${streak}</strong> 天</div>
+<button class="btn" onclick="window.print()">🖨️ 打印</button>
+<table><tr><th>日期</th><th>状态</th><th>进度</th><th>备注</th><th>AI点评</th></tr>${rows}</table>
+</body></html>`;
+    mime     = 'text/html;charset=utf-8';
+    filename = `打卡_${safeTitle}_${new Date().toISOString().slice(0,10)}.html`;
+  }
+
+  const blob = new Blob([content], { type: mime });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = filename; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 8000);
+  if (typeof toast === 'function') toast(`✅ 已导出 ${format.toUpperCase()}`);
+}
+
+// ── 陪伴计时自动打卡 ──
+async function ckAddCompanionMinutes(goalId, minutes) {
+  const goal = (await ckGetGoals()).find(g => g.id === goalId);
+  if (!goal) return;
+  const today = ckTodayStr();
+  const existing = await ckGetRecordByDate(goalId, today);
+  const prevMins = existing?.minutesLogged || 0;
+  const newMins  = prevMins + minutes;
+  const targetMins = goal.targetMinutes || 30;
+  const wasCompleted = existing?.completed || false;
+  const nowCompleted = newMins >= targetMins;
+  const s = window.S;
+  const aiName = (s?.settings?.companionContactId ? s?._contacts?.[s.settings.companionContactId]?.name : null) || s?.settings?.aiName || 'AI';
+  const notesEntry = `在${aiName}的陪伴下${goal.title}了${minutes}分钟`;
+
+  const rec = {
+    id:          existing?.id || (typeof uid === 'function' ? uid() : Date.now().toString()),
+    goalId,
+    date:        today,
+    items:       existing?.items || {},
+    progress:    nowCompleted ? 100 : Math.round((newMins / targetMins) * 100),
+    notes:       existing?.notes || notesEntry,
+    submissions: [...(existing?.submissions || []), { ts: new Date().toISOString(), notes: notesEntry, progress: Math.round((newMins/targetMins)*100), minutesThisSession: minutes }],
+    completed:   nowCompleted,
+    minutesLogged: newMins,
+    aiComment:   existing?.aiComment || '',
+    completedAt: new Date().toISOString(),
+  };
+
+  if (typeof dbPut === 'function') await dbPut('checkinRecords', rec);
+  if (typeof ckSyncRecordUp === 'function') ckSyncRecordUp(rec);
+
+  if (typeof toast === 'function') {
+    if (nowCompleted && !wasCompleted) {
+      toast(`🎉 在${aiName}的陪伴下完成了「${goal.title}」${newMins}分钟目标！已自动打卡！`);
+    } else {
+      toast(`✅ 在${aiName}陪伴下${goal.title}了${minutes}分钟，进度：${newMins}/${targetMins}分钟`);
+    }
+  }
+
+  if (typeof renderCkTodaySection === 'function' && document.getElementById('ck-today-section')) {
+    CK.goals = await ckGetGoals();
+    await renderCkTodaySection();
+  }
 }
 
 // ══════════════════════════════

@@ -1236,3 +1236,80 @@ button, a, .nav-tab, .nav-logo, .chat-item, .ibtn, .hbtn, .act-btn,
   transition: all .15s;
 }
 #input-expand-btn:hover { background: var(--hover); color: var(--accent); }
+
+/* ── Version navigation for AI message regen ── */
+.version-nav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+  padding-top: 5px;
+  border-top: 1px solid var(--border);
+}
+.ver-btn {
+  background: none;
+  border: 1.5px solid var(--border);
+  border-radius: 6px;
+  color: var(--text3);
+  font-size: 14px;
+  line-height: 1;
+  padding: 2px 7px;
+  cursor: pointer;
+  transition: all .15s;
+}
+.ver-btn:hover:not(:disabled) { background: var(--hover); color: var(--accent); border-color: var(--accent); }
+.ver-btn:disabled { opacity: 0.35; cursor: default; }
+.ver-label { font-size: 11px; color: var(--text3); min-width: 28px; text-align: center; }
+
+/* ── Companion Quick Phrases ── */
+.comp-speak-wrap { position: relative; }
+.comp-phrase-panel {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  min-width: 180px;
+  max-width: 260px;
+  background: var(--bg2);
+  border: 1.5px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 4px 16px var(--shadow2);
+  z-index: 200;
+  padding: 8px;
+}
+.comp-phrase-panel-mini {
+  bottom: auto;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  min-width: unset;
+  max-width: unset;
+}
+#comp-phrase-list, #comp-mini-phrase-list { display: flex; flex-wrap: wrap; gap: 5px; padding: 2px; }
+.comp-phrase-btn {
+  background: var(--hover);
+  border: 1.5px solid var(--border);
+  border-radius: 16px;
+  padding: 4px 11px;
+  font-size: 12px;
+  color: var(--text2);
+  cursor: pointer;
+  transition: all .15s;
+  font-family: inherit;
+}
+.comp-phrase-btn:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+/* ── Check-in Timer Progress ── */
+.ck-timer-progress-wrap {
+  margin: 8px 0;
+}
+.ck-timer-bar-row {
+  display: flex; align-items: center; gap: 8px; margin-top: 4px;
+}
+.ck-timer-bar {
+  flex: 1; height: 8px; background: var(--border); border-radius: 4px; overflow: hidden;
+}
+.ck-timer-bar-fill {
+  height: 100%; border-radius: 4px; background: var(--accent);
+  transition: width .4s ease;
+}
+.ck-timer-label { font-size: 12px; color: var(--text3); min-width: 80px; text-align: right; }

@@ -143,36 +143,62 @@ let S = {
 
 // ── MODELS ──
 const MODELS = [
-  {id:'openai/gpt-4o',name:'GPT-4o',desc:'OpenAI 最强多模态'},
-  {id:'openai/gpt-4o-2024-11-20',name:'GPT-4o (2024-11-20)',desc:'最新版'},
-  {id:'openai/gpt-4o-2024-08-06',name:'GPT-4o (2024-08-06)',desc:'结构化输出'},
-  {id:'openai/gpt-4o-mini',name:'GPT-4o mini',desc:'快速便宜'},
-  {id:'openai/gpt-4o-mini-2024-07-18',name:'GPT-4o mini (07-18)',desc:'固定版本'},
-  {id:'openai/gpt-4o:online',name:'GPT-4o (联网)',desc:'原生联网'},
-  {id:'openai/gpt-4o-mini:online',name:'GPT-4o mini (联网)',desc:'快速联网'},
-  {id:'openai/o1',name:'o1',desc:'深度推理'},
-  {id:'openai/o1-mini',name:'o1 mini',desc:'推理轻量版'},
-  {id:'openai/o3-mini',name:'o3 mini',desc:'最新推理'},
-  {id:'openai/o3-mini-high',name:'o3 mini (high)',desc:'高强度推理'},
-  {id:'anthropic/claude-3.5-sonnet',name:'Claude 3.5 Sonnet',desc:'Anthropic 最强'},
-  {id:'anthropic/claude-3.5-haiku',name:'Claude 3.5 Haiku',desc:'快速版'},
-  {id:'anthropic/claude-3-opus',name:'Claude 3 Opus',desc:'旗舰'},
-  {id:'anthropic/claude-3.7-sonnet',name:'Claude 3.7 Sonnet',desc:'最新'},
-  {id:'anthropic/claude-3.7-sonnet:thinking',name:'Claude 3.7 Sonnet (思考)',desc:'含思考链'},
-  {id:'google/gemini-2.0-flash-exp:free',name:'Gemini 2.0 Flash (免费)',desc:'免费快速'},
-  {id:'google/gemini-2.0-flash-thinking-exp:free',name:'Gemini Flash 思考 (免费)',desc:'免费思考'},
-  {id:'google/gemini-pro-1.5',name:'Gemini 1.5 Pro',desc:'长上下文'},
-  {id:'google/gemini-flash-1.5',name:'Gemini 1.5 Flash',desc:'快速'},
-  {id:'deepseek/deepseek-chat',name:'DeepSeek V3',desc:'国产优秀'},
+  {id:'anthropic/claude-opus-4.6',name:'Claude Opus 4.6',desc:'Anthropic 旗舰，最强编程推理'},
+  {id:'anthropic/claude-sonnet-4.6',name:'Claude Sonnet 4.6',desc:'高性能均衡'},
+  {id:'anthropic/claude-haiku-4.5',name:'Claude Haiku 4.5',desc:'快速轻量'},
+  {id:'openai/gpt-4.1',name:'GPT-4.1',desc:'OpenAI 旗舰'},
+  {id:'openai/gpt-4.1-mini',name:'GPT-4.1 Mini',desc:'快速便宜'},
+  {id:'openai/o3',name:'o3',desc:'顶级推理模型'},
+  {id:'openai/o4-mini',name:'o4 mini',desc:'轻量推理'},
+  {id:'openai/o4-mini:online',name:'o4 mini (联网)',desc:'联网推理'},
+  {id:'google/gemini-2.5-pro',name:'Gemini 2.5 Pro',desc:'Google 旗舰，超长上下文'},
+  {id:'google/gemini-2.5-flash',name:'Gemini 2.5 Flash',desc:'快速多模态'},
+  {id:'google/gemini-2.5-flash-lite',name:'Gemini 2.5 Flash Lite',desc:'极速轻量'},
+  {id:'deepseek/deepseek-v3-0324',name:'DeepSeek V3',desc:'国产顶级'},
   {id:'deepseek/deepseek-r1',name:'DeepSeek R1',desc:'推理模型'},
   {id:'deepseek/deepseek-r1:free',name:'DeepSeek R1 (免费)',desc:'免费推理'},
-  {id:'meta-llama/llama-3.3-70b-instruct',name:'Llama 3.3 70B',desc:'Meta 开源'},
-  {id:'meta-llama/llama-3.1-8b-instruct:free',name:'Llama 3.1 8B (免费)',desc:'小型免费'},
-  {id:'qwen/qwen-2.5-72b-instruct',name:'Qwen 2.5 72B',desc:'阿里通义'},
-  {id:'perplexity/sonar-pro',name:'Perplexity Sonar Pro (联网)',desc:'专业联网'},
-  {id:'perplexity/sonar',name:'Perplexity Sonar (联网)',desc:'标准联网'},
+  {id:'meta-llama/llama-4-maverick',name:'Llama 4 Maverick',desc:'Meta 最新旗舰'},
+  {id:'meta-llama/llama-4-scout:free',name:'Llama 4 Scout (免费)',desc:'免费开源'},
+  {id:'qwen/qwen3-235b-a22b',name:'Qwen3 235B',desc:'阿里通义最强'},
+  {id:'qwen/qwen3-32b',name:'Qwen3 32B',desc:'通义中型'},
+  {id:'perplexity/sonar-pro',name:'Perplexity Sonar Pro (联网)',desc:'专业联网搜索'},
+  {id:'perplexity/sonar',name:'Perplexity Sonar (联网)',desc:'标准联网搜索'},
   {id:'custom',name:'自定义…',desc:'手动输入模型名'},
 ];
+
+// ── 自动从 OpenRouter 获取最新模型列表 ──
+async function fetchOpenRouterModels() {
+  try {
+    const cacheKey = 'or_models_v3';
+    const cached = localStorage.getItem(cacheKey);
+    if (cached) {
+      const { ts, data } = JSON.parse(cached);
+      if (Date.now() - ts < 6 * 3600 * 1000 && data?.length > 10) {
+        _applyFetchedModels(data); return;
+      }
+    }
+    const res = await fetch('https://openrouter.ai/api/v1/models');
+    if (!res.ok) return;
+    const json = await res.json();
+    const models = (json.data || [])
+      .filter(m => m.id && !m.id.startsWith('openrouter/'))
+      .map(m => ({ id: m.id, name: m.name || m.id, desc: (m.description || m.id.split('/')[0] || '').slice(0, 60) }));
+    if (models.length > 10) {
+      localStorage.setItem(cacheKey, JSON.stringify({ ts: Date.now(), data: models }));
+      _applyFetchedModels(models);
+    }
+  } catch(e) { /* 静默失败，使用内置列表 */ }
+}
+function _applyFetchedModels(models) {
+  MODELS.length = 0;
+  models.forEach(m => MODELS.push(m));
+  MODELS.push({id:'custom', name:'自定义…', desc:'手动输入模型名'});
+  document.querySelectorAll('.model-list').forEach(el => {
+    const prefix = el.id.replace('-model-list','');
+    const sel = el.closest('.s-row, .cm-section')?.querySelector(`#${prefix}-model`)?.value;
+    if (sel !== undefined) renderModelList(prefix, sel);
+  });
+}
 
 // ══════════════════════════════
 //  INIT
@@ -187,6 +213,7 @@ async function init() {
   applyBubble();
   applyBubbleSetting();
   buildSettingsUI();
+  fetchOpenRouterModels();
   renderChatList();
   renderContacts();
   renderMemories();
@@ -273,7 +300,7 @@ function switchPage(id) {
   if (id === 'memory-page') renderMemories();
   if (id === 'contacts-page') renderContacts();
   if (id === 'moments-page') renderMoments();
-  if (id === 'companion-page') renderCompanionPage();
+  if (id === 'companion-page') { renderCompanionPage(); if (window._refreshLinkedTaskSelect) window._refreshLinkedTaskSelect(); }
   if (id === 'settings-page') { buildSettingsUI(); updateStorageInfo(); }
   if (id === 'checkin-page' && typeof renderCheckinPage === 'function') renderCheckinPage();
   if (id === 'explore-page') renderExplorePage();
@@ -882,6 +909,10 @@ function appendBubble(groupEl, msg) {
 
 function makeBubble(msg) {
   const b = document.createElement('div'); b.className = 'bubble'; b.dataset.id = msg.id;
+  const contact_ = S.currentContact ? S._contacts[S.currentContact] : null;
+  const showingAlt = msg.altVersions?.length && msg.altIdx != null;
+  const displayContent = showingAlt ? (msg.altVersions[msg.altIdx]?.content ?? msg.content) : msg.content;
+  const displayThinking = showingAlt ? (msg.altVersions[msg.altIdx]?.thinking ?? null) : msg.thinking;
   if (msg.type === 'voice') {
     b.innerHTML = makeVoiceHTML(msg);
     if (msg.transcript && S.settings.voiceReplyMode !== 'voice') {
@@ -900,8 +931,8 @@ function makeBubble(msg) {
   } else {
     let html = '';
     if (msg.replyTo) html += `<div class="reply-quote">${esc((msg.replyTo||'').slice(0,60))}</div>`;
-    if (msg.thinking && cs(contact_?.xShowThink, S.settings.showThink)) html += `<details class="thinking-block"><summary>思考过程</summary><div style="margin-top:5px;white-space:pre-wrap">${esc(msg.thinking)}</div></details>`;
-    html += fmtText(msg.content || '');
+    if (displayThinking && cs(contact_?.xShowThink, S.settings.showThink)) html += `<details class="thinking-block"><summary>思考过程</summary><div style="margin-top:5px;white-space:pre-wrap">${esc(displayThinking)}</div></details>`;
+    html += fmtText(displayContent || '');
     b.innerHTML = html;
   }
   if (!['image','sticker'].includes(msg.type)) {
@@ -914,6 +945,15 @@ function makeBubble(msg) {
       ${msg.role==='ai'?`<button class="act-btn" onclick="regenMsg('${msg.id}')" title="重新生成">🔄</button>`:''}
       <button class="act-btn" style="color:#e05a7a" onclick="deleteMsg('${msg.id}')" title="删除此条">🗑️</button>`;
     b.appendChild(acts);
+    if (msg.role === 'ai' && msg.altVersions?.length) {
+      const total = msg.altVersions.length + 1;
+      const curPos = msg.altIdx != null ? msg.altIdx + 1 : total;
+      const atOldest = msg.altIdx === 0;
+      const atNewest = msg.altIdx == null;
+      const vnav = document.createElement('div'); vnav.className = 'version-nav';
+      vnav.innerHTML = `<button class="ver-btn" onclick="switchMsgVersion('${msg.id}',-1)" ${atOldest?'disabled':''}>‹</button><span class="ver-label">${curPos}/${total}</span><button class="ver-btn" onclick="switchMsgVersion('${msg.id}',1)" ${atNewest?'disabled':''}>›</button>`;
+      b.appendChild(vnav);
+    }
   }
   return b;
 }
@@ -1044,12 +1084,14 @@ async function maybeAiSendImage(chatId, contact, context) {
   } catch(e) { /* silent fail */ }
 }
 
-async function handleStream(res, chatId) {
+async function handleStream(res, chatId, updateMsgId=null) {
   const reader = res.body.getReader(), dec = new TextDecoder();
   let content = '', thinking = '', usage = null;
-  const tmpId = uid();
-  await dbPut('messages', { id:tmpId, chatId, role:'ai', type:'text', content:'', ts:Date.now() });
-  await renderMsgs();
+  const tmpId = updateMsgId || uid();
+  if (!updateMsgId) {
+    await dbPut('messages', { id:tmpId, chatId, role:'ai', type:'text', content:'', ts:Date.now() });
+    await renderMsgs();
+  }
   const getBub = () => document.querySelector(`.bubble[data-id="${tmpId}"]`);
   while (true) {
     const { done, value } = await reader.read(); if (done) break;
@@ -1853,7 +1895,7 @@ function sttBrowser(){return new Promise(resolve=>{if(!('webkitSpeechRecognition
 async function playVoice(id){const msgs=await dbGetAll('messages','chatId',S.currentChat);const msg=msgs.find(m=>m.id===id);if(msg?.url)new Audio(msg.url).play();}
 
 let curSpeech=null;
-async function speakMsg(id){const msgs=await dbGetAll('messages','chatId',S.currentChat);const msg=msgs.find(m=>m.id===id);if(msg?.content)speakText(msg.content);}
+async function speakMsg(id){const msgs=await dbGetAll('messages','chatId',S.currentChat);const msg=msgs.find(m=>m.id===id);if(!msg)return;const txt=(msg.altVersions?.length&&msg.altIdx!=null)?msg.altVersions[msg.altIdx]?.content:msg.content;if(txt)speakText(txt);}
 function speakText(text){
   const s=S.settings; const ct=S.currentContact?S._contacts[S.currentContact]:null;
   const ttsMode=cs(ct?.xTtsMode,s.ttsMode); const ttsUrl=cs(ct?.xTtsUrl,s.ttsUrl);
@@ -2302,13 +2344,108 @@ async function addTextSticker(){const t=window.prompt('输入文字/emoji表情�
 // ══════════════════════════════
 //  MSG ACTIONS
 // ══════════════════════════════
-async function copyMsg(id){const msgs=await dbGetAll('messages','chatId',S.currentChat);const msg=msgs.find(m=>m.id===id);if(msg?.content)navigator.clipboard.writeText(msg.content).then(()=>{haptic([5,3,5]);toast('✓ 已复制');});}
+async function copyMsg(id){const msgs=await dbGetAll('messages','chatId',S.currentChat);const msg=msgs.find(m=>m.id===id);if(!msg)return;const txt=(msg.altVersions?.length&&msg.altIdx!=null)?msg.altVersions[msg.altIdx]?.content:msg.content;if(txt)navigator.clipboard.writeText(txt).then(()=>{haptic([5,3,5]);toast('✓ 已复制');});}
 async function deleteMsg(id){if(!confirm('删除这条消息？（不影响上下文其他内容）'))return;await dbDel('messages',id);fbDel('messages',id);haptic(15);await renderMsgs();}
 async function replyMsg(id){const msgs=await dbGetAll('messages','chatId',S.currentChat);const msg=msgs.find(m=>m.id===id);if(!msg)return;S.replyTo=msg;$i('reply-bar-txt').textContent=(msg.content||'[媒体]').slice(0,50);$i('reply-bar').classList.add('show');$i('msg-input').focus();}
 function cancelReply(){S.replyTo=null;$i('reply-bar').classList.remove('show');}
 async function editMsg(id){const msgs=await dbGetAll('messages','chatId',S.currentChat);const msg=msgs.find(m=>m.id===id);if(!msg)return;S.editingMsgId=id;$i('msg-input').value=msg.content||'';$i('edit-bar-txt').textContent=(msg.content||'').slice(0,40);$i('edit-bar').classList.add('show');autoH($i('msg-input'));$i('msg-input').focus();}
 function cancelEdit(){S.editingMsgId=null;$i('edit-bar').classList.remove('show');}
-async function regenMsg(id){haptic([8,4,8]);const msgs=await dbGetAll('messages','chatId',S.currentChat);const idx=msgs.findIndex(m=>m.id===id);if(idx===-1)return;for(let i=idx;i<msgs.length;i++)await dbDel('messages',msgs[i].id);await renderMsgs();await callAI(S.currentChat);}
+async function regenMsg(id) {
+  haptic([8,4,8]);
+  const msgs = await dbGetAll('messages','chatId',S.currentChat);
+  msgs.sort((a,b) => a.ts - b.ts);
+  const idx = msgs.findIndex(m => m.id === id);
+  if (idx === -1) return;
+  const msg = msgs[idx];
+  const altVersions = msg.altVersions ? [...msg.altVersions] : [];
+  altVersions.push({ content: msg.content, thinking: msg.thinking || null });
+  await dbPut('messages', { ...msg, chatId: S.currentChat, content: '', thinking: null, altVersions, altIdx: null });
+  await renderMsgs(); scrollTo_(false);
+  await callAIForRegenAt(S.currentChat, id);
+}
+
+async function callAIForRegenAt(chatId, targetMsgId) {
+  const chat = S._chats[chatId];
+  const contact = S.currentContact ? S._contacts[S.currentContact] : null;
+  const s = S.settings;
+  const useKey = contact?.apiKey || s.apiKey;
+  const useUrl = contact?.apiUrl || s.apiUrl || 'https://openrouter.ai/api/v1/chat/completions';
+  if (!useKey) { toast('请先填写 API Key！'); return; }
+  S.isStreaming = true; showTyping(); startHapticStream();
+  const t0 = Date.now();
+  try {
+    const mems = await getRelevantMems(chatId, contact?.id || null);
+    const msgs = await buildMsgsUpTo(chat, contact, mems, targetMsgId);
+    const baseModel = contact?.model || s.model || 'openai/gpt-4o';
+    const model = baseModel + (S.onlineSearch && !baseModel.includes(':online') && !baseModel.includes('perplexity') ? ':online' : '');
+    const useStream = cs(contact?.xStream, s.stream);
+    const body = { model, messages: msgs, temperature: contact?.temp ?? parseFloat(s.temp), stream: useStream, max_tokens: 4096 };
+    const res = await fetch(useUrl, { method:'POST', headers:{'Authorization':`Bearer ${useKey}`,'Content-Type':'application/json','HTTP-Referer':'https://raimos.app','X-Title':'Raimos'}, body:JSON.stringify(body) });
+    if (!res.ok) { const e = await res.json().catch(()=>({error:{message:'Error'}})); throw new Error(e.error?.message||res.statusText); }
+    removeTyping();
+    let content = '', thinking = '', usage = null;
+    if (useStream) { const r = await handleStream(res, chatId, targetMsgId); content=r.content; thinking=r.thinking; usage=r.usage; }
+    else { const d=await res.json(); content=d.choices?.[0]?.message?.content||''; thinking=d.choices?.[0]?.message?.reasoning||''; usage=d.usage; }
+    const { text: cleanText } = parseStickerTags(content);
+    const elapsed = ((Date.now()-t0)/1000).toFixed(1);
+    const usageObj = usage ? {prompt:usage.prompt_tokens||0,completion:usage.completion_tokens||0,total:usage.total_tokens||0} : null;
+    const finalMsg = await dbGet('messages', targetMsgId);
+    if (finalMsg) await dbPut('messages', { ...finalMsg, content: cleanText, thinking: thinking||null, elapsed, usage: usageObj });
+    await renderMsgs(); scrollTo_(false);
+    if (cs(contact?.xAutoTts, s.autoTts) && cleanText) speakText(cleanText);
+    checkKwAnims(cleanText, 'ai');
+  } catch(e) {
+    removeTyping();
+    const targetMsg = await dbGet('messages', targetMsgId);
+    if (targetMsg) await dbPut('messages', { ...targetMsg, content: `❌ 出错了：${e.message}` });
+    await renderMsgs(); scrollTo_(false);
+  }
+  S.isStreaming = false; stopHapticStream();
+}
+
+async function buildMsgsUpTo(chat, contact, mems, beforeMsgId) {
+  const msgs = [];
+  let sys = cs(contact?.system, S.settings.systemPrompt) || '你是一个可爱温柔的AI助手。';
+  if (mems.length) sys += `\n\n[用户记忆]\n${mems.map(m=>`- ${m.text}`).join('\n')}`;
+  if (S._stickers.length) {
+    const slist = S._stickers.map(s=>`${s.label||s.content||'表情'}`).join(', ');
+    const stickerHint = S.settings.stickerCallPrompt ? `\n${S.settings.stickerCallPrompt}` : '';
+    sys += `\n\n[表情包库] 可在回复中用 [sticker:标签名] 插入表情。可用: ${slist}${stickerHint}`;
+  }
+  msgs.push({ role:'system', content:sys });
+  if (chat.summary) msgs.push({ role:'system', content:`[历史摘要] ${chat.summary}` });
+  const allMsgs = await dbGetAll('messages', 'chatId', chat.id);
+  allMsgs.sort((a,b) => a.ts - b.ts);
+  const cutIdx = allMsgs.findIndex(m => m.id === beforeMsgId);
+  const contextMsgs = cutIdx > 0 ? allMsgs.slice(0, cutIdx) : allMsgs.slice(0, -1);
+  const recent = contextMsgs.slice(-parseInt(cs(contact?.xCtx, S.settings.ctx))||20);
+  for (const m of recent) {
+    if (m.type==='image' && m.imageData) msgs.push({role:m.role==='user'?'user':'assistant',content:[{type:'image_url',image_url:{url:m.imageData}},{type:'text',text:'（图片）'}]});
+    else if (m.type==='voice' && m.transcript) msgs.push({role:m.role==='user'?'user':'assistant',content:`[语音] ${m.transcript}`});
+    else if (m.type==='file') msgs.push({role:m.role==='user'?'user':'assistant',content:`[文件: ${m.fileName}]`});
+    else if (m.content) msgs.push({role:m.role==='user'?'user':'assistant',content:m.content});
+  }
+  return msgs;
+}
+
+async function switchMsgVersion(msgId, dir) {
+  const msgs = await dbGetAll('messages','chatId',S.currentChat);
+  const msg = msgs.find(m => m.id === msgId);
+  if (!msg?.altVersions?.length) return;
+  const curIdx = msg.altIdx ?? null;
+  let newIdx;
+  if (dir === -1) {
+    if (curIdx === null) newIdx = msg.altVersions.length - 1;
+    else if (curIdx > 0) newIdx = curIdx - 1;
+    else return;
+  } else {
+    if (curIdx === null) return;
+    else if (curIdx < msg.altVersions.length - 1) newIdx = curIdx + 1;
+    else newIdx = null;
+  }
+  await dbPut('messages', { ...msg, chatId: S.currentChat, altIdx: newIdx });
+  await renderMsgs();
+}
 
 // ══════════════════════════════
 //  ONLINE / IMGGEN
@@ -2738,12 +2875,6 @@ function buildSettingsUI() {
       <div class="s-row"><label>我的相册</label><button class="btn-s" onclick="openAlbumModal()">🖼️ 管理相册（AI发圈用图）</button></div>
       <div class="s-row"><label>启用朋友圈</label><label class="toggle"><input type="checkbox" id="s-moments-enabled" ${s.momentsEnabled?'checked':''}><span class="tslider"></span></label></div>
       <div class="s-row"><label>AI 自动发圈</label><label class="toggle"><input type="checkbox" id="s-auto-post" ${s.autoPost?'checked':''}><span class="tslider"></span></label></div>
-      <div class="s-row"><label>发圈的助手</label>
-        <select id="s-moment-contact" style="flex:1">
-          <option value="">-- 请选择 --</option>
-          ${Object.values(S._contacts).map(c=>`<option value="${c.id}" ${s.momentContactId===c.id?'selected':''}>${esc(c.name)}</option>`).join('')}
-        </select>
-      </div>
       <div class="s-row"><label>发圈频率</label>
         <select id="s-moment-freq-mode" style="max-width:90px">
           <option value="perDay" ${(s.momentFreqMode||'perWeek')==='perDay'?'selected':''}>每天</option>
@@ -2888,7 +3019,6 @@ async function saveAllSettings(){
   s.proactive=getB('s-proactive');s.proMax=parseInt(get('s-pro-max','3'));
   s.proStart=parseInt(get('s-pro-start','8'));s.proEnd=parseInt(get('s-pro-end','22'));
   s.proContactId=get('s-pro-contact','');
-  s.momentContactId=get('s-moment-contact','');
   s.momentsEnabled=getB('s-moments-enabled');s.autoPost=getB('s-auto-post');
   s.momentFreqMode=get('s-moment-freq-mode','perWeek');s.momentFreqCount=parseInt(get('s-moment-freq-count','3'));
   s.momentPromptMode=get('s-moment-prompt-mode','add');s.momentPrompt=get('s-moment-prompt','').trim();
@@ -3274,6 +3404,29 @@ function applyMobileUI() {
 window.addEventListener('resize', applyMobileUI);
 document.addEventListener('DOMContentLoaded', applyMobileUI);
 window.addEventListener('load', () => { applyMobileUI(); });
+
+// 移动端键盘弹出时隐藏底部导航栏，避免被推到键盘上方占用空间
+(function setupKeyboardNavHide() {
+  let _navHidden = false;
+  function setNavHidden(hide) {
+    if (hide === _navHidden) return;
+    _navHidden = hide;
+    const nav = document.getElementById('nav-tabs');
+    if (nav) nav.style.display = hide ? 'none' : '';
+  }
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', () => {
+      if (!isMobile()) return;
+      setNavHidden(window.innerHeight - window.visualViewport.height > 100);
+    });
+  } else {
+    const input = document.getElementById('msg-input');
+    if (input) {
+      input.addEventListener('focus', () => { if (isMobile()) setTimeout(() => setNavHidden(true), 100); });
+      input.addEventListener('blur', () => setNavHidden(false));
+    }
+  }
+})();
 
 document.addEventListener('click', e => {
   if (isMobile() && e.target.closest('.chat-item')) {
@@ -3726,6 +3879,29 @@ function initCompanion() {
   syncCompanionUIFromSettings();
   renderCompanionPage();
   companionInitDrag();
+
+  // Populate linked task select
+  async function refreshLinkedTaskSelect() {
+    const sel = $i('comp-linked-task'); if (!sel) return;
+    sel.innerHTML = '<option value="">-- 不关联 --</option>';
+    if (typeof ckGetGoals === 'function') {
+      const goals = await ckGetGoals();
+      goals.filter(g => g.goalType === 'timer').forEach(g => {
+        const opt = document.createElement('option');
+        opt.value = g.id;
+        opt.textContent = `${g.emoji||'🎯'} ${g.title} (${g.targetMinutes||30}分钟/天)`;
+        if (g.id === S.settings.companionLinkedGoalId) opt.selected = true;
+        sel.appendChild(opt);
+      });
+    }
+  }
+  window._refreshLinkedTaskSelect = refreshLinkedTaskSelect;
+  refreshLinkedTaskSelect();
+  const linkedSel = $i('comp-linked-task');
+  if (linkedSel) linkedSel.addEventListener('change', async () => {
+    S.settings.companionLinkedGoalId = linkedSel.value;
+    await saveSetting('companionLinkedGoalId', linkedSel.value);
+  });
 }
 
 function renderCompanionPage() {
@@ -3738,6 +3914,7 @@ function renderCompanionPage() {
   void renderCompanionStage();
   applyCompanionMusicSettings();
   void applyCompanionMusicSrc();
+  if (typeof renderCompanionPhraseSettings === 'function') renderCompanionPhraseSettings();
 }
 
 function renderCompanionContactOptions() {
@@ -4113,6 +4290,7 @@ function companionStart() {
   haptic([10,5,10,5,10]);
   const s = S.settings, mode = s.companionTimerMode || 'pomodoro';
   S._companion.mode = mode; S._companion.running = true;
+  S._companion.sessionStartSec = S._companion.elapsedSec || 0;
   if (mode === 'countup') {
     if (!S._companion.elapsedSec) S._companion.elapsedSec = 0;
   } else if (mode === 'countdown') {
@@ -4149,12 +4327,24 @@ function companionStart() {
   void applyCompanionMusicSrc();
 }
 
-function companionPause() {
+async function companionPause() {
   S._companion.running = false;
   if (S._companion.tickTimer) { clearInterval(S._companion.tickTimer); S._companion.tickTimer = null; }
   if (S._companion.speechTimer) { clearInterval(S._companion.speechTimer); S._companion.speechTimer = null; }
   const a = $i('comp-audio'); if (a) a.pause();
   updateCompanionStartBtn();
+  // Log time to linked checkin goal
+  const linkedId = S.settings.companionLinkedGoalId;
+  if (linkedId && S._companion.mode === 'countup') {
+    const sessionSecs = (S._companion.elapsedSec || 0) - (S._companion.sessionStartSec || 0);
+    const sessionMins = Math.floor(sessionSecs / 60);
+    if (sessionMins > 0) {
+      S._companion.sessionStartSec = S._companion.elapsedSec;
+      if (typeof ckAddCompanionMinutes === 'function') {
+        await ckAddCompanionMinutes(linkedId, sessionMins);
+      }
+    }
+  }
 }
 
 function companionReset() {
@@ -4192,7 +4382,7 @@ async function companionSpeakNow() {
   } finally { S._companion.isSpeaking = false; }
 }
 
-async function callCompanionAI() {
+async function callCompanionAI(phrase = '') {
   const s = S.settings;
   const contact = s.companionContactId ? S._contacts[s.companionContactId] : null;
   const useKey = contact?.apiKey || s.apiKey;
@@ -4206,8 +4396,27 @@ async function callCompanionAI() {
     : mode === 'countdown'
       ? `剩余 ${fmtSec(S._companion.remainingSec)}`
       : `${S._companion.phase === 'break' ? '休息' : '专注'}剩余 ${fmtSec(S._companion.remainingSec)}`;
-  const sys = `你是${aiName}，${cs(contact?.system, s.systemPrompt) || '可爱温柔的AI助手'}。你正在以"陪伴模式"陪用户进行：${scene}。请用中文输出1-2句简短自然的话（不要列点、不超过40字/句），像真实朋友一样。`;
-  const userMsg = `当前状态：${status}。请给用户一句陪伴/鼓励/提醒。`;
+
+  // Task context for linked checkin goal
+  let taskCtx = '';
+  const linkedId = s.companionLinkedGoalId;
+  if (linkedId && typeof ckGetGoals === 'function') {
+    try {
+      const goals = await ckGetGoals();
+      const linkedGoal = goals.find(g => g.id === linkedId);
+      if (linkedGoal) {
+        const today = typeof ckTodayStr === 'function' ? ckTodayStr() : new Date().toISOString().slice(0,10);
+        const rec = typeof ckGetRecordByDate === 'function' ? await ckGetRecordByDate(linkedId, today) : null;
+        const done = rec?.minutesLogged || 0;
+        const target = linkedGoal.targetMinutes || 30;
+        taskCtx = `\n用户正在用陪伴时间完成打卡目标「${linkedGoal.title}」，今日进度：${done}/${target}分钟。`;
+      }
+    } catch(e) {}
+  }
+
+  const sys = `你是${aiName}，${cs(contact?.system, s.systemPrompt) || '可爱温柔的AI助手'}。你正在以"陪伴模式"陪用户进行：${scene}。请用中文输出1-2句简短自然的话（不要列点、不超过40字/句），像真实朋友一样。${taskCtx}`;
+  const phraseCtx = phrase ? `\n用户说：「${phrase}」，请针对此做出自然回应。` : '';
+  const userMsg = `当前状态：${status}。${phraseCtx || '请给用户一句陪伴/鼓励/提醒。'}`;
   try {
     const res = await fetch(useUrl, {
       method:'POST',
@@ -4219,6 +4428,105 @@ async function callCompanionAI() {
     return (d.choices?.[0]?.message?.content || '').trim();
   } catch(e) { toast(`❌ 陪伴说话失败：${e.message}`); return ''; }
 }
+
+// ── Quick Phrases for Companion ──
+const DEFAULT_PHRASES = ['摸摸头', '要求夸奖', '我想放弃了', '帮我打气', '快夸夸我'];
+
+let _speakBtnLastClick = 0;
+let _phrasePanelOpen = false;
+
+function companionSpeakClick(event) {
+  const now = Date.now();
+  const isDouble = (now - _speakBtnLastClick) < 380;
+  _speakBtnLastClick = now;
+  if (isDouble) {
+    companionClosePhrasePanel();
+    companionSpeakNow();
+  } else {
+    companionTogglePhrasePanel();
+  }
+}
+
+function companionTogglePhrasePanel() {
+  _phrasePanelOpen = !_phrasePanelOpen;
+  companionRenderPhrasePanel();
+  const panels = ['comp-phrase-panel', 'comp-mini-phrase-panel'];
+  panels.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = _phrasePanelOpen ? '' : 'none';
+  });
+}
+
+function companionClosePhrasePanel() {
+  _phrasePanelOpen = false;
+  ['comp-phrase-panel','comp-mini-phrase-panel'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = 'none';
+  });
+}
+
+function companionRenderPhrasePanel() {
+  const phrases = S.settings.companionPhrases || DEFAULT_PHRASES;
+  ['comp-phrase-list','comp-mini-phrase-list'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.innerHTML = '';
+    phrases.forEach(p => {
+      const btn = document.createElement('button');
+      btn.className = 'comp-phrase-btn';
+      btn.textContent = p;
+      btn.onclick = () => { companionClosePhrasePanel(); companionSpeakWithPhrase(p); };
+      el.appendChild(btn);
+    });
+  });
+  // Also render settings list
+  renderCompanionPhraseSettings();
+}
+
+async function companionSpeakWithPhrase(phrase) {
+  if (S._companion.isSpeaking) return;
+  S._companion.isSpeaking = true;
+  try {
+    const text = await callCompanionAI(phrase);
+    if (text) { companionShowBubble(text); if (S.settings.autoTts) speakText(text); }
+  } finally { S._companion.isSpeaking = false; }
+}
+
+function renderCompanionPhraseSettings() {
+  const container = document.getElementById('comp-phrases-list');
+  if (!container) return;
+  const phrases = S.settings.companionPhrases || DEFAULT_PHRASES;
+  container.innerHTML = '';
+  phrases.forEach((p, i) => {
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;gap:6px;align-items:center;margin-bottom:4px';
+    const inp = document.createElement('input');
+    inp.value = p; inp.style.cssText = 'flex:1;background:var(--input-bg);border:1.5px solid var(--border);border-radius:8px;padding:5px 8px;font-size:12px;color:var(--text);font-family:inherit;outline:none';
+    inp.onchange = () => { const arr = [...(S.settings.companionPhrases||DEFAULT_PHRASES)]; arr[i] = inp.value.trim()||p; S.settings.companionPhrases = arr; saveSetting('companionPhrases', arr); };
+    const del = document.createElement('button');
+    del.textContent = '✕'; del.className = 'btn-s'; del.style.cssText = 'padding:3px 7px;font-size:11px;color:#e05a7a';
+    del.onclick = () => { const arr = [...(S.settings.companionPhrases||DEFAULT_PHRASES)]; arr.splice(i,1); S.settings.companionPhrases = arr; saveSetting('companionPhrases', arr); renderCompanionPhraseSettings(); };
+    row.appendChild(inp); row.appendChild(del);
+    container.appendChild(row);
+  });
+}
+
+function ckAddPhraseRow() {
+  const arr = [...(S.settings.companionPhrases || DEFAULT_PHRASES)];
+  arr.push('新短语');
+  S.settings.companionPhrases = arr;
+  saveSetting('companionPhrases', arr);
+  renderCompanionPhraseSettings();
+}
+// alias used in HTML
+function compAddPhrase() { ckAddPhraseRow(); }
+
+// Close phrase panel when clicking outside
+document.addEventListener('click', e => {
+  if (_phrasePanelOpen && !e.target.closest('.comp-speak-wrap') && !e.target.closest('#comp-mini-phrase-panel') && !e.target.closest('#comp-mini-speak')) {
+    companionClosePhrasePanel();
+  }
+});
 
 // ── Character Size ──
 function companionApplyCharSize(val) {
@@ -4395,5 +4703,18 @@ function _miniUpdateTimer() {
   if (b && mb2) {
     mb2.textContent = b.textContent || '';
     mb2.classList.toggle('on', b.style.display !== 'none' && !!b.textContent);
+  }
+  // Show linked task progress
+  const taskEl = $i('comp-mini-task');
+  if (taskEl) {
+    const linkedId = S.settings.companionLinkedGoalId;
+    if (linkedId && typeof ckGetGoals === 'function') {
+      const goal = (window.CK?.goals || []).find(g => g.id === linkedId);
+      if (goal) {
+        taskEl.style.display = '';
+        // Try to get today's record from CK cache (synchronous check)
+        taskEl.textContent = `${goal.emoji||'🎯'} ${goal.title}`;
+      } else { taskEl.style.display = 'none'; }
+    } else { taskEl.style.display = 'none'; }
   }
 }

@@ -3,7 +3,7 @@
 // ═══════════════════════════════════════════
 
 const DB_NAME = 'raimos_db';
-const DB_VER  = 5;
+const DB_VER  = 6;
 
 const STORES = {
   chats:          { keyPath: 'id' },
@@ -21,6 +21,7 @@ const STORES = {
   statusNotes:    { keyPath: 'id' },
   checkinGoals:   { keyPath: 'id' },
   checkinRecords: { keyPath: 'id', indexes: [['goalId','goalId']] },
+  companionStats: { keyPath: 'date' },
 };
 
 let _db = null;

@@ -59,7 +59,7 @@
     <div class="hdr-avatar" id="hdr-avatar" onclick="openAvatarModal()">🐱</div>
     <div class="hdr-info">
       <div class="hdr-name" id="hdr-name" onclick="renameChat()">选择或新建对话</div>
-      <div class="hdr-status" id="hdr-status"><div class="status-pulse"></div><span class="hdr-status-emoji" id="hdr-status-emoji"></span><span id="hdr-status-text">在线</span><span id="hdr-typing-indicator" style="display:none"></span></div>
+      <div class="hdr-status" id="hdr-status"><div class="status-pulse"></div><span class="hdr-status-emoji" id="hdr-status-emoji"></span><span id="hdr-status-text">在线</span><span id="hdr-typing-indicator" style="display:none"><span class="hdr-ecg-wrap"><span class="hdr-ecg-track"><span class="hdr-ecg-inner" id="hdr-ecg-inner"></span></span><span class="hdr-ecg-label">输入中</span></span></span></div>
     </div>
     <button class="hbtn mob-only" onclick="newChat()" title="新建对话" id="btn-mobile-new-chat">✦</button>
     <button class="hbtn" onclick="openCtxMenu(event)" title="更多">⋯</button>
@@ -83,7 +83,6 @@
 
   <div id="input-wrap">
     <button id="input-collapse-btn" onclick="toggleInputCollapse()" title="收起/展开输入框">▾</button>
-    <button id="input-expand-btn" onclick="toggleExpandInput()" title="展开/收起输入框">⤢</button>
     <div id="rec-bar">
       <div class="rec-dot"></div><span id="rec-timer">0:00</span>
       <div class="rec-wave" id="rec-wave"></div>
@@ -92,8 +91,14 @@
     <div id="edit-bar">✏️ <span id="edit-bar-txt"></span><button class="bar-close" onclick="cancelEdit()">✕</button></div>
     <div id="reply-bar">↩️ <span id="reply-bar-txt"></span><button class="bar-close" onclick="cancelReply()">✕</button></div>
     <div id="img-preview-row"></div>
-    <div id="input-row">
+    <div id="mob-input-bar">
+      <button id="input-expand-btn" onclick="toggleExpandInput()" title="展开/收起输入框">⤢</button>
       <button class="ibtn ibtn-g" id="btn-emoji" onclick="toggleEmoji(event)" type="button">😊</button>
+      <button class="ibtn ibtn-g" id="btn-sticker" onclick="openChatAlbum()" title="表情包 / 我的相册">🖼️</button>
+    </div>
+    <div id="input-row">
+      <button class="ibtn ibtn-g mob-hidden" id="input-expand-btn-desk" onclick="toggleExpandInput()" title="展开/收起输入框" style="display:none;font-size:13px">⤢</button>
+      <button class="ibtn ibtn-g mob-hidden" id="btn-emoji-desk" onclick="toggleEmoji(event)" type="button">😊</button>
       <button class="ibtn ibtn-g" id="btn-file" onclick="triggerFileOrStopRec()" title="发文件/图片">📎</button>
       <div class="input-ta-wrap">
         <textarea id="msg-input" placeholder="发消息…（Enter 换行，Ctrl/⌘+Enter 发送）" rows="1" onkeydown="onKey(event)" oninput="autoH(this);onInputTyping()"></textarea>
@@ -188,8 +193,9 @@
       <button class="btn-p" id="comp-btn-start" onclick="companionToggleRun()">▶︎ 开始</button>
       <button class="btn-s" onclick="companionReset()">↺ 重置</button>
       <button class="btn-s" onclick="companionEnterImmersive()" title="全屏沉浸模式">⛶ 全屏</button>
-      <button class="btn-s" onclick="companionEnterPiP()" title="画中画·悬浮小窗">⧉ 画中画</button>
-      <button class="btn-s" id="comp-btn-mini" onclick="companionToggleMini()" title="小窗模式">▭ 小窗</button>
+      <button class="btn-s" id="comp-btn-pip-desk" onclick="companionEnterPiP()" title="画中画·悬浮小窗" style="display:none">⧉ 画中画</button>
+      <button class="btn-s" id="comp-btn-pip-mob" onclick="companionToggleMini()" title="小窗模式" style="display:none">▭ 小窗</button>
+      <button class="btn-s" id="comp-btn-mini" onclick="companionToggleMini()" title="小窗模式" style="display:none">▭ 小窗</button>
     </div>
   </div>
 
@@ -203,9 +209,17 @@
       </div>
       <div id="comp-bubble" style="display:none"></div>
       <!-- Immersive-mode floating controls (hidden in normal mode) -->
-      <div id="comp-imm-bar">
+      <div id="comp-imm-bar" style="position:relative">
         <button class="comp-imm-btn" onclick="companionExitImmersive()" title="退出全屏">✕ 退出</button>
-        <button class="comp-imm-btn" id="comp-imm-speak" onclick="companionSpeakClick(event)" title="单击短语，双击说一句">💬</button>
+        <div style="position:relative;display:inline-block">
+          <button class="comp-imm-btn" id="comp-imm-speak" onclick="companionSpeakClick(event)" title="单击短语，双击说一句">💬</button>
+          <div id="comp-imm-phrase-panel" style="display:none" class="comp-phrase-panel" onclick="event.stopPropagation()">
+            <div id="comp-imm-phrase-list"></div>
+            <div style="border-top:1px solid var(--border);padding:5px 6px 2px">
+              <button class="btn-s" style="font-size:11px;padding:3px 8px;width:100%" onclick="companionClosePhrasePanel();companionSpeakNow()">✨ 随机说一句</button>
+            </div>
+          </div>
+        </div>
         <button class="comp-imm-btn" id="comp-imm-start" onclick="companionToggleRun()">▶︎</button>
         <button class="comp-imm-btn" onclick="companionReset()">↺</button>
       </div>
@@ -369,6 +383,7 @@
 <!-- ── MEMORY PAGE ── -->
 <div class="page" id="memory-page">
   <div class="page-header">
+    <button class="page-back-btn" onclick="switchPage('my-page')">‹ 返回</button>
     <h2>🧠 记忆库</h2>
     <button class="btn-p" onclick="openAddMemModal()">＋ 添加</button>
   </div>
@@ -380,7 +395,10 @@
 <!-- ── SETTINGS PAGE ── -->
 <div class="page" id="settings-page">
   <div class="page-header" style="justify-content:space-between;align-items:center;">
-    <h2>⚙️ 设置</h2>
+    <div style="display:flex;align-items:center;gap:0">
+      <button class="page-back-btn" onclick="switchPage('my-page')">‹ 返回</button>
+      <h2>⚙️ 设置</h2>
+    </div>
     <!-- ★ 登录状态栏 -->
     <div id="auth-status-bar" style="display:flex;align-items:center;gap:7px;font-size:12px;color:var(--text3);">
       <span id="auth-status-txt">未登录</span>
@@ -443,7 +461,21 @@
         <div class="explore-card-name">陪伴模式</div>
         <div class="explore-card-desc">专注学习伴你左右</div>
       </div>
+      <div class="explore-card explore-card-comp-history" onclick="openCompanionHistory()">
+        <div class="explore-card-icon">📖</div>
+        <div class="explore-card-name">我们一起的日子</div>
+        <div class="explore-card-desc">聊天记录与陪伴统计</div>
+      </div>
     </div>
+  </div>
+</div>
+
+<!-- Companion History Page -->
+<div class="overlay" id="companion-history-modal">
+  <div class="modal" style="max-width:480px;max-height:80vh;display:flex;flex-direction:column">
+    <h2>📖 我们一起的日子 <button class="mclose" onclick="closeModal('companion-history-modal')">✕</button></h2>
+    <div id="ch-summary" style="font-size:13px;color:var(--text2);margin-bottom:12px;padding:10px;background:var(--hover);border-radius:10px;line-height:1.8"></div>
+    <div id="ch-list" style="overflow-y:auto;flex:1"></div>
   </div>
 </div>
 
@@ -625,6 +657,8 @@
       <div id="cm-appear-body" style="display:none;padding:6px 0 10px">
         <div class="mrow"><label>AI 气泡色</label><input type="color" id="cm-x-ai-bubble" value="#ffffff" style="width:44px;height:32px;border:none;border-radius:8px;cursor:pointer;padding:2px"/></div>
         <div class="mrow"><label>聊天背景色</label><input type="color" id="cm-x-chat-bg" value="#fdf6f0" style="width:44px;height:32px;border:none;border-radius:8px;cursor:pointer;padding:2px"/></div>
+        <div class="mrow"><label>显示用户气泡</label><label class="toggle"><input type="checkbox" id="cm-x-show-user-bubble" checked><span class="tslider"></span></label></div>
+        <div class="mrow"><label>显示 AI 气泡</label><label class="toggle"><input type="checkbox" id="cm-x-show-ai-bubble" checked><span class="tslider"></span></label></div>
       </div>
 
       <!-- 图片生成 -->
@@ -690,6 +724,9 @@
           <label><input type="checkbox" id="cm-x-imgsrc-search"> 联网搜索</label>
           <label><input type="checkbox" id="cm-x-imgsrc-generate"> 生成图片</label>
         </div></div>
+        <div class="mrow" style="align-items:flex-start"><label style="padding-top:6px">配图提示词</label>
+          <textarea id="cm-x-moment-img-prompt" rows="2" placeholder="留空继承全局设置" style="width:100%;font-size:12px;resize:vertical"></textarea>
+        </div>
       </div>
 
       </div>
@@ -854,9 +891,9 @@
     </div>
     <div class="mrow" style="align-items:flex-start">
       <label style="padding-top:6px">配图提示词</label>
-      <textarea id="apm-img-prompt" rows="2" placeholder="可选：描述想要什么样的配图，留空则自动判断" style="flex:1;font-size:12px;resize:vertical"></textarea>
+      <textarea id="apm-img-prompt" rows="2" placeholder="可选：覆盖设置中的配图提示词（留空则使用设置中的默认值）" style="flex:1;font-size:12px;resize:vertical"></textarea>
     </div>
-    <div style="font-size:12px;color:var(--text3);margin:4px 0 8px">AI 将根据助手人设自动生成一条朋友圈内容并发布。</div>
+    <div style="font-size:12px;color:var(--text3);margin:4px 0 8px">AI 将根据助手人设自动生成一条朋友圈内容并发布。配图提示词可在 AI 助手设置 → 朋友圈 中全局配置。</div>
     <div class="mbtns">
       <button class="btn-s" onclick="closeModal('ai-post-modal')">取消</button>
       <button class="btn-p" onclick="doAiPost()">🌸 立即发圈</button>

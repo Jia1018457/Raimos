@@ -132,10 +132,10 @@ body{font-family:'Nunito','Noto Sans SC',sans-serif;background:var(--bg);color:v
 .img-bub img{width:100%;height:auto;display:block;transition:transform .3s;}
 .img-bub:hover img{transform:scale(1.03);}
 .file-bub{display:flex;align-items:center;gap:8px;padding:4px 0;}
-.bub-actions{display:none;position:absolute;bottom:calc(100% + 3px);gap:2px;background:var(--bg3);border:1px solid var(--border);border-radius:9px;padding:3px 5px;box-shadow:0 4px 14px var(--shadow2);white-space:nowrap;z-index:100;}
-.msg-group.user .bub-actions{right:0;}
-.msg-group.ai .bub-actions{left:0;}
-.bubble:hover .bub-actions,.bubble.show-act .bub-actions{display:flex;}
+.bub-actions{display:flex;position:static;gap:2px;background:none;border:none;border-radius:9px;padding:2px 0 0;box-shadow:none;white-space:nowrap;z-index:100;opacity:0;transition:opacity .15s;}
+.msg-group.user .bub-actions{justify-content:flex-end;}
+.msg-group.ai .bub-actions{justify-content:flex-start;}
+.bw:hover .bub-actions,.bubble.show-act .bub-actions{opacity:1;}
 .act-btn{background:none;border:none;cursor:pointer;font-size:13px;padding:3px 4px;border-radius:6px;color:var(--text2);transition:background .1s;}
 .act-btn:hover{background:var(--hover);color:var(--accent);}
 .bub-time{font-size:9px;color:var(--text3);padding:0 2px;align-self:flex-end;white-space:nowrap;}
@@ -428,6 +428,8 @@ body.comp-immersive #comp-page-header{display:none;}
 body.comp-immersive #comp-wrap{padding:0;gap:0;border-radius:0;}
 body.comp-immersive #comp-stage{border-radius:0;border:none;box-shadow:none;}
 body.comp-immersive #comp-panel{display:none;}
+
+#comp-imm-phrase-panel { z-index: 10010; }
 
 /* COMPANION MINI WINDOW */
 #comp-mini-win{
@@ -1024,6 +1026,10 @@ body.comp-immersive #comp-panel{display:none;}
   #msg-input { padding-right: 13px; }
   .input-ta-wrap { flex: 1; }
   .input-ta-wrap.is-typing .input-float-btns { opacity: 1 !important; pointer-events: all !important; }
+  /* Desktop: show PiP, hide small window mini button */
+  #comp-btn-pip-mob { display: none !important; }
+  #comp-btn-pip-desk { display: flex !important; }
+  #comp-btn-mini { display: none !important; }
 }
 
 /* ── Explore Page ── */
@@ -1058,6 +1064,7 @@ body.comp-immersive #comp-panel{display:none;}
 .explore-card-checkin::before { background: linear-gradient(135deg, #a78bfa, #e0d4ff); }
 .explore-card-wardrobe::before { background: linear-gradient(135deg, #f472b6, #fce4f3); }
 .explore-card-companion::before { background: linear-gradient(135deg, #fb7185, #fecdd3); }
+.explore-card-comp-history::before { background: linear-gradient(135deg, #f9a8d4, #fbcfe8); }
 .explore-card-icon { font-size: 44px; filter: drop-shadow(0 3px 8px rgba(0,0,0,.15)); }
 .explore-card-name { font-size: 15px; font-weight: 800; color: var(--text); }
 .explore-card-desc { font-size: 11.5px; color: var(--text3); line-height: 1.4; }
@@ -1167,18 +1174,18 @@ body.comp-immersive #comp-panel{display:none;}
   .msg-group.ai .token-row { text-align: left; }
   .token-detail { order: 4; width: 100%; }
 
-  /* Input row: emoji hidden, file on left, mic+send float inside textarea */
-  #btn-emoji { display: none !important; }
+  /* Input row: show emoji+sticker toolbar on mobile, mic hides when typing, send always visible */
   #btn-file { order: 0; }
   .input-ta-wrap { order: 1; }
   #msg-input { padding-right: 74px !important; border-radius: 20px; }
-  #msg-input.is-typing + .input-float-btns,
-  .input-ta-wrap.is-typing .input-float-btns { opacity: 0; pointer-events: none; }
+  .input-ta-wrap.is-typing #btn-voice { opacity: 0; pointer-events: none; width: 0; padding: 0; margin: 0; overflow: hidden; }
   .input-float-btns { transition: opacity .15s; }
   .float-ibtn.ibtn-g { background: none; color: var(--text3); }
   .float-ibtn.ibtn-g:hover { background: var(--hover); }
   #btn-send.float-ibtn { background: linear-gradient(135deg, var(--accent), var(--accent-dark)); color: #fff; box-shadow: 0 2px 8px var(--shadow2); }
   #btn-send.float-ibtn:hover { transform: scale(1.08); }
+  /* Mobile: show action buttons always below bubble, always opaque */
+  .bub-actions { opacity: 1 !important; }
 
   /* Explore and My pages fill nicely */
   .explore-grid { grid-template-columns: repeat(2, 1fr); }
@@ -1194,7 +1201,6 @@ body.comp-immersive #comp-panel{display:none;}
 
   /* ── Input expand ── */
   #msg-input.input-expanded { max-height: 42vh !important; height: 42vh !important; border-radius: 14px !important; }
-  #input-expand-btn { display: flex !important; }
 
   /* ── Moments: hide desktop compose, show mobile + button ── */
   .desk-only { display: none !important; }
@@ -1207,22 +1213,6 @@ body.comp-immersive #comp-panel{display:none;}
   #ck-main { min-height: 0; }
 
   /* ── Action buttons: always visible below message on mobile ── */
-  .bub-actions {
-    display: flex !important;
-    position: static !important;
-    bottom: auto !important;
-    left: auto !important;
-    right: auto !important;
-    background: none !important;
-    border: none !important;
-    box-shadow: none !important;
-    padding: 3px 0 0 !important;
-    gap: 0 !important;
-    flex-wrap: nowrap;
-    overflow-x: auto;
-  }
-  .msg-group.ai .bub-actions { justify-content: flex-start; }
-  .msg-group.user .bub-actions { justify-content: flex-end; }
   .act-btn { font-size: 14px; padding: 4px 6px; }
 
   /* Companion: portrait image default contain on mobile to avoid cropping */
@@ -1231,6 +1221,14 @@ body.comp-immersive #comp-panel{display:none;}
 
   /* Mini window: higher z-index on mobile so it's above nav */
   #comp-mini-win { z-index: 9999; bottom: 70px; }
+
+  /* Fullscreen companion: force portrait */
+  #companion-page:-webkit-full-screen { width: 100vw !important; height: 100vh !important; }
+  #companion-page:fullscreen { width: 100vw !important; height: 100vh !important; }
+
+  /* Hide PiP button on mobile, show mini button */
+  #comp-btn-pip-mob { display: flex !important; }
+  #comp-btn-pip-desk { display: none !important; }
 }
 
 /* ── Touch-action: disable 300ms tap delay on all interactive elements ── */
@@ -1264,6 +1262,14 @@ button, a, .nav-tab, .nav-logo, .chat-item, .ibtn, .hbtn, .act-btn,
   content: '✦'; font-size: 22px; color: var(--accent);
   animation: shapebeat 1.4s ease-in-out infinite;
 }
+.typing-bear::before {
+  content: '🐻'; font-size: 22px;
+  animation: shapebeat 1.1s ease-in-out infinite;
+}
+.typing-cat::before {
+  content: '🐱'; font-size: 22px;
+  animation: shapebeat 1.1s ease-in-out infinite;
+}
 .typing-error-icon {
   font-size: 22px; color: var(--accent-dark);
   animation: shapebeat .7s ease-in-out infinite;
@@ -1287,9 +1293,7 @@ button, a, .nav-tab, .nav-logo, .chat-item, .ibtn, .hbtn, .act-btn,
 /* ── Input expand button ── */
 #input-expand-btn {
   display: none;
-  position: absolute;
-  top: -22px; right: 40px;
-  width: 20px; height: 20px;
+  width: 22px; height: 22px;
   border-radius: 50%;
   border: 1.5px solid var(--border);
   background: var(--bg3);
@@ -1298,10 +1302,72 @@ button, a, .nav-tab, .nav-logo, .chat-item, .ibtn, .hbtn, .act-btn,
   font-size: 10px;
   align-items: center;
   justify-content: center;
-  z-index: 5;
+  flex-shrink: 0;
   transition: all .15s;
+  order: -2;
 }
 #input-expand-btn:hover { background: var(--hover); color: var(--accent); }
+
+/* ── Mobile input extra toolbar ── */
+#mob-input-bar {
+  display: none;
+}
+@media (max-width: 768px) {
+  #mob-input-bar {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 0 2px;
+  }
+  #input-expand-btn { display: flex !important; }
+}
+
+/* ── Chat bubble show/hide per role ── */
+.chat-no-user-bubble .msg-group.user .bubble { background: none !important; border: none !important; box-shadow: none !important; padding: 3px 0 !important; }
+.chat-no-ai-bubble .msg-group.ai .bubble { background: none !important; border: none !important; box-shadow: none !important; padding: 3px 0 !important; }
+
+/* ── ECG / heartbeat typing animation in header ── */
+.hdr-ecg-wrap {
+  display: inline-flex; align-items: center; gap: 4px;
+  overflow: hidden; max-width: 120px;
+}
+.hdr-ecg-track {
+  overflow: hidden; width: 80px; height: 18px; position: relative;
+}
+.hdr-ecg-inner {
+  position: absolute; white-space: nowrap;
+  font-size: 13px; color: var(--accent);
+  animation: ecg-scroll 2s linear infinite;
+  letter-spacing: 2px;
+}
+@keyframes ecg-scroll {
+  0% { transform: translateX(100%); }
+  100% { transform: translateX(-100%); }
+}
+.hdr-ecg-label {
+  font-size: 10px; color: var(--accent); font-weight: 700; white-space: nowrap;
+}
+
+/* ── Back button for mobile sub-pages ── */
+.page-back-btn {
+  display: none;
+}
+@media (max-width: 768px) {
+  .page-back-btn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    background: none;
+    border: none;
+    color: var(--accent);
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    padding: 0;
+    font-family: inherit;
+    margin-right: 8px;
+  }
+}
 
 /* ── Version navigation for AI message regen ── */
 .version-nav {
@@ -1331,7 +1397,7 @@ button, a, .nav-tab, .nav-logo, .chat-item, .ibtn, .hbtn, .act-btn,
 .comp-speak-wrap { position: relative; }
 .comp-phrase-panel {
   position: absolute;
-  bottom: calc(100% + 6px);
+  top: calc(100% + 6px);
   left: 0;
   min-width: 180px;
   max-width: 260px;
@@ -1339,7 +1405,7 @@ button, a, .nav-tab, .nav-logo, .chat-item, .ibtn, .hbtn, .act-btn,
   border: 1.5px solid var(--border);
   border-radius: 12px;
   box-shadow: 0 4px 16px var(--shadow2);
-  z-index: 200;
+  z-index: 9999;
   padding: 8px;
 }
 .comp-phrase-panel-mini {

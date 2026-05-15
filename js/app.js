@@ -300,7 +300,7 @@ function switchPage(id) {
   if (id === 'memory-page') renderMemories();
   if (id === 'contacts-page') renderContacts();
   if (id === 'moments-page') renderMoments();
-  if (id === 'companion-page') renderCompanionPage();
+  if (id === 'companion-page') { renderCompanionPage(); if (window._refreshLinkedTaskSelect) window._refreshLinkedTaskSelect(); }
   if (id === 'settings-page') { buildSettingsUI(); updateStorageInfo(); }
   if (id === 'checkin-page' && typeof renderCheckinPage === 'function') renderCheckinPage();
   if (id === 'explore-page') renderExplorePage();
@@ -3879,6 +3879,29 @@ function initCompanion() {
   syncCompanionUIFromSettings();
   renderCompanionPage();
   companionInitDrag();
+
+  // Populate linked task select
+  async function refreshLinkedTaskSelect() {
+    const sel = $i('comp-linked-task'); if (!sel) return;
+    sel.innerHTML = '<option value="">-- 不关联 --</option>';
+    if (typeof ckGetGoals === 'function') {
+      const goals = await ckGetGoals();
+      goals.filter(g => g.goalType === 'timer').forEach(g => {
+        const opt = document.createElement('option');
+        opt.value = g.id;
+        opt.textContent = `${g.emoji||'🎯'} ${g.title} (${g.targetMinutes||30}分钟/天)`;
+        if (g.id === S.settings.companionLinkedGoalId) opt.selected = true;
+        sel.appendChild(opt);
+      });
+    }
+  }
+  window._refreshLinkedTaskSelect = refreshLinkedTaskSelect;
+  refreshLinkedTaskSelect();
+  const linkedSel = $i('comp-linked-task');
+  if (linkedSel) linkedSel.addEventListener('change', async () => {
+    S.settings.companionLinkedGoalId = linkedSel.value;
+    await saveSetting('companionLinkedGoalId', linkedSel.value);
+  });
 }
 
 function renderCompanionPage() {
@@ -3891,6 +3914,7 @@ function renderCompanionPage() {
   void renderCompanionStage();
   applyCompanionMusicSettings();
   void applyCompanionMusicSrc();
+  if (typeof renderCompanionPhraseSettings === 'function') renderCompanionPhraseSettings();
 }
 
 function renderCompanionContactOptions() {
@@ -4266,6 +4290,7 @@ function companionStart() {
   haptic([10,5,10,5,10]);
   const s = S.settings, mode = s.companionTimerMode || 'pomodoro';
   S._companion.mode = mode; S._companion.running = true;
+  S._companion.sessionStartSec = S._companion.elapsedSec || 0;
   if (mode === 'countup') {
     if (!S._companion.elapsedSec) S._companion.elapsedSec = 0;
   } else if (mode === 'countdown') {
@@ -4302,12 +4327,24 @@ function companionStart() {
   void applyCompanionMusicSrc();
 }
 
-function companionPause() {
+async function companionPause() {
   S._companion.running = false;
   if (S._companion.tickTimer) { clearInterval(S._companion.tickTimer); S._companion.tickTimer = null; }
   if (S._companion.speechTimer) { clearInterval(S._companion.speechTimer); S._companion.speechTimer = null; }
   const a = $i('comp-audio'); if (a) a.pause();
   updateCompanionStartBtn();
+  // Log time to linked checkin goal
+  const linkedId = S.settings.companionLinkedGoalId;
+  if (linkedId && S._companion.mode === 'countup') {
+    const sessionSecs = (S._companion.elapsedSec || 0) - (S._companion.sessionStartSec || 0);
+    const sessionMins = Math.floor(sessionSecs / 60);
+    if (sessionMins > 0) {
+      S._companion.sessionStartSec = S._companion.elapsedSec;
+      if (typeof ckAddCompanionMinutes === 'function') {
+        await ckAddCompanionMinutes(linkedId, sessionMins);
+      }
+    }
+  }
 }
 
 function companionReset() {
@@ -4345,7 +4382,7 @@ async function companionSpeakNow() {
   } finally { S._companion.isSpeaking = false; }
 }
 
-async function callCompanionAI() {
+async function callCompanionAI(phrase = '') {
   const s = S.settings;
   const contact = s.companionContactId ? S._contacts[s.companionContactId] : null;
   const useKey = contact?.apiKey || s.apiKey;
@@ -4359,8 +4396,27 @@ async function callCompanionAI() {
     : mode === 'countdown'
       ? `剩余 ${fmtSec(S._companion.remainingSec)}`
       : `${S._companion.phase === 'break' ? '休息' : '专注'}剩余 ${fmtSec(S._companion.remainingSec)}`;
-  const sys = `你是${aiName}，${cs(contact?.system, s.systemPrompt) || '可爱温柔的AI助手'}。你正在以"陪伴模式"陪用户进行：${scene}。请用中文输出1-2句简短自然的话（不要列点、不超过40字/句），像真实朋友一样。`;
-  const userMsg = `当前状态：${status}。请给用户一句陪伴/鼓励/提醒。`;
+
+  // Task context for linked checkin goal
+  let taskCtx = '';
+  const linkedId = s.companionLinkedGoalId;
+  if (linkedId && typeof ckGetGoals === 'function') {
+    try {
+      const goals = await ckGetGoals();
+      const linkedGoal = goals.find(g => g.id === linkedId);
+      if (linkedGoal) {
+        const today = typeof ckTodayStr === 'function' ? ckTodayStr() : new Date().toISOString().slice(0,10);
+        const rec = typeof ckGetRecordByDate === 'function' ? await ckGetRecordByDate(linkedId, today) : null;
+        const done = rec?.minutesLogged || 0;
+        const target = linkedGoal.targetMinutes || 30;
+        taskCtx = `\n用户正在用陪伴时间完成打卡目标「${linkedGoal.title}」，今日进度：${done}/${target}分钟。`;
+      }
+    } catch(e) {}
+  }
+
+  const sys = `你是${aiName}，${cs(contact?.system, s.systemPrompt) || '可爱温柔的AI助手'}。你正在以"陪伴模式"陪用户进行：${scene}。请用中文输出1-2句简短自然的话（不要列点、不超过40字/句），像真实朋友一样。${taskCtx}`;
+  const phraseCtx = phrase ? `\n用户说：「${phrase}」，请针对此做出自然回应。` : '';
+  const userMsg = `当前状态：${status}。${phraseCtx || '请给用户一句陪伴/鼓励/提醒。'}`;
   try {
     const res = await fetch(useUrl, {
       method:'POST',
@@ -4372,6 +4428,105 @@ async function callCompanionAI() {
     return (d.choices?.[0]?.message?.content || '').trim();
   } catch(e) { toast(`❌ 陪伴说话失败：${e.message}`); return ''; }
 }
+
+// ── Quick Phrases for Companion ──
+const DEFAULT_PHRASES = ['摸摸头', '要求夸奖', '我想放弃了', '帮我打气', '快夸夸我'];
+
+let _speakBtnLastClick = 0;
+let _phrasePanelOpen = false;
+
+function companionSpeakClick(event) {
+  const now = Date.now();
+  const isDouble = (now - _speakBtnLastClick) < 380;
+  _speakBtnLastClick = now;
+  if (isDouble) {
+    companionClosePhrasePanel();
+    companionSpeakNow();
+  } else {
+    companionTogglePhrasePanel();
+  }
+}
+
+function companionTogglePhrasePanel() {
+  _phrasePanelOpen = !_phrasePanelOpen;
+  companionRenderPhrasePanel();
+  const panels = ['comp-phrase-panel', 'comp-mini-phrase-panel'];
+  panels.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = _phrasePanelOpen ? '' : 'none';
+  });
+}
+
+function companionClosePhrasePanel() {
+  _phrasePanelOpen = false;
+  ['comp-phrase-panel','comp-mini-phrase-panel'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = 'none';
+  });
+}
+
+function companionRenderPhrasePanel() {
+  const phrases = S.settings.companionPhrases || DEFAULT_PHRASES;
+  ['comp-phrase-list','comp-mini-phrase-list'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.innerHTML = '';
+    phrases.forEach(p => {
+      const btn = document.createElement('button');
+      btn.className = 'comp-phrase-btn';
+      btn.textContent = p;
+      btn.onclick = () => { companionClosePhrasePanel(); companionSpeakWithPhrase(p); };
+      el.appendChild(btn);
+    });
+  });
+  // Also render settings list
+  renderCompanionPhraseSettings();
+}
+
+async function companionSpeakWithPhrase(phrase) {
+  if (S._companion.isSpeaking) return;
+  S._companion.isSpeaking = true;
+  try {
+    const text = await callCompanionAI(phrase);
+    if (text) { companionShowBubble(text); if (S.settings.autoTts) speakText(text); }
+  } finally { S._companion.isSpeaking = false; }
+}
+
+function renderCompanionPhraseSettings() {
+  const container = document.getElementById('comp-phrases-list');
+  if (!container) return;
+  const phrases = S.settings.companionPhrases || DEFAULT_PHRASES;
+  container.innerHTML = '';
+  phrases.forEach((p, i) => {
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;gap:6px;align-items:center;margin-bottom:4px';
+    const inp = document.createElement('input');
+    inp.value = p; inp.style.cssText = 'flex:1;background:var(--input-bg);border:1.5px solid var(--border);border-radius:8px;padding:5px 8px;font-size:12px;color:var(--text);font-family:inherit;outline:none';
+    inp.onchange = () => { const arr = [...(S.settings.companionPhrases||DEFAULT_PHRASES)]; arr[i] = inp.value.trim()||p; S.settings.companionPhrases = arr; saveSetting('companionPhrases', arr); };
+    const del = document.createElement('button');
+    del.textContent = '✕'; del.className = 'btn-s'; del.style.cssText = 'padding:3px 7px;font-size:11px;color:#e05a7a';
+    del.onclick = () => { const arr = [...(S.settings.companionPhrases||DEFAULT_PHRASES)]; arr.splice(i,1); S.settings.companionPhrases = arr; saveSetting('companionPhrases', arr); renderCompanionPhraseSettings(); };
+    row.appendChild(inp); row.appendChild(del);
+    container.appendChild(row);
+  });
+}
+
+function ckAddPhraseRow() {
+  const arr = [...(S.settings.companionPhrases || DEFAULT_PHRASES)];
+  arr.push('新短语');
+  S.settings.companionPhrases = arr;
+  saveSetting('companionPhrases', arr);
+  renderCompanionPhraseSettings();
+}
+// alias used in HTML
+function compAddPhrase() { ckAddPhraseRow(); }
+
+// Close phrase panel when clicking outside
+document.addEventListener('click', e => {
+  if (_phrasePanelOpen && !e.target.closest('.comp-speak-wrap') && !e.target.closest('#comp-mini-phrase-panel') && !e.target.closest('#comp-mini-speak')) {
+    companionClosePhrasePanel();
+  }
+});
 
 // ── Character Size ──
 function companionApplyCharSize(val) {
@@ -4548,5 +4703,18 @@ function _miniUpdateTimer() {
   if (b && mb2) {
     mb2.textContent = b.textContent || '';
     mb2.classList.toggle('on', b.style.display !== 'none' && !!b.textContent);
+  }
+  // Show linked task progress
+  const taskEl = $i('comp-mini-task');
+  if (taskEl) {
+    const linkedId = S.settings.companionLinkedGoalId;
+    if (linkedId && typeof ckGetGoals === 'function') {
+      const goal = (window.CK?.goals || []).find(g => g.id === linkedId);
+      if (goal) {
+        taskEl.style.display = '';
+        // Try to get today's record from CK cache (synchronous check)
+        taskEl.textContent = `${goal.emoji||'🎯'} ${goal.title}`;
+      } else { taskEl.style.display = 'none'; }
+    } else { taskEl.style.display = 'none'; }
   }
 }

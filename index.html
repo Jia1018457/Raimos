@@ -156,7 +156,15 @@
   <div class="page-header" id="comp-page-header">
     <h2>💗 陪伴</h2>
     <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
-      <button class="btn-s" onclick="companionSpeakNow()">💬 说一句</button>
+      <div class="comp-speak-wrap" style="position:relative">
+        <button class="btn-s" id="comp-speak-btn" onclick="companionSpeakClick(event)" title="单击展开短语，双击直接说一句">💬 说一句</button>
+        <div id="comp-phrase-panel" style="display:none" class="comp-phrase-panel">
+          <div id="comp-phrase-list"></div>
+          <div style="border-top:1px solid var(--border);padding:5px 6px 2px">
+            <button class="btn-s" style="font-size:11px;padding:3px 8px;width:100%" onclick="companionClosePhrasePanel();companionSpeakNow()">✨ 随机说一句</button>
+          </div>
+        </div>
+      </div>
       <button class="btn-p" id="comp-btn-start" onclick="companionToggleRun()">▶︎ 开始</button>
       <button class="btn-s" onclick="companionReset()">↺ 重置</button>
       <button class="btn-s" onclick="companionEnterImmersive()" title="全屏沉浸模式">⛶ 全屏</button>
@@ -177,7 +185,7 @@
       <!-- Immersive-mode floating controls (hidden in normal mode) -->
       <div id="comp-imm-bar">
         <button class="comp-imm-btn" onclick="companionExitImmersive()" title="退出全屏">✕ 退出</button>
-        <button class="comp-imm-btn" onclick="companionSpeakNow()">💬</button>
+        <button class="comp-imm-btn" id="comp-imm-speak" onclick="companionSpeakClick(event)" title="单击短语，双击说一句">💬</button>
         <button class="comp-imm-btn" id="comp-imm-start" onclick="companionToggleRun()">▶︎</button>
         <button class="comp-imm-btn" onclick="companionReset()">↺</button>
       </div>
@@ -209,7 +217,18 @@
             <label>对话频率</label>
             <input id="comp-freq" type="number" min="0" step="1" placeholder="分钟/次（0=不说话）" />
           </div>
+          <div class="comp-row" id="comp-task-row">
+            <label>关联打卡</label>
+            <select id="comp-linked-task">
+              <option value="">-- 不关联 --</option>
+            </select>
+          </div>
         </div>
+      </div>
+      <div class="comp-sec">
+        <div class="comp-sec-title">快捷短语 <span style="font-size:11px;font-weight:400;color:var(--text3)">单击「说一句」展开</span></div>
+        <div id="comp-phrases-list" style="margin-bottom:6px"></div>
+        <button class="btn-s" style="font-size:12px" onclick="compAddPhrase()">＋ 添加短语</button>
       </div>
 
       <div class="comp-sec">
@@ -361,8 +380,8 @@
   <div class="page-header">
     <h2>📅 打卡日历</h2>
     <div style="display:flex;gap:6px;align-items:center">
-      <button class="btn-s" id="ck-edit-goal-btn" onclick="openCkGoalModal(CK.activeGoalId)" title="编辑当前目标" style="display:none">⚙️ 编辑</button>
       <button class="btn-p" onclick="openCkGoalModal(null)">＋ 新目标</button>
+      <button class="btn-s" id="ck-more-btn" onclick="openCkMoreMenu(event)" title="更多操作" style="display:none">⋯</button>
     </div>
   </div>
   <div id="pwa-sync-hint" style="display:none">
@@ -453,12 +472,16 @@
   <div id="comp-mini-header">
     <span id="comp-mini-title">💗 陪伴</span>
     <div style="display:flex;gap:4px">
-      <button onclick="companionSpeakNow()" title="说一句">💬</button>
+      <button id="comp-mini-speak" onclick="companionSpeakClick(event)" title="单击短语，双击说一句">💬</button>
       <button id="comp-mini-start" onclick="companionToggleRun()">▶︎</button>
       <button onclick="companionToggleMini()" title="关闭小窗">✕</button>
     </div>
   </div>
+  <div id="comp-mini-phrase-panel" style="display:none" class="comp-phrase-panel comp-phrase-panel-mini">
+    <div id="comp-mini-phrase-list"></div>
+  </div>
   <div id="comp-mini-stage"></div>
+  <div id="comp-mini-task" style="display:none;font-size:11px;color:var(--text3);padding:2px 8px 4px;text-align:center"></div>
 </div>
 
 <!-- EMOJI PICKER -->
@@ -1103,6 +1126,21 @@
       <input type="number" id="ckg-days" value="30" min="1" max="3650" style="max-width:80px;background:var(--input-bg);border:1.5px solid var(--border);border-radius:8px;padding:6px 10px;font-size:13px;color:var(--text);font-family:inherit"/> 天
     </div>
 
+    <!-- 打卡类型 -->
+    <div class="mrow" style="margin-top:2px">
+      <label>打卡类型</label>
+      <select id="ckg-goal-type" onchange="ckToggleGoalType()" style="flex:1">
+        <option value="count">计数类（打卡即完成）</option>
+        <option value="timer">计时类（设定每日目标时长）</option>
+      </select>
+    </div>
+    <div class="mrow" id="ckg-target-mins-row" style="display:none">
+      <label>每日目标</label>
+      <input type="number" id="ckg-target-mins" value="30" min="1" max="1440"
+        style="max-width:80px;background:var(--input-bg);border:1.5px solid var(--border);border-radius:8px;padding:6px 10px;font-size:13px;color:var(--text);font-family:inherit"/> 分钟
+      <span style="font-size:11px;color:var(--text3);margin-left:6px">陪伴计时可自动累积</span>
+    </div>
+
     <!-- 每日分项 -->
     <div class="ckg-section" style="margin-top:10px">
       <div class="ckg-section-title">每日分项打卡 <span style="font-weight:400;opacity:.6">（可选，AI 会对每项逐一点评）</span></div>
@@ -1206,6 +1244,24 @@
       <button class="btn-danger" id="ckg-delete-btn" onclick="deleteCkGoal()" style="display:none">🗑️ 删除目标</button>
       <button class="btn-s" onclick="closeModal('ck-goal-modal')">取消</button>
       <button class="btn-p" onclick="saveCkGoal()">💾 保存目标</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── CHECK-IN EXPORT MODAL ── -->
+<div class="overlay" id="ck-export-modal">
+  <div class="modal">
+    <h2>📤 导出打卡记录 <button class="mclose" onclick="closeModal('ck-export-modal')">✕</button></h2>
+    <p style="font-size:13px;margin:0 0 4px">当前目标：<strong id="ck-export-goal-name"></strong></p>
+    <p style="font-size:12px;color:var(--text3);margin:0 0 14px">选择导出格式：</p>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <button class="btn-p" onclick="exportCkData('json')">📋 JSON · 完整数据备份</button>
+      <button class="btn-p" onclick="exportCkData('csv')">📊 CSV · 电子表格</button>
+      <button class="btn-p" onclick="exportCkData('markdown')">📝 Markdown · 笔记格式</button>
+      <button class="btn-p" onclick="exportCkData('html')">🖨️ HTML · 可打印报告</button>
+    </div>
+    <div class="mbtns" style="margin-top:14px">
+      <button class="btn-s" onclick="closeModal('ck-export-modal')">取消</button>
     </div>
   </div>
 </div>

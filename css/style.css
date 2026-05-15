@@ -267,6 +267,36 @@ body{font-family:'Nunito','Noto Sans SC',sans-serif;background:var(--bg);color:v
 .moment-av img{width:100%;height:100%;object-fit:cover;border-radius:50%;}
 .moment-author{font-size:13px;font-weight:800;color:var(--text);}
 .moment-time{font-size:10.5px;color:var(--text3);}
+/* ── Moments manage / new menus ── */
+.moments-manage-wrap{position:relative;}
+.moments-manage-menu,.moments-new-menu{
+  position:absolute;top:calc(100% + 5px);right:0;
+  background:var(--bg3);border:1.5px solid var(--border);
+  border-radius:12px;padding:5px;
+  box-shadow:0 8px 28px var(--shadow2);z-index:600;
+  min-width:150px;display:flex;flex-direction:column;gap:2px;
+}
+.moments-manage-menu button,.moments-new-menu button{
+  background:none;border:none;cursor:pointer;
+  text-align:left;padding:9px 12px;border-radius:8px;
+  font-size:13px;color:var(--text);font-family:inherit;
+  transition:background .12s;white-space:nowrap;
+}
+.moments-manage-menu button:hover,.moments-new-menu button:hover{background:var(--hover);color:var(--accent);}
+/* Notification bar */
+.moments-notif-bar{
+  background:color-mix(in srgb,var(--accent) 12%,var(--bg3));
+  border:1px solid color-mix(in srgb,var(--accent) 25%,var(--border));
+  border-radius:10px;padding:9px 14px;margin:0 0 10px;
+  font-size:12.5px;color:var(--text2);line-height:1.6;
+  cursor:pointer;
+}
+.moments-notif-bar:hover{background:color-mix(in srgb,var(--accent) 18%,var(--bg3));}
+/* Liked button active state */
+.m-act-btn.liked{color:var(--accent);}
+/* Desktop-only elements */
+.desk-only{display:inline-flex;}
+.desk-only-block{display:block;}
 .moment-text{font-size:13.5px;line-height:1.7;color:var(--text);margin-bottom:10px;word-break:break-word;}
 .moment-images{display:grid;gap:5px;margin-bottom:10px;}
 .moment-images.n1{grid-template-columns:1fr;max-width:260px;}
@@ -1165,6 +1195,42 @@ body.comp-immersive #comp-panel{display:none;}
   /* ── Input expand ── */
   #msg-input.input-expanded { max-height: 42vh !important; height: 42vh !important; border-radius: 14px !important; }
   #input-expand-btn { display: flex !important; }
+
+  /* ── Moments: hide desktop compose, show mobile + button ── */
+  .desk-only { display: none !important; }
+  .desk-only-block { display: none !important; }
+
+  /* ── Calendar: ensure visibility on mobile ── */
+  .ck-calendar-card { overflow: visible; }
+  .ck-cal-wrap { padding: 10px 8px; }
+  .ck-cal-cell { min-height: 32px; }
+  #ck-main { min-height: 0; }
+
+  /* ── Action buttons: always visible below message on mobile ── */
+  .bub-actions {
+    display: flex !important;
+    position: static !important;
+    bottom: auto !important;
+    left: auto !important;
+    right: auto !important;
+    background: none !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 3px 0 0 !important;
+    gap: 0 !important;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+  }
+  .msg-group.ai .bub-actions { justify-content: flex-start; }
+  .msg-group.user .bub-actions { justify-content: flex-end; }
+  .act-btn { font-size: 14px; padding: 4px 6px; }
+
+  /* Companion: portrait image default contain on mobile to avoid cropping */
+  #comp-bg img, #comp-bg video { object-fit: contain; background-color: transparent; }
+  #comp-bg.fit-cover img, #comp-bg.fit-cover video { object-fit: cover; }
+
+  /* Mini window: higher z-index on mobile so it's above nav */
+  #comp-mini-win { z-index: 9999; bottom: 70px; }
 }
 
 /* ── Touch-action: disable 300ms tap delay on all interactive elements ── */

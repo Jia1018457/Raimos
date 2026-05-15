@@ -471,8 +471,10 @@ async function doCkCheckin() {
 
   const today = ckTodayStr();
   if (CK._checkinDate === today && !existing?.completed && rec.completed) {
+    if (typeof haptic === 'function') haptic([20, 10, 20, 10, 40]);
     await playCkStampAnim(goal);
   } else if (!existing && CK._checkinDate === today) {
+    if (typeof haptic === 'function') haptic([8, 5, 8]);
     toast(`✅ 已记录！${totalItems > 0 ? `${doneCount}/${totalItems} 项` : `${progress}% 完成`}`);
   }
 

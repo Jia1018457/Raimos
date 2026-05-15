@@ -105,6 +105,14 @@ let S = {
     splashMediaId: '',
     splashDuration: 4,   // seconds, for image splash
     splashType: '',      // 'image' | 'video' | ''
+
+    // ── 触感反馈 ──
+    hapticEnabled: true,
+    hapticOnAiReply: false,
+
+    // ── 正在输入动画 ──
+    typingAnimEnabled: true,
+    typingAnimShape: 'heart',  // 'heart' | 'star' | 'sparkle' | 'dot'
   },
   _momentTimers: {},
   _imgSearchTarget: 'compose',
@@ -255,6 +263,7 @@ function cs(cv, gv) { return (cv === null || cv === undefined) ? gv : cv; }
 //  PAGE SWITCHING
 // ══════════════════════════════
 function switchPage(id) {
+  if (isMobile()) haptic(10);
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
   const pageEl = $i(id);
@@ -902,7 +911,8 @@ function makeBubble(msg) {
       <button class="act-btn" onclick="replyMsg('${msg.id}')" title="回复">↩️</button>
       <button class="act-btn" onclick="speakMsg('${msg.id}')" title="朗读">🔊</button>
       ${msg.role==='user'?`<button class="act-btn" onclick="editMsg('${msg.id}')" title="编辑">✏️</button>`:''}
-      ${msg.role==='ai'?`<button class="act-btn" onclick="regenMsg('${msg.id}')" title="重新生成">🔄</button>`:''}`;
+      ${msg.role==='ai'?`<button class="act-btn" onclick="regenMsg('${msg.id}')" title="重新生成">🔄</button>`:''}
+      <button class="act-btn" style="color:#e05a7a" onclick="deleteMsg('${msg.id}')" title="删除此条">🗑️</button>`;
     b.appendChild(acts);
   }
   return b;
@@ -921,6 +931,7 @@ async function sendMsg() {
     stopRec(); return;
   }
   const chat = S._chats[S.currentChat]; if (!chat) { toast('请先选择或新建对话'); return; }
+  haptic(8);
   const text = $i('msg-input').value.trim();
   const files = [...S.pendingFiles];
   if (!text && !files.length) return;
@@ -962,7 +973,7 @@ async function callAI(chatId) {
   const useKey = contact?.apiKey || s.apiKey;
   const useUrl = contact?.apiUrl || s.apiUrl || 'https://openrouter.ai/api/v1/chat/completions';
   if (!useKey) { toast('请先填写 API Key！'); return; }
-S.isStreaming = true; showTyping();
+S.isStreaming = true; showTyping(); startHapticStream();
 const t0 = Date.now();
 try {
     const mems = await getRelevantMems(chatId, contact?.id || null);
@@ -1001,7 +1012,7 @@ try {
     await addMsg(chatId, { role:'ai', type:'text', content:`❌ 出错了：${e.message}` });
     await renderMsgs(); scrollTo_(false);
   }
-  S.isStreaming = false;
+  S.isStreaming = false; stopHapticStream();
 }
 
 async function maybeAiSendImage(chatId, contact, context) {
@@ -1654,7 +1665,14 @@ async function aiReplyComment(momentId, commentObj, contactId) {
   const contact = contactId ? S._contacts[contactId] : null; if (!contact || !S.settings.apiKey) return;
   const aiName = contact.name || 'AI';
   try {
-    const res = await fetch((contact.apiUrl||S.settings.apiUrl||'https://openrouter.ai')+'/api/v1/chat/completions',{method:'POST',headers:{'Authorization':`Bearer ${contact.apiKey||S.settings.apiKey}`,'Content-Type':'application/json'},body:JSON.stringify({model:contact.model||'openai/gpt-4o-mini',max_tokens:60,stream:false,messages:[{role:'system',content:`你是${aiName}，简短自然地回复朋友圈评论，1句话。`},{role:'user',content:`朋友"${commentObj.author}"评论了你的朋友圈：${commentObj.text}`}]})});
+    const moment = await dbGet('moments', momentId);
+    const allComments = await dbGetAll('comments', 'momentId', momentId);
+    allComments.sort((a, b) => a.ts - b.ts);
+    const threadCtx = allComments.length > 1
+      ? '\n\n评论区已有内容：\n' + allComments.slice(-6).map(c => `${c.author}：${c.text}`).join('\n')
+      : '';
+    const postText = moment?.text ? `朋友圈内容：${moment.text}\n\n` : '';
+    const res = await fetch((contact.apiUrl||S.settings.apiUrl||'https://openrouter.ai')+'/api/v1/chat/completions',{method:'POST',headers:{'Authorization':`Bearer ${contact.apiKey||S.settings.apiKey}`,'Content-Type':'application/json'},body:JSON.stringify({model:contact.model||'openai/gpt-4o-mini',max_tokens:60,stream:false,messages:[{role:'system',content:`你是${aiName}，${buildMomentSysPrompt(contact)}，简短自然地回复朋友圈评论，1句话，像真实朋友一样。`},{role:'user',content:`${postText}朋友"${commentObj.author}"说：${commentObj.text}${threadCtx}`}]})});
     const d=await res.json(); const reply=d.choices?.[0]?.message?.content||'';
     if(reply){
       const c={id:uid(),momentId,author:aiName,text:reply,replyTo:commentObj.author,ts:Date.now()};
@@ -1713,6 +1731,13 @@ function toggleInputCollapse() {
   const wrap=$i('input-wrap'); if(!wrap)return;
   const collapsed=wrap.classList.toggle('collapsed');
   const btn=$i('input-collapse-btn'); if(btn)btn.textContent=collapsed?'▸':'▾';
+}
+function toggleExpandInput() {
+  const inp=$i('msg-input'); if(!inp)return;
+  const btn=$i('input-expand-btn');
+  const expanded=inp.classList.toggle('input-expanded');
+  if(btn)btn.textContent=expanded?'⤡':'⤢';
+  if(!expanded){inp.style.height='auto';autoH(inp);}
 }
 function buildComposeEmojiGrid() {
   const grid=$i('compose-emoji-grid');
@@ -1821,8 +1846,8 @@ async function archiveMoments() {
 //  VOICE
 // ══════════════════════════════
 let recStream=null;
-function startRec(e){if(e)e.preventDefault();if(S.isRecording)return;navigator.mediaDevices.getUserMedia({audio:true}).then(stream=>{recStream=stream;S.mediaRecorder=new MediaRecorder(stream);S.audioChunks=[];S.isRecording=true;S.recSecs=0;S.mediaRecorder.ondataavailable=e=>S.audioChunks.push(e.data);S.mediaRecorder.start();$i('btn-voice').classList.add('recording');$i('rec-bar').classList.add('show');const fb=$i('btn-file');if(fb){fb.innerHTML='⏹';fb.title='停止录音';}S.recTimer=setInterval(()=>{S.recSecs++;const m=Math.floor(S.recSecs/60),s=S.recSecs%60;$i('rec-timer').textContent=`${m}:${s.toString().padStart(2,'0')}`;},1000);}).catch(e=>toast('无法访问麦克风: '+e.message));}
-function stopRec(){if(!S.isRecording)return;S.isRecording=false;clearInterval(S.recTimer);$i('btn-voice').classList.remove('recording');$i('rec-bar').classList.remove('show');$i('rec-timer').textContent='0:00';const fb=$i('btn-file');if(fb){fb.innerHTML='📎';fb.title='发文件/图片';}S.mediaRecorder.stop();S.mediaRecorder.onstop=async()=>{const blob=new Blob(S.audioChunks,{type:'audio/webm'});recStream?.getTracks().forEach(t=>t.stop());const dur=`${Math.floor(S.recSecs/60)}:${(S.recSecs%60).toString().padStart(2,'0')}`;const url=URL.createObjectURL(blob);const transcript=await sttBrowser();const chat=S._chats[S.currentChat];if(!chat)return;const vmsg={role:'user',type:'voice',url,dur,transcript,content:transcript?`[语音] ${transcript}`:'[语音消息]'};await addMsg(S.currentChat,vmsg);await renderMsgs();scrollTo_(false);if(transcript)await callAI(S.currentChat);};}
+function startRec(e){if(e)e.preventDefault();if(S.isRecording)return;haptic([10,5,10]);navigator.mediaDevices.getUserMedia({audio:true}).then(stream=>{recStream=stream;S.mediaRecorder=new MediaRecorder(stream);S.audioChunks=[];S.isRecording=true;S.recSecs=0;S.mediaRecorder.ondataavailable=e=>S.audioChunks.push(e.data);S.mediaRecorder.start();$i('btn-voice').classList.add('recording');$i('rec-bar').classList.add('show');const fb=$i('btn-file');if(fb){fb.innerHTML='⏹';fb.title='停止录音';}S.recTimer=setInterval(()=>{S.recSecs++;const m=Math.floor(S.recSecs/60),s=S.recSecs%60;$i('rec-timer').textContent=`${m}:${s.toString().padStart(2,'0')}`;},1000);}).catch(e=>toast('无法访问麦克风: '+e.message));}
+function stopRec(){if(!S.isRecording)return;haptic([8,4,8]);S.isRecording=false;clearInterval(S.recTimer);$i('btn-voice').classList.remove('recording');$i('rec-bar').classList.remove('show');$i('rec-timer').textContent='0:00';const fb=$i('btn-file');if(fb){fb.innerHTML='📎';fb.title='发文件/图片';}S.mediaRecorder.stop();S.mediaRecorder.onstop=async()=>{const blob=new Blob(S.audioChunks,{type:'audio/webm'});recStream?.getTracks().forEach(t=>t.stop());const dur=`${Math.floor(S.recSecs/60)}:${(S.recSecs%60).toString().padStart(2,'0')}`;const url=URL.createObjectURL(blob);const transcript=await sttBrowser();const chat=S._chats[S.currentChat];if(!chat)return;const vmsg={role:'user',type:'voice',url,dur,transcript,content:transcript?`[语音] ${transcript}`:'[语音消息]'};await addMsg(S.currentChat,vmsg);await renderMsgs();scrollTo_(false);if(transcript)await callAI(S.currentChat);};}
 function cancelRec(){if(!S.isRecording)return;S.isRecording=false;clearInterval(S.recTimer);S.mediaRecorder?.stop();recStream?.getTracks().forEach(t=>t.stop());$i('btn-voice').classList.remove('recording');$i('rec-bar').classList.remove('show');const fb=$i('btn-file');if(fb){fb.innerHTML='📎';fb.title='发文件/图片';}}
 function sttBrowser(){return new Promise(resolve=>{if(!('webkitSpeechRecognition'in window||'SpeechRecognition'in window)){resolve('');return;}const SR=window.SpeechRecognition||window.webkitSpeechRecognition;const r=new SR();r.lang='zh-CN';r.interimResults=false;r.start();r.onresult=e=>resolve(e.results[0][0].transcript);r.onerror=()=>resolve('');r.onend=()=>resolve('');setTimeout(()=>{try{r.stop();}catch(e){}},5000);});}
 async function playVoice(id){const msgs=await dbGetAll('messages','chatId',S.currentChat);const msg=msgs.find(m=>m.id===id);if(msg?.url)new Audio(msg.url).play();}
@@ -1863,7 +1888,7 @@ async function uploadToCloudinary(fileOrDataUrl, folder='raimos') {
 // ══════════════════════════════
 //  FILES
 // ══════════════════════════════
-function triggerFile(){$i('file-upload').click();}
+function triggerFile(){haptic(8);$i('file-upload').click();}
 function triggerFileOrStopRec() {
   if (S.isRecording) { stopRecToInput(); }
   else { triggerFile(); }
@@ -1898,6 +1923,7 @@ function onVoiceTouchEnd(e) {
   }
 }
 function startRecMobile() {
+  haptic([10,5,10]);
   navigator.mediaDevices.getUserMedia({audio:true}).then(stream => {
     recStream = stream;
     S.mediaRecorder = new MediaRecorder(stream);
@@ -1919,6 +1945,7 @@ function startRecMobile() {
 }
 function stopRecToInput() {
   if (!S.isRecording) return;
+  haptic([8,4,8]);
   S.isRecording = false;
   clearInterval(S.recTimer);
   $i('btn-voice').classList.remove('recording');
@@ -2275,12 +2302,13 @@ async function addTextSticker(){const t=window.prompt('输入文字/emoji表情�
 // ══════════════════════════════
 //  MSG ACTIONS
 // ══════════════════════════════
-async function copyMsg(id){const msgs=await dbGetAll('messages','chatId',S.currentChat);const msg=msgs.find(m=>m.id===id);if(msg?.content)navigator.clipboard.writeText(msg.content).then(()=>toast('✓ 已复制'));}
+async function copyMsg(id){const msgs=await dbGetAll('messages','chatId',S.currentChat);const msg=msgs.find(m=>m.id===id);if(msg?.content)navigator.clipboard.writeText(msg.content).then(()=>{haptic([5,3,5]);toast('✓ 已复制');});}
+async function deleteMsg(id){if(!confirm('删除这条消息？（不影响上下文其他内容）'))return;await dbDel('messages',id);fbDel('messages',id);haptic(15);await renderMsgs();}
 async function replyMsg(id){const msgs=await dbGetAll('messages','chatId',S.currentChat);const msg=msgs.find(m=>m.id===id);if(!msg)return;S.replyTo=msg;$i('reply-bar-txt').textContent=(msg.content||'[媒体]').slice(0,50);$i('reply-bar').classList.add('show');$i('msg-input').focus();}
 function cancelReply(){S.replyTo=null;$i('reply-bar').classList.remove('show');}
 async function editMsg(id){const msgs=await dbGetAll('messages','chatId',S.currentChat);const msg=msgs.find(m=>m.id===id);if(!msg)return;S.editingMsgId=id;$i('msg-input').value=msg.content||'';$i('edit-bar-txt').textContent=(msg.content||'').slice(0,40);$i('edit-bar').classList.add('show');autoH($i('msg-input'));$i('msg-input').focus();}
 function cancelEdit(){S.editingMsgId=null;$i('edit-bar').classList.remove('show');}
-async function regenMsg(id){const msgs=await dbGetAll('messages','chatId',S.currentChat);const idx=msgs.findIndex(m=>m.id===id);if(idx===-1)return;for(let i=idx;i<msgs.length;i++)await dbDel('messages',msgs[i].id);await renderMsgs();await callAI(S.currentChat);}
+async function regenMsg(id){haptic([8,4,8]);const msgs=await dbGetAll('messages','chatId',S.currentChat);const idx=msgs.findIndex(m=>m.id===id);if(idx===-1)return;for(let i=idx;i<msgs.length;i++)await dbDel('messages',msgs[i].id);await renderMsgs();await callAI(S.currentChat);}
 
 // ══════════════════════════════
 //  ONLINE / IMGGEN
@@ -2658,6 +2686,20 @@ function buildSettingsUI() {
       <div class="s-row"><label>上下文消息数</label><input type="number" id="s-ctx" value="${s.ctx||20}" min="2" max="1000" style="max-width:80px"/><span style="font-size:11px;color:var(--text3)">条 (最高1000)</span></div>
       <div class="s-row"><label>图片压缩尺寸</label><input type="range" id="s-imgsize" min="256" max="2048" step="128" value="${s.imgSize||800}" oninput="$i('s-imgsize-v').textContent=this.value+'px'"><span class="rval" id="s-imgsize-v">${s.imgSize||800}px</span></div>
       <div class="s-row"><label>摘要阈值</label><input type="number" id="s-sumthresh" value="${s.sumThresh||40}" min="10" max="200" style="max-width:80px"/><span style="font-size:11px;color:var(--text3)">条后自动摘要</span></div>
+      <div class="s-row"><label>AI回复触感反馈（打字感）</label><label class="toggle"><input type="checkbox" id="s-haptic-ai-reply" ${s.hapticOnAiReply?'checked':''}><span class="tslider"></span></label><span style="font-size:11px;color:var(--text3)">流式输出时微弱震动</span></div>
+      <div class="s-row"><label>正在输入动画形状</label>
+        <select id="s-typing-shape">
+          <option value="heart" ${(s.typingAnimShape||'heart')==='heart'?'selected':''}>♥ 心形</option>
+          <option value="star" ${s.typingAnimShape==='star'?'selected':''}>★ 星星</option>
+          <option value="sparkle" ${s.typingAnimShape==='sparkle'?'selected':''}>✦ 光点</option>
+          <option value="dot" ${s.typingAnimShape==='dot'?'selected':''}>••• 圆点（经典）</option>
+        </select>
+      </div>
+      <div class="s-row"><label>开启正在输入动画</label><label class="toggle"><input type="checkbox" id="s-typing-anim" ${s.typingAnimEnabled!==false?'checked':''}><span class="tslider"></span></label></div>
+    </div>
+    <div class="s-section" hidden><h3>📳 触感与动效</h3>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:8px">仅在支持振动的设备上生效（Android / 部分PWA）</div>
+      <div class="s-row"><label>开启触感反馈</label><label class="toggle"><input type="checkbox" id="s-haptic-enabled" ${s.hapticEnabled!==false?'checked':''}><span class="tslider"></span></label></div>
     </div>
     <div class="s-section" hidden><h3>🎨 外观</h3>
       <div class="s-row"><label>主题</label>
@@ -2837,6 +2879,10 @@ async function saveAllSettings(){
   s.ttsUrl=get('s-tts-url');s.ttsKey=get('s-tts-key');s.ttsVoice=get('s-tts-voice','cove');
   s.voiceReplyMode=get('s-voice-reply','text');s.autoTts=getB('s-auto-tts');
   s.stream=getB('s-stream');s.showToken=getB('s-show-token');s.showThink=getB('s-show-think');
+  s.hapticEnabled=getB('s-haptic-enabled');
+  s.hapticOnAiReply=getB('s-haptic-ai-reply');
+  s.typingAnimEnabled=getB('s-typing-anim');
+  s.typingAnimShape=get('s-typing-shape','heart');
   s.temp=parseFloat(get('s-temp','0.85'));s.ctx=parseInt(get('s-ctx','20'));
   s.imgSize=parseInt(get('s-imgsize','800'));s.sumThresh=parseInt(get('s-sumthresh','40'));
   s.proactive=getB('s-proactive');s.proMax=parseInt(get('s-pro-max','3'));
@@ -3122,8 +3168,45 @@ function addExpandBtns() {
 // ══════════════════════════════
 //  TYPING INDICATOR
 // ══════════════════════════════
-function showTyping(){const ca=$i('chat-area');const d=document.createElement('div');d.id='typing';d.className='msg-group ai';d.innerHTML='<div class="bubble"><div class="typing-dots"><div class="tdot"></div><div class="tdot"></div><div class="tdot"></div></div></div>';ca.appendChild(d);scrollTo_(false);}
-function removeTyping(){$i('typing')?.remove();}
+function showTyping(isError){
+  const ca=$i('chat-area');
+  const d=document.createElement('div');d.id='typing';d.className='msg-group ai';
+  let inner;
+  if (isError) {
+    inner = '<div class="typing-anim"><span class="typing-error-icon">⁉</span></div>';
+  } else if (S.settings.typingAnimEnabled !== false) {
+    const shape = S.settings.typingAnimShape || 'heart';
+    if (shape === 'dot') {
+      inner = '<div class="typing-dots"><div class="tdot"></div><div class="tdot"></div><div class="tdot"></div></div>';
+    } else {
+      inner = `<div class="typing-anim typing-${shape}"></div>`;
+    }
+  } else {
+    inner = '<div class="typing-dots"><div class="tdot"></div><div class="tdot"></div><div class="tdot"></div></div>';
+  }
+  d.innerHTML=`<div class="bubble typing-bubble">${inner}</div>`;
+  ca.appendChild(d);scrollTo_(false);
+  _showHdrTyping(isError);
+}
+function removeTyping(){$i('typing')?.remove();_hideHdrTyping();}
+
+function _showHdrTyping(isError) {
+  if (S.settings.typingAnimEnabled === false) return;
+  const hdr = $i('hdr-status'); if (!hdr) return;
+  hdr.classList.add('ai-typing');
+  const ind = $i('hdr-typing-indicator'); if (!ind) return;
+  const shape = isError ? 'error' : (S.settings.typingAnimShape || 'heart');
+  const shapeMap = { heart:'♥', star:'★', sparkle:'✦', error:'⁉' };
+  const shapeClass = isError ? 'typing-error-icon' : `typing-${shape}`;
+  ind.innerHTML = `<span class="${shapeClass}" style="font-size:13px">${shapeMap[shape]||''}</span><span style="font-size:11px;color:var(--accent);font-weight:600">正在输入</span>`;
+  ind.style.display = '';
+}
+function _hideHdrTyping() {
+  const hdr = $i('hdr-status'); if (!hdr) return;
+  hdr.classList.remove('ai-typing');
+  const ind = $i('hdr-typing-indicator'); if (!ind) return;
+  ind.style.display = 'none'; ind.innerHTML = '';
+}
 
 // ══════════════════════════════
 //  HELPERS
@@ -3197,6 +3280,48 @@ document.addEventListener('click', e => {
     setTimeout(closeSidebar, 100);
   }
 });
+
+// ══════════════════════════════
+//  HAPTIC FEEDBACK
+// ══════════════════════════════
+function haptic(pattern) {
+  if (!S.settings.hapticEnabled) return;
+  if ('vibrate' in navigator) navigator.vibrate(pattern || 8);
+}
+
+// ── AI reply typing haptic (while streaming) ──
+let _hapticStreamTimer = null;
+function startHapticStream() {
+  if (!S.settings.hapticEnabled || !S.settings.hapticOnAiReply) return;
+  _hapticStreamTimer = setInterval(() => { if ('vibrate' in navigator) navigator.vibrate(3); }, 280);
+}
+function stopHapticStream() {
+  if (_hapticStreamTimer) { clearInterval(_hapticStreamTimer); _hapticStreamTimer = null; }
+}
+
+// ══════════════════════════════
+//  SWIPE RIGHT TO OPEN SIDEBAR
+// ══════════════════════════════
+(function initSwipeGesture() {
+  let startX = 0, startY = 0, tracking = false;
+  const target = document.getElementById('pages') || document.body;
+  target.addEventListener('touchstart', e => {
+    startX = e.touches[0].clientX;
+    startY = e.touches[0].clientY;
+    tracking = startX < 44;
+  }, { passive: true });
+  target.addEventListener('touchmove', e => {
+    if (!tracking) return;
+    const dx = e.touches[0].clientX - startX;
+    const dy = Math.abs(e.touches[0].clientY - startY);
+    if (dx > 60 && dy < 80 && isMobile() && !document.getElementById('sidebar').classList.contains('open')) {
+      openSidebar();
+      haptic([6, 4, 6]);
+      tracking = false;
+    }
+  }, { passive: true });
+  target.addEventListener('touchend', () => { tracking = false; }, { passive: true });
+})();
 
 // ══════════════════════════════
 //  FIREBASE AUTH & CLOUD SYNC
@@ -3985,6 +4110,7 @@ function companionToggleRun() {
 }
 
 function companionStart() {
+  haptic([10,5,10,5,10]);
   const s = S.settings, mode = s.companionTimerMode || 'pomodoro';
   S._companion.mode = mode; S._companion.running = true;
   if (mode === 'countup') {

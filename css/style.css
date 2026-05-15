@@ -1236,3 +1236,27 @@ button, a, .nav-tab, .nav-logo, .chat-item, .ibtn, .hbtn, .act-btn,
   transition: all .15s;
 }
 #input-expand-btn:hover { background: var(--hover); color: var(--accent); }
+
+/* ── Version navigation for AI message regen ── */
+.version-nav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+  padding-top: 5px;
+  border-top: 1px solid var(--border);
+}
+.ver-btn {
+  background: none;
+  border: 1.5px solid var(--border);
+  border-radius: 6px;
+  color: var(--text3);
+  font-size: 14px;
+  line-height: 1;
+  padding: 2px 7px;
+  cursor: pointer;
+  transition: all .15s;
+}
+.ver-btn:hover:not(:disabled) { background: var(--hover); color: var(--accent); border-color: var(--accent); }
+.ver-btn:disabled { opacity: 0.35; cursor: default; }
+.ver-label { font-size: 11px; color: var(--text3); min-width: 28px; text-align: center; }

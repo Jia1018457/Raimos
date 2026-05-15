@@ -164,6 +164,7 @@
     <div id="compose-img-previews" class="compose-img-previews"></div>
     <div class="compose-tools">
       <button class="compose-btn" onclick="composePicLocal()">🖼️ 本地图片</button>
+      <button class="compose-btn" onclick="composeFromAlbum('compose')">📷 从相册</button>
       <button class="compose-btn" onclick="openImgSearchModal('compose')">🔍 搜索图片</button>
       <button class="compose-btn" onclick="composeGenImg('compose')">🎨 生成图片</button>
       <button class="compose-btn" onclick="toggleComposeEmoji()">😊 表情</button>
@@ -196,6 +197,7 @@
       <button class="btn-s" id="comp-btn-pip-desk" onclick="companionEnterPiP()" title="画中画·悬浮小窗" style="display:none">⧉ 画中画</button>
       <button class="btn-s" id="comp-btn-pip-mob" onclick="companionToggleMini()" title="小窗模式" style="display:none">▭ 小窗</button>
       <button class="btn-s" id="comp-btn-mini" onclick="companionToggleMini()" title="小窗模式" style="display:none">▭ 小窗</button>
+      <button class="btn-s mob-hidden" onclick="openCompanionHistory()" title="我们一起的日子">📖 我们一起的日子</button>
     </div>
   </div>
 
@@ -384,7 +386,7 @@
 <div class="page" id="memory-page">
   <div class="page-header">
     <button class="page-back-btn" onclick="switchPage('my-page')">‹ 返回</button>
-    <h2>🧠 记忆库</h2>
+    <h2>⭐ 记忆库</h2>
     <button class="btn-p" onclick="openAddMemModal()">＋ 添加</button>
   </div>
   <div id="memory-tabs" style="display:flex;gap:4px;padding:6px 12px;overflow-x:auto;flex-shrink:0;flex-wrap:nowrap;"></div>
@@ -820,7 +822,7 @@
 <!-- Add Memory -->
 <div class="overlay" id="add-mem-modal">
   <div class="modal">
-    <h2>🧠 添加记忆 <button class="mclose" onclick="closeModal('add-mem-modal')">✕</button></h2>
+    <h2>⭐ 添加记忆 <button class="mclose" onclick="closeModal('add-mem-modal')">✕</button></h2>
     <div class="mrow"><label>内容</label><input type="text" id="amm-text" placeholder="例：我乳糖不耐受"/></div>
     <div class="mrow"><label>分类</label>
       <select id="amm-cat">
@@ -851,6 +853,7 @@
     <div id="compose-modal-img-previews" class="compose-img-previews" style="margin-bottom:8px"></div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
       <button class="btn-s" onclick="composePicLocal('modal')">🖼️ 本地</button>
+      <button class="btn-s" onclick="composeFromAlbum('modal')">📷 相册</button>
       <button class="btn-s" onclick="openImgSearchModal('compose-modal')">🔍 搜索</button>
       <button class="btn-s" onclick="composeGenImg('compose-modal')">🎨 生成</button>
       <button class="btn-s" onclick="toggleComposeModalEmoji()">😊 表情</button>

@@ -908,6 +908,9 @@ async function renderMsgs() {
 function appendBubble(groupEl, msg) {
   const bw = document.createElement('div'); bw.className = 'bw';
   const bubble = makeBubble(msg); bw.appendChild(bubble);
+  // Actions and version-nav go outside the bubble, below it
+  if (bubble._actions) bw.appendChild(bubble._actions);
+  if (bubble._vnav) bw.appendChild(bubble._vnav);
   const bt = document.createElement('div'); bt.className = 'bub-time'; bt.textContent = fmtTimeFull(msg.ts);
   const contact_ = S.currentContact ? S._contacts[S.currentContact] : null;
   if (cs(contact_?.xShowToken, S.settings.showToken) && msg.usage) {
@@ -958,7 +961,7 @@ function makeBubble(msg) {
       ${msg.role==='user'?`<button class="act-btn" onclick="editMsg('${msg.id}')" title="编辑">✏️</button>`:''}
       ${msg.role==='ai'?`<button class="act-btn" onclick="regenMsg('${msg.id}')" title="重新生成">🔄</button>`:''}
       <button class="act-btn" style="color:#e05a7a" onclick="deleteMsg('${msg.id}')" title="删除此条">🗑️</button>`;
-    b.appendChild(acts);
+    b._actions = acts;
     if (msg.role === 'ai' && msg.altVersions?.length) {
       const total = msg.altVersions.length + 1;
       const curPos = msg.altIdx != null ? msg.altIdx + 1 : total;
@@ -966,7 +969,7 @@ function makeBubble(msg) {
       const atNewest = msg.altIdx == null;
       const vnav = document.createElement('div'); vnav.className = 'version-nav';
       vnav.innerHTML = `<button class="ver-btn" onclick="switchMsgVersion('${msg.id}',-1)" ${atOldest?'disabled':''}>‹</button><span class="ver-label">${curPos}/${total}</span><button class="ver-btn" onclick="switchMsgVersion('${msg.id}',1)" ${atNewest?'disabled':''}>›</button>`;
-      b.appendChild(vnav);
+      b._vnav = vnav;
     }
   }
   return b;
@@ -1356,7 +1359,7 @@ async function _renderMomentsNotif(moments) {
 async function makeMomentCard(m) {
   const comments = await dbGetAll('comments','momentId',m.id);
   comments.sort((a,b)=>a.ts-b.ts);
-  const card = document.createElement('div'); card.className = 'moment-card'; card.id='mc-'+m.id;
+  const card = document.createElement('div'); card.className = 'moment-card' + (!(m.images||[]).length ? ' moment-card-text-only' : ''); card.id='mc-'+m.id;
   const avHTML = m.avatar?.startsWith('data:') ? `<img src="${m.avatar}">` : (m.avatar||'😊');
   const nImg = (m.images||[]).length;
   const imgGrid = nImg ? `<div class="moment-images n${Math.min(nImg,4)}">${(m.images||[]).slice(0,4).map(url=>`<div class="mi"><img src="${url}" loading="lazy" onclick="openLB('${url}')"></div>`).join('')}</div>` : '';
@@ -1868,6 +1871,48 @@ async function aiReplyComment(momentId, commentObj, contactId) {
 function composePicLocal(src) {
   if (src === 'modal') { $i('compose-pic-modal-file')?.click(); return; }
   $i('compose-pic-file').click();
+}
+
+async function composeFromAlbum(src) {
+  const isModal = src === 'modal';
+  const photos = await dbGetAll('album');
+  if (!photos.length) { toast('相册为空，请先在相册管理中上传照片'); return; }
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;';
+  const box = document.createElement('div');
+  box.style.cssText = 'background:var(--bg3);border-radius:16px;padding:16px;width:min(360px,92vw);max-height:80vh;display:flex;flex-direction:column;gap:10px;';
+  box.innerHTML = `<div style="display:flex;align-items:center;justify-content:space-between;"><span style="font-weight:800;font-size:14px">📷 从相册选图</span><button style="background:none;border:none;cursor:pointer;font-size:18px;color:var(--text3)" id="_alb-close">✕</button></div>
+  <div style="overflow-y:auto;display:grid;grid-template-columns:repeat(3,1fr);gap:6px;" id="_alb-grid"></div>
+  <div style="font-size:11px;color:var(--text3);text-align:center">点击图片选择，可多选</div>
+  <div style="display:flex;gap:8px;justify-content:flex-end;"><button class="btn-s" id="_alb-cancel">取消</button><button class="btn-p" id="_alb-ok">确定</button></div>`;
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
+  const grid = box.querySelector('#_alb-grid');
+  const selected = new Set();
+  photos.forEach(p => {
+    const div = document.createElement('div');
+    div.style.cssText = 'position:relative;border-radius:8px;overflow:hidden;cursor:pointer;border:2.5px solid transparent;transition:border-color .15s;';
+    div.innerHTML = `<img src="${p.url}" style="width:100%;aspect-ratio:1;object-fit:cover;display:block"><div style="position:absolute;top:2px;right:2px;width:18px;height:18px;border-radius:50%;background:var(--accent);color:#fff;font-size:11px;display:none;align-items:center;justify-content:center;" class="_alb-check">✓</div>`;
+    div.onclick = () => {
+      if (selected.has(p.id)) { selected.delete(p.id); div.style.borderColor='transparent'; div.querySelector('._alb-check').style.display='none'; }
+      else { selected.add(p.id); div.style.borderColor='var(--accent)'; div.querySelector('._alb-check').style.display='flex'; }
+    };
+    grid.appendChild(div);
+  });
+  const close = () => { overlay.remove(); };
+  box.querySelector('#_alb-close').onclick = close;
+  box.querySelector('#_alb-cancel').onclick = close;
+  box.querySelector('#_alb-ok').onclick = () => {
+    close();
+    const picked = photos.filter(p => selected.has(p.id));
+    if (!picked.length) return;
+    if (isModal) {
+      if (!S._composeModalPics) S._composeModalPics = [];
+      picked.forEach(p => { S._composeModalPics.push({dataUrl:p.url}); addComposePicPreview(p.url, S._composeModalPics.length-1, 'modal'); });
+    } else {
+      picked.forEach(p => { S._composePics.push({dataUrl:p.url}); addComposePicPreview(p.url, S._composePics.length-1); });
+    }
+  };
 }
 async function handleComposePic(input, src) {
   const isModal = src === 'modal';
@@ -2948,9 +2993,9 @@ function buildSettingsUI() {
     <div class="s-section" hidden><h3>👤 个人信息</h3>
       <div style="font-size:12px;color:var(--text3);margin-bottom:8px">基本信息用于AI天气查询等功能</div>
       <div class="s-row"><label>所在城市</label><input type="text" id="s-city" value="${s.city||''}" placeholder="如：北京、上海（用于查天气）"/></div>
-      <div style="font-size:11px;color:var(--text3);margin-top:6px;padding:6px 8px;background:var(--hover);border-radius:8px">💡 我的名称、头像在 🎨 外观 中设置；记忆与参考设置请到 🧠 记忆设置</div>
+      <div style="font-size:11px;color:var(--text3);margin-top:6px;padding:6px 8px;background:var(--hover);border-radius:8px">💡 我的名称、头像在 🎨 外观 中设置；记忆与参考设置请到 ⭐ 记忆设置</div>
     </div>
-    <div class="s-section" hidden><h3>🧠 记忆设置</h3>
+    <div class="s-section" hidden><h3>⭐ 记忆设置</h3>
       <div style="font-size:12px;color:var(--text3);margin-bottom:8px">控制 AI 发朋友圈/陪伴/聊天 等功能如何参考历史和记忆库</div>
       <div class="s-row"><label>AI发圈参考最近聊天</label><label class="toggle"><input type="checkbox" id="s-ref-chat" ${s.refChatEnabled?'checked':''}><span class="tslider"></span></label></div>
       <div class="s-row"><label>参考聊天条数</label><input type="number" id="s-ref-chat-count" value="${s.refChatCount||5}" min="1" max="50" style="max-width:70px"/> 条<span style="font-size:11px;color:var(--text3)">（最近N条对话）</span></div>
@@ -3330,6 +3375,26 @@ function openCtxMenu(e){
 }
 function closeCtxMenu(){$i('ctx-menu').classList.remove('show');}
 
+function openCtxMenuFromItems(event, items) {
+  const existing = document.getElementById('dynamic-ctx-menu');
+  if (existing) existing.remove();
+  const m = document.createElement('div');
+  m.id = 'dynamic-ctx-menu';
+  m.style.cssText = 'display:block;position:fixed;background:var(--bg3);border:1.5px solid var(--border);border-radius:11px;padding:4px;box-shadow:0 8px 24px var(--shadow2);z-index:400;min-width:170px;';
+  items.forEach(item => {
+    const btn = document.createElement('button');
+    btn.className = 'ctx-item';
+    btn.textContent = item.label;
+    btn.onclick = () => { m.remove(); document.removeEventListener('click', closeHandler); item.action(); };
+    m.appendChild(btn);
+  });
+  document.body.appendChild(m);
+  positionMenu(m, event.clientX || 100, event.clientY || 100);
+  event.stopPropagation();
+  const closeHandler = (e) => { if (!m.contains(e.target)) { m.remove(); document.removeEventListener('click', closeHandler); } };
+  setTimeout(() => document.addEventListener('click', closeHandler), 0);
+}
+
 function positionMenu(m, x, y) {
   const mw = 175; // estimated menu width
   const mh = m.id === 'ctx-menu' ? 260 : 170; // estimated height
@@ -3657,15 +3722,22 @@ window.addEventListener('load', () => { applyMobileUI(); });
   if (window.visualViewport) {
     window.visualViewport.addEventListener('resize', () => {
       if (!isMobile()) return;
-      setNavHidden(window.innerHeight - window.visualViewport.height > 100);
+      setNavHidden(window.innerHeight - window.visualViewport.height > 150);
     });
-  } else {
-    const input = document.getElementById('msg-input');
-    if (input) {
-      input.addEventListener('focus', () => { if (isMobile()) setTimeout(() => setNavHidden(true), 100); });
-      input.addEventListener('blur', () => setNavHidden(false));
-    }
   }
+  // Also hide nav on any input/textarea focus (covers all pages and input types)
+  document.addEventListener('focusin', e => {
+    if (!isMobile()) return;
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+      setTimeout(() => setNavHidden(true), 80);
+    }
+  });
+  document.addEventListener('focusout', e => {
+    if (!isMobile()) return;
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+      setTimeout(() => setNavHidden(false), 200);
+    }
+  });
 })();
 
 document.addEventListener('click', e => {

@@ -38,10 +38,10 @@ let S = {
     autoComment:false, commentFreqMins:360,
     replyMomentComments:false, replyDelay:120, autoLike:false, likeProb:60,
     maxComments:1,
-    postImages:false, imageFreq:50, imageSources:'album',
+    postImages:false, imageFreq:50, imageSources:'album', momentImgPrompt:'',
     imgGenModel:'openai/dall-e-3',
     aiName:'小可', userName:'我', aiAvatar:'🐱', userAvatar:'😊',
-    showUserAvatar:true, showAiAvatar:true, showBubble:true,
+    showUserAvatar:true, showAiAvatar:true, showBubble:true, showUserBubble:true, showAiBubble:true,
     userBubble:'#ff8fab', aiBubble:'#ffffff',
     userTextColor:'', aiTextColor:'', fontColor:'',
     theme:'light', chatBg:'#fdf6f0', chatBgImg:'', bgOpacity:1, fontSize:14,
@@ -245,6 +245,11 @@ async function init() {
   initSplashScreen();
   if (typeof initCheckin === 'function') initCheckin();
   if (S._dbError) setTimeout(() => toast('⚠️ 数据库加载异常，部分数据可能丢失：' + S._dbError), 800);
+  // Mobile: shorter placeholder text, fix emoji button alias
+  if (isMobile()) {
+    const inp = $i('msg-input');
+    if (inp) inp.placeholder = '发消息…';
+  }
 }
 
 // ══════════════════════════════
@@ -403,9 +408,11 @@ function openContactModal(editId) {
   if (c?.xShowThink !== null && c?.xShowThink !== undefined) { const el=$i('cm-x-show-think'); if(el)el.checked=c.xShowThink!==false; }
   if (c?.xCtx !== null && c?.xCtx !== undefined) { const el=$i('cm-x-ctx'); if(el)el.value=c.xCtx||20; }
   if (c?.xSumThresh !== null && c?.xSumThresh !== undefined) { const el=$i('cm-x-sumthresh'); if(el)el.value=c.xSumThresh||40; }
-  setCmSection('appear', c, ['xAiBubble','xChatBg']);
+  setCmSection('appear', c, ['xAiBubble','xChatBg','xShowUserBubble','xShowAiBubble']);
   if (c?.xAiBubble !== null && c?.xAiBubble !== undefined) { const el=$i('cm-x-ai-bubble'); if(el)el.value=c.xAiBubble||'#ffffff'; }
   if (c?.xChatBg !== null && c?.xChatBg !== undefined) { const el=$i('cm-x-chat-bg'); if(el)el.value=c.xChatBg||'#fdf6f0'; }
+  if (c?.xShowUserBubble !== null && c?.xShowUserBubble !== undefined) { const el=$i('cm-x-show-user-bubble'); if(el)el.checked=c.xShowUserBubble!==false; }
+  if (c?.xShowAiBubble !== null && c?.xShowAiBubble !== undefined) { const el=$i('cm-x-show-ai-bubble'); if(el)el.checked=c.xShowAiBubble!==false; }
   setCmSection('imggen', c, ['xImgGenModel','xImgGenCustomModel','xImgGenApiUrl','xImgGenApiKey']);
   if (c?.xImgGenModel !== null && c?.xImgGenModel !== undefined) {
     const el=$i('cm-imggen-model');
@@ -425,7 +432,7 @@ function openContactModal(editId) {
   if (c?.xProStart !== null && c?.xProStart !== undefined) { const el=$i('cm-x-pro-start'); if(el)el.value=c.xProStart??8; }
   if (c?.xProEnd !== null && c?.xProEnd !== undefined) { const el=$i('cm-x-pro-end'); if(el)el.value=c.xProEnd??22; }
   // Moments section
-  setCmSection('moments', c, ['xMomentsEnabled','xAutoPost','xMomentFreqMode','xMomentFreqCount','xMomentPromptMode','xMomentPrompt','xAutoComment','xCommentFreqMins','xReplyMomentComments','xReplyDelay','xAutoLike','xLikeProb','xMaxComments','xPostImages','xImageFreq','xImageSources']);
+  setCmSection('moments', c, ['xMomentsEnabled','xAutoPost','xMomentFreqMode','xMomentFreqCount','xMomentPromptMode','xMomentPrompt','xAutoComment','xCommentFreqMins','xReplyMomentComments','xReplyDelay','xAutoLike','xLikeProb','xMaxComments','xPostImages','xImageFreq','xImageSources','xMomentImgPrompt']);
   if (c?.xMomentsEnabled !== null && c?.xMomentsEnabled !== undefined) { const el=$i('cm-x-moments-enabled'); if(el)el.checked=!!c.xMomentsEnabled; }
   if (c?.xAutoPost !== null && c?.xAutoPost !== undefined) { const el=$i('cm-x-auto-post'); if(el)el.checked=!!c.xAutoPost; }
   if (c?.xMomentFreqMode !== null && c?.xMomentFreqMode !== undefined) { const el=$i('cm-x-moment-freq-mode'); if(el)el.value=c.xMomentFreqMode||'perWeek'; }
@@ -445,6 +452,7 @@ function openContactModal(editId) {
     const srcs = (c.xImageSources||'album').split(',');
     ['album','search','generate'].forEach(s => { const el=$i(`cm-x-imgsrc-${s}`); if(el)el.checked=srcs.includes(s); });
   }
+  if (c?.xMomentImgPrompt !== null && c?.xMomentImgPrompt !== undefined) { const el=$i('cm-x-moment-img-prompt'); if(el)el.value=c.xMomentImgPrompt||''; }
   // AI chat images section
   setCmSection('aichat', c, ['xAiChatImages','xAiChatImageFreq','xAiChatImageSources']);
   if (c?.xAiChatImages !== null && c?.xAiChatImages !== undefined) { const el=$i('cm-x-ai-chat-images'); if(el)el.checked=!!c.xAiChatImages; }
@@ -521,6 +529,8 @@ async function saveContact() {
     // Appearance section
     xAiBubble: getCmSection('appear') ? getV('cm-x-ai-bubble','#ffffff') : null,
     xChatBg: getCmSection('appear') ? getV('cm-x-chat-bg','#fdf6f0') : null,
+    xShowUserBubble: getCmSection('appear') ? getB2('cm-x-show-user-bubble',true) : null,
+    xShowAiBubble: getCmSection('appear') ? getB2('cm-x-show-ai-bubble',true) : null,
     // Image gen section
     xImgGenModel: getCmSection('imggen') ? (()=>{ const v=getV('cm-imggen-model'); return v==='custom'?(getV('cm-x-imggen-custom-model')||'openai/dall-e-3'):v; })() : null,
     xImgGenCustomModel: getCmSection('imggen') ? getV('cm-x-imggen-custom-model') : null,
@@ -548,6 +558,7 @@ async function saveContact() {
     xPostImages: getCmSection('moments') ? getB2('cm-x-post-images') : null,
     xImageFreq: getCmSection('moments') ? parseInt(getV('cm-x-image-freq','50')) : null,
     xImageSources: getCmSection('moments') ? ['album','search','generate'].filter(s=>$i(`cm-x-imgsrc-${s}`)?.checked).join(',') || 'album' : null,
+    xMomentImgPrompt: getCmSection('moments') ? getV('cm-x-moment-img-prompt','').trim() : null,
     // AI chat images
     xAiChatImages: getCmSection('aichat') ? getB2('cm-x-ai-chat-images') : null,
     xAiChatImageFreq: getCmSection('aichat') ? parseInt(getV('cm-x-ai-chat-freq','20')) : null,
@@ -999,6 +1010,7 @@ async function sendMsg() {
     await addMsg(S.currentChat, { role:'user', type:'text', content:text, replyTo:S.replyTo?.content||null });
     cancelReply(); await renderMsgs(); scrollTo_(false);
     checkKwAnims(text, 'user');
+    void _updateCompanionStats({ msgDelta:1, charDelta:text.length, contactId: S._chats[S.currentChat]?.contactId || null });
     await callAI(S.currentChat);
   } else if (files.length) {
     await renderMsgs(); scrollTo_(false); await callAI(S.currentChat);
@@ -1048,6 +1060,7 @@ try {
     await renderMsgs(); scrollTo_(false);
     if (cs(contact?.xAutoTts, s.autoTts) && cleanText) speakText(cleanText);
     checkKwAnims(cleanText, 'ai');
+    if (cleanText) void _updateCompanionStats({ msgDelta:1, charDelta:cleanText.length, contactId: contact?.id || null });
     autoMemCheck(chatId, contact?.id || null);
   } catch(e) {
     removeTyping();
@@ -1131,6 +1144,8 @@ async function buildMsgs(chat, contact, mems) {
     const stickerHint = S.settings.stickerCallPrompt ? `\n${S.settings.stickerCallPrompt}` : '';
     sys += `\n\n[表情包库] 可在回复中用 [sticker:标签名] 插入表情。可用: ${slist}${stickerHint}`;
   }
+  // Inject current date/time/season so AI knows the time context naturally
+  sys += `\n\n[背景参考] ${buildDatetimeCtx()}，请自然融入此背景，不要主动播报时间或日期。`;
   msgs.push({ role:'system', content:sys });
   if (chat.summary) msgs.push({ role:'system', content:`[历史摘要] ${chat.summary}` });
   const allMsgs = await dbGetAll('messages', 'chatId', chat.id);
@@ -1421,6 +1436,7 @@ function toggleComposeModalEmoji() {
 
 function toggleMomentsManageMenu(e) {
   e.stopPropagation();
+  closeMomentsNewMenu();  // close the other menu first
   const menu=$i('moments-manage-menu'); if(!menu) return;
   const show=menu.style.display==='none';
   menu.style.display=show?'flex':'none';
@@ -1430,6 +1446,7 @@ function closeMomentsManageMenu() { const m=$i('moments-manage-menu');if(m)m.sty
 
 function toggleMomentsNewMenu(e) {
   e.stopPropagation();
+  closeMomentsManageMenu();  // close the other menu first
   const menu=$i('moments-new-menu'); if(!menu) return;
   const show=menu.style.display==='none';
   menu.style.display=show?'flex':'none';
@@ -1554,10 +1571,17 @@ async function regenComment(momentId, commentId) {
   const comment = await dbGet('comments', commentId); if (!comment) return;
   const contact = Object.values(S._contacts).find(ct => ct.name === comment.author);
   if (!contact) { toast('找不到对应助手'); return; }
+  const wasReplyTo = comment.replyTo;  // preserve original replyTo info
   await dbDel('comments', commentId);
   const m = await dbGet('moments', momentId);
   if (m) { const card = await makeMomentCard(m); const old = $i('mc-'+momentId); if(old) old.replaceWith(card); }
   const cl = $i('clist-'+momentId); if(cl) { cl.style.display='flex'; cl.style.flexDirection='column'; }
+  if (wasReplyTo) {
+    // It was a reply — find the comment being replied to and re-generate a reply
+    const allComments = await dbGetAll('comments', 'momentId', momentId);
+    const targetComment = allComments.find(c => c.author === wasReplyTo && !c.replyTo);
+    if (targetComment) { await aiReplyComment(momentId, targetComment, contact.id); return; }
+  }
   await aiCommentMoment(momentId, contact.id);
 }
 function openAiPostModal() {
@@ -1659,7 +1683,7 @@ function buildDatetimeCtx() {
   return `现在是${dateStr} ${partOfDay}${timeStr}`;
 }
 
-async function aiPostMoment(contactId, extraImgPrompt) {
+async function aiPostMoment(contactId, extraImgPromptOverride) {
   const contact = contactId ? S._contacts[contactId] : Object.values(S._contacts)[0];
   if (!contact || !S.settings.apiKey) { toast('需要配置助手和 API Key'); return; }
   const aiName = contact.name || S.settings.aiName || 'AI';
@@ -1671,6 +1695,10 @@ async function aiPostMoment(contactId, extraImgPrompt) {
     const useImages = cs(contact?.xPostImages, S.settings.postImages);
     const imageFreq = cs(contact?.xImageFreq, S.settings.imageFreq) || 50;
     const imageSources = (cs(contact?.xImageSources, S.settings.imageSources) || 'album').split(',').filter(Boolean);
+
+    // Resolve image prompt: per-contact > global setting > one-off modal override
+    const settingsImgPrompt = cs(contact?.xMomentImgPrompt, S.settings.momentImgPrompt) || null;
+    const extraImgPrompt = extraImgPromptOverride || settingsImgPrompt;
 
     // Build real date/time + weather context as background reference only
     const datetimeCtx = buildDatetimeCtx();
@@ -2190,6 +2218,8 @@ function openStickersModal(tab) {
   switchAlbumTab(tab || 'photos');
 }
 function openAlbumModal() { openStickersModal('photos'); }
+// Mobile: open sticker/album modal from chat input bar
+function openChatAlbum() { openStickersModal('photos'); }
 
 async function saveStickerLibConfig(){
   S.settings.stickerLibKey=($i('sticker-lib-key')?.value||'').trim();
@@ -2692,7 +2722,14 @@ function applyBubble(){
   if(S.settings.fontColor) document.documentElement.style.setProperty('--text',S.settings.fontColor);
 }
 function getLum(hex){try{const r=parseInt(hex.slice(1,3),16)/255,g=parseInt(hex.slice(3,5),16)/255,b=parseInt(hex.slice(5,7),16)/255;return .299*r+.587*g+.114*b;}catch{return 0;}}
-function applyBubbleSetting(){const ca=$i('chat-area');if(!ca)return;ca.classList.toggle('chat-no-bubble',S.settings.showBubble===false);}
+function applyBubbleSetting(){
+  const ca=$i('chat-area');if(!ca)return;
+  const contact = S.currentContact ? S._contacts[S.currentContact] : null;
+  const showUser = cs(contact?.xShowUserBubble, S.settings.showUserBubble);
+  const showAi = cs(contact?.xShowAiBubble, S.settings.showAiBubble);
+  ca.classList.toggle('chat-no-user-bubble', showUser===false);
+  ca.classList.toggle('chat-no-ai-bubble', showAi===false);
+}
 
 const BG_PRESETS=[{c:'#fdf6f0',l:'默认粉'},{c:'#fff0f3',l:'粉白'},{c:'#f0fff4',l:'薄荷'},{c:'#f0f8ff',l:'天蓝'},{c:'#f5f0ff',l:'薰衣草'},{c:'#fffde7',l:'奶油'},{c:'#1a1220',l:'深紫'},{c:'#0d1b2a',l:'深蓝'},{c:'#0d2818',l:'深绿'}];
 function openBgModal(){const bg=$i('bg-grid');bg.innerHTML='';BG_PRESETS.forEach(p=>{const d=document.createElement('div');d.className='bg-tile'+(S.settings.chatBg===p.c?' sel':'');d.style.background=p.c;d.style.border='1.5px solid #ccc';d.title=p.l;d.onclick=()=>{S.settings.chatBg=p.c;S.settings.chatBgImg='';applyBg();saveSetting('chatBg',p.c);saveSetting('chatBgImg','');document.querySelectorAll('.bg-tile').forEach(t=>t.classList.remove('sel'));d.classList.add('sel');};bg.appendChild(d);});const cust=document.createElement('div');cust.className='bg-tile';cust.style.background='conic-gradient(red,yellow,lime,cyan,blue,magenta,red)';cust.style.position='relative';cust.innerHTML='<input type="color" style="opacity:0;position:absolute;inset:0;cursor:pointer;width:100%;height:100%" oninput="S.settings.chatBg=this.value;S.settings.chatBgImg=\'\';applyBg();saveSetting(\'chatBg\',this.value)">';bg.appendChild(cust);$i('bg-modal').classList.add('show');}
@@ -2949,16 +2986,18 @@ function buildSettingsUI() {
       <div class="s-row"><label>AI回复触感反馈（打字感）</label><label class="toggle"><input type="checkbox" id="s-haptic-ai-reply" ${s.hapticOnAiReply?'checked':''}><span class="tslider"></span></label><span style="font-size:11px;color:var(--text3)">流式输出时微弱震动</span></div>
       <div class="s-row"><label>正在输入动画形状</label>
         <select id="s-typing-shape">
-          <option value="heart" ${(s.typingAnimShape||'heart')==='heart'?'selected':''}>♥ 心形</option>
+          <option value="heart" ${(s.typingAnimShape||'heart')==='heart'?'selected':''}>♥ 心形（粉色ECG）</option>
           <option value="star" ${s.typingAnimShape==='star'?'selected':''}>★ 星星</option>
           <option value="sparkle" ${s.typingAnimShape==='sparkle'?'selected':''}>✦ 光点</option>
+          <option value="bear" ${s.typingAnimShape==='bear'?'selected':''}>🐻 小熊</option>
+          <option value="cat" ${s.typingAnimShape==='cat'?'selected':''}>🐱 小猫</option>
           <option value="dot" ${s.typingAnimShape==='dot'?'selected':''}>••• 圆点（经典）</option>
         </select>
       </div>
       <div class="s-row"><label>开启正在输入动画</label><label class="toggle"><input type="checkbox" id="s-typing-anim" ${s.typingAnimEnabled!==false?'checked':''}><span class="tslider"></span></label></div>
     </div>
     <div class="s-section" hidden><h3>📳 触感与动效</h3>
-      <div style="font-size:12px;color:var(--text3);margin-bottom:8px">仅在支持振动的设备上生效（Android / 部分PWA）</div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:8px">⚠️ iOS Safari 不支持网页振动 API，触感反馈仅 Android 有效</div>
       <div class="s-row"><label>开启触感反馈</label><label class="toggle"><input type="checkbox" id="s-haptic-enabled" ${s.hapticEnabled!==false?'checked':''}><span class="tslider"></span></label></div>
     </div>
     <div class="s-section" hidden><h3>🎨 外观</h3>
@@ -2979,7 +3018,8 @@ function buildSettingsUI() {
       <div class="s-row"><label>我的名称</label><input type="text" id="s-username" value="${s.userName||'我'}"/></div>
       <div class="s-row"><label>显示我的头像</label><label class="toggle"><input type="checkbox" id="s-show-user-av" ${s.showUserAvatar!==false?'checked':''}><span class="tslider"></span></label></div>
       <div class="s-row"><label>显示 AI 头像</label><label class="toggle"><input type="checkbox" id="s-show-ai-av" ${s.showAiAvatar!==false?'checked':''}><span class="tslider"></span></label></div>
-      <div class="s-row"><label>显示聊天气泡</label><label class="toggle"><input type="checkbox" id="s-show-bubble" ${s.showBubble!==false?'checked':''}><span class="tslider"></span></label><span style="font-size:11px;color:var(--text3)">关闭后文字全宽平铺</span></div>
+      <div class="s-row"><label>显示我的聊天气泡</label><label class="toggle"><input type="checkbox" id="s-show-user-bubble" ${s.showUserBubble!==false?'checked':''}><span class="tslider"></span></label></div>
+      <div class="s-row"><label>显示 AI 聊天气泡</label><label class="toggle"><input type="checkbox" id="s-show-ai-bubble" ${s.showAiBubble!==false?'checked':''}><span class="tslider"></span></label></div>
     </div>
     <div class="s-section" hidden><h3>🐾 主动消息</h3>
       <div style="font-size:11px;color:var(--text3);margin-bottom:8px">需要部署后台服务（Railway）才能离线触发</div>
@@ -3015,6 +3055,7 @@ function buildSettingsUI() {
             </select>
           </div>
           <textarea id="s-moment-prompt" rows="3" placeholder="留空则使用系统提示词。填写后AI发圈/评论时使用此词。" style="width:100%;font-size:12px;resize:vertical" data-expandable="true" data-expand-title="朋友圈专属提示词">${esc(s.momentPrompt||'')}</textarea>
+          <div style="font-size:11px;color:var(--text3);margin-top:3px">💡 如某助手在扩展设置→朋友圈中有单独配置，则优先使用助手的设置而非此处全局设置。</div>
         </div>
       </div>
       <div class="s-row"><label>朋友圈Token显示</label><label class="toggle"><input type="checkbox" id="s-show-moment-token" ${s.showMomentToken?'checked':''}><span class="tslider"></span></label></div>
@@ -3033,6 +3074,9 @@ function buildSettingsUI() {
         <label><input type="checkbox" id="s-imgsrc-search" ${(s.imageSources||'').includes('search')?'checked':''}> 联网搜索</label>
         <label><input type="checkbox" id="s-imgsrc-generate" ${(s.imageSources||'').includes('generate')?'checked':''}> 生成图片</label>
       </div></div>
+      <div class="s-row" style="align-items:flex-start"><label style="padding-top:6px">配图提示词</label>
+        <textarea id="s-moment-img-prompt" rows="2" placeholder="可选：描述想要什么样的配图（如"唯美风景"），留空则 AI 自动判断" style="flex:1;font-size:12px;resize:vertical">${esc(s.momentImgPrompt||'')}</textarea>
+      </div>
     </div>
     <div class="s-section" hidden><h3>📨 AI聊天发图</h3>
       <div style="font-size:11px;color:var(--text3);margin-bottom:8px">各助手可在扩展设置中单独覆盖</div>
@@ -3152,6 +3196,7 @@ async function saveAllSettings(){
   s.autoLike=getB('s-auto-like');s.likeProb=parseInt(get('s-like-prob','60'));
   s.postImages=getB('s-post-images');s.imageFreq=parseInt(get('s-image-freq','50'));
   s.imageSources=['album','search','generate'].filter(x=>getB(`s-imgsrc-${x}`)).join(',') || 'album';
+  s.momentImgPrompt=get('s-moment-img-prompt','').trim();
   s.fontSize=parseInt(get('s-fontsize','14'));s.bgOpacity=parseFloat(get('s-bgopa','1'));
   s.userTextColor=get('s-user-text-color','');s.aiTextColor=get('s-ai-text-color','');s.fontColor=get('s-font-color','');
   const igm=get('s-imggen-model','openai/dall-e-3');
@@ -3161,7 +3206,9 @@ async function saveAllSettings(){
   s.imgGenApiKey=get('s-imggen-api-key');
   s.userName=get('s-username','我');
   s.showUserAvatar=getB('s-show-user-av'); s.showAiAvatar=getB('s-show-ai-av');
-  s.showBubble=getB('s-show-bubble'); applyBubbleSetting();
+  s.showUserBubble=getB('s-show-user-bubble'); s.showAiBubble=getB('s-show-ai-bubble');
+  s.showBubble=true; // legacy, individual settings take precedence
+  applyBubbleSetting();
   // 个人信息
   s.city=get('s-city','').trim();
   s.refChatEnabled=getB('s-ref-chat');
@@ -3449,16 +3496,21 @@ function _showHdrTyping(isError) {
   hdr.classList.add('ai-typing');
   const ind = $i('hdr-typing-indicator'); if (!ind) return;
   const shape = isError ? 'error' : (S.settings.typingAnimShape || 'heart');
-  const shapeMap = { heart:'♥', star:'★', sparkle:'✦', error:'⁉' };
-  const shapeClass = isError ? 'typing-error-icon' : `typing-${shape}`;
-  ind.innerHTML = `<span class="${shapeClass}" style="font-size:13px">${shapeMap[shape]||''}</span><span style="font-size:11px;color:var(--accent);font-weight:600">正在输入</span>`;
+  const shapeMap = { heart:'♥', star:'★', sparkle:'✦', bear:'🐻', cat:'🐱', error:'⁉' };
+  const ch = shapeMap[shape] || '♥';
+  // Build ECG-like scrolling string: flat line · shape · flat line · shape
+  const ecgStr = isError
+    ? '⁉ ⁉ ⁉ ⁉ ⁉ ⁉ ⁉ ⁉'
+    : `${ch}·——·——${ch}·——·——${ch}·——·——${ch}·——·——`;
+  const inner = $i('hdr-ecg-inner');
+  if (inner) inner.textContent = ecgStr;
   ind.style.display = '';
 }
 function _hideHdrTyping() {
   const hdr = $i('hdr-status'); if (!hdr) return;
   hdr.classList.remove('ai-typing');
   const ind = $i('hdr-typing-indicator'); if (!ind) return;
-  ind.style.display = 'none'; ind.innerHTML = '';
+  ind.style.display = 'none';
 }
 
 // ══════════════════════════════
@@ -3470,7 +3522,13 @@ function fmtTime(ts){if(!ts)return'';const d=new Date(ts);return`${d.getHours().
 function fmtTimeFull(ts){return ts?`${fmtDate(ts)} ${fmtTime(ts)}`:''}
 function fmtText(t){return esc(t).replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>').replace(/\*(.*?)\*/g,'<em>$1</em>').replace(/`([^`]+)`/g,'<code style="background:rgba(0,0,0,.08);padding:1px 5px;border-radius:4px;font-family:monospace">$1</code>').replace(/\n/g,'<br>');}
 function onKey(e){if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)){e.preventDefault();sendMsg();}}
-function autoH(el){el.style.height='auto';el.style.height=Math.min(el.scrollHeight,100)+'px';}
+function autoH(el){
+  el.style.height='auto';
+  el.style.height=Math.min(el.scrollHeight,100)+'px';
+  // Show desktop expand button when textarea is tall (>50px)
+  const deskBtn = $i('input-expand-btn-desk');
+  if (deskBtn) deskBtn.style.display = el.offsetHeight > 50 ? '' : 'none';
+}
 function onInputTyping() {
   const inp = $i('msg-input');
   const wrap = inp?.parentElement;
@@ -3486,9 +3544,12 @@ function closeModal(id){$i(id).classList.remove('show');}
 
 // ★ 修复表情按钮：outsideClick 不干扰 btn-emoji 本身的点击
 function outsideClick(e) {
-  const emojiBtn = $i('btn-emoji');
   const emojiPicker = $i('emoji-picker');
-  if (emojiBtn && (emojiBtn === e.target || emojiBtn.contains(e.target))) return;
+  // Don't close if clicking on any emoji button
+  for (const id of ['btn-emoji','btn-emoji-desk']) {
+    const btn = $i(id);
+    if (btn && (btn === e.target || btn.contains(e.target))) return;
+  }
   if (emojiPicker && emojiPicker.contains(e.target)) return;
   if (emojiPicker) emojiPicker.classList.remove('show');
   if (!$i('ctx-menu').contains(e.target)) closeCtxMenu();
@@ -4047,7 +4108,9 @@ function renderCompanionContactOptions() {
   const o0 = document.createElement('option'); o0.value = ''; o0.textContent = '（使用全局模型）'; sel.appendChild(o0);
   Object.values(S._contacts || {}).forEach(c => {
     const o = document.createElement('option'); o.value = c.id;
-    o.textContent = `${c.avatar || '🤖'} ${c.name || 'AI 助手'}`; sel.appendChild(o);
+    // Only show emoji avatar in text; skip data: and http: URLs to avoid showing raw base64
+    const av = c.avatar && !c.avatar.startsWith('data:') && !c.avatar.startsWith('http') ? c.avatar : '🤖';
+    o.textContent = `${av} ${c.name || 'AI 助手'}`; sel.appendChild(o);
   });
   sel.value = cur;
 }
@@ -4405,6 +4468,55 @@ function updateCompanionStartBtn() {
   const b2 = $i('comp-imm-start'); if (b2) b2.textContent = running ? '⏸' : '▶︎';
 }
 
+// ── COMPANION STATS (daily history) ──
+function _todayStr() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+async function _updateCompanionStats({ msgDelta=0, charDelta=0, sessDelta=0, contactId=null }={}) {
+  const date = _todayStr();
+  const existing = (await dbGet('companionStats', date)) || { date, msgCount:0, charCount:0, sessSec:0, companions:[] };
+  existing.msgCount += msgDelta;
+  existing.charCount += charDelta;
+  existing.sessSec += sessDelta;
+  if (contactId && !existing.companions.includes(contactId)) existing.companions.push(contactId);
+  await dbPut('companionStats', existing);
+}
+async function openCompanionHistory() {
+  const all = (await dbGetAll('companionStats')).sort((a,b)=>b.date.localeCompare(a.date));
+  const modal = $i('companion-history-modal');
+  if (!modal) return;
+  // Summary
+  const totalDays = all.length;
+  const totalMsgs = all.reduce((s,r)=>s+r.msgCount,0);
+  const totalChars = all.reduce((s,r)=>s+r.charCount,0);
+  const totalSecs = all.reduce((s,r)=>s+r.sessSec,0);
+  const fmt = s => s>=3600 ? `${Math.floor(s/3600)}h${Math.floor((s%3600)/60)}m` : s>=60 ? `${Math.floor(s/60)}m` : `${s}s`;
+  const sumEl = $i('ch-summary');
+  if (sumEl) sumEl.innerHTML = `共 <b>${totalDays}</b> 天记录 &nbsp;·&nbsp; 消息 <b>${totalMsgs}</b> 条 &nbsp;·&nbsp; 文字 <b>${totalChars}</b> 字 &nbsp;·&nbsp; 陪伴 <b>${fmt(totalSecs)}</b>`;
+  // List
+  const listEl = $i('ch-list');
+  if (listEl) {
+    if (!all.length) { listEl.innerHTML = '<div style="text-align:center;color:var(--text3);padding:24px">暂无记录，开始聊天吧 💗</div>'; }
+    else {
+      listEl.innerHTML = all.map(r => {
+        const names = r.companions.map(id => S._contacts[id]?.name || id).join('、') || '—';
+        return `<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border-bottom:1px solid var(--border);font-size:13px">
+          <div>
+            <div style="font-weight:600">${r.date}</div>
+            <div style="color:var(--text3);font-size:11px;margin-top:2px">与 ${names}</div>
+          </div>
+          <div style="text-align:right;color:var(--text2)">
+            <div>${r.msgCount} 条消息 / ${r.charCount} 字</div>
+            <div style="font-size:11px;color:var(--text3)">${r.sessSec ? '陪伴 '+fmt(r.sessSec) : ''}</div>
+          </div>
+        </div>`;
+      }).join('');
+    }
+  }
+  modal.classList.add('show');
+}
+
 function companionToggleRun() {
   if (S._companion.running) companionPause(); else companionStart();
   updateCompanionStartBtn();
@@ -4445,6 +4557,14 @@ function companionStart() {
       }
     }
     updateCompanionTimerText();
+    // Record 1 second of companion time every 60 ticks to avoid excessive DB writes
+    if (!S._companion._statTick) S._companion._statTick = 0;
+    S._companion._statTick++;
+    if (S._companion._statTick >= 60) {
+      S._companion._statTick = 0;
+      const cid = S.currentChat ? S._chats[S.currentChat]?.contactId : null;
+      void _updateCompanionStats({ sessDelta: 60, contactId: cid });
+    }
   }, 1000);
   companionSetupSpeechTimer();
   applyCompanionMusicSettings();
@@ -4574,7 +4694,7 @@ function companionSpeakClick(event) {
 function companionTogglePhrasePanel() {
   _phrasePanelOpen = !_phrasePanelOpen;
   companionRenderPhrasePanel();
-  const panels = ['comp-phrase-panel', 'comp-mini-phrase-panel'];
+  const panels = ['comp-phrase-panel', 'comp-mini-phrase-panel', 'comp-imm-phrase-panel'];
   panels.forEach(id => {
     const el = document.getElementById(id);
     if (el) el.style.display = _phrasePanelOpen ? '' : 'none';
@@ -4583,7 +4703,7 @@ function companionTogglePhrasePanel() {
 
 function companionClosePhrasePanel() {
   _phrasePanelOpen = false;
-  ['comp-phrase-panel','comp-mini-phrase-panel'].forEach(id => {
+  ['comp-phrase-panel','comp-mini-phrase-panel','comp-imm-phrase-panel'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.style.display = 'none';
   });
@@ -4591,7 +4711,7 @@ function companionClosePhrasePanel() {
 
 function companionRenderPhrasePanel() {
   const phrases = S.settings.companionPhrases || DEFAULT_PHRASES;
-  ['comp-phrase-list','comp-mini-phrase-list'].forEach(id => {
+  ['comp-phrase-list','comp-mini-phrase-list','comp-imm-phrase-list'].forEach(id => {
     const el = document.getElementById(id);
     if (!el) return;
     el.innerHTML = '';
@@ -4669,11 +4789,19 @@ function companionEnterImmersive() {
   updateCompanionStartBtn();
   // Request true fullscreen (covers browser UI)
   const el = $i('companion-page') || document.documentElement;
-  if (el.requestFullscreen) el.requestFullscreen().catch(() => {});
-  else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+  const fsPromise = el.requestFullscreen ? el.requestFullscreen() : (el.webkitRequestFullscreen ? Promise.resolve(el.webkitRequestFullscreen()) : Promise.resolve());
+  fsPromise.catch(() => {}).then(() => {
+    // Lock to portrait on mobile so fullscreen fills the screen vertically
+    if (isMobile() && screen.orientation?.lock) {
+      screen.orientation.lock('portrait').catch(() => {});
+    }
+  });
   // Listen for exit via Escape
   document.addEventListener('fullscreenchange', _companionFsChange);
   document.addEventListener('webkitfullscreenchange', _companionFsChange);
+}
+function companionExitImmersiveOrientation() {
+  if (screen.orientation?.unlock) { try { screen.orientation.unlock(); } catch(e) {} }
 }
 function _companionFsChange() {
   if (!document.fullscreenElement && !document.webkitFullscreenElement) {
@@ -4684,6 +4812,7 @@ function companionExitImmersive() {
   S._companion.immersive = false;
   document.body.classList.remove('comp-immersive');
   updateCompanionStartBtn();
+  companionExitImmersiveOrientation();
   if (document.exitFullscreen && document.fullscreenElement) document.exitFullscreen();
   else if (document.webkitExitFullscreen && document.webkitFullscreenElement) document.webkitExitFullscreen();
   document.removeEventListener('fullscreenchange', _companionFsChange);
@@ -4715,12 +4844,15 @@ async function companionEnterPiP() {
         stage.style.cssText = 'position:absolute;inset:0;border-radius:0;border:none;';
       }
       pipWin.addEventListener('pagehide', () => {
-        // Return stage to original location when PiP closes
-        const wrap = $i('comp-wrap'); const orig = $i('comp-stage');
+        // Stage is currently in pipWin.document, not main document
+        const orig = pipWin.document.getElementById('comp-stage') || $i('comp-stage');
+        const wrap = $i('comp-wrap');
         if (orig && wrap) wrap.insertBefore(orig, wrap.firstChild);
         if (orig) orig.style.cssText = '';
+        // Null cached URLs so renderCompanionStage creates fresh blob URLs in main window
+        S._companion.bgObjUrl = null;
+        S._companion.charObjUrl = null;
         _pipWin = null;
-        // Re-apply background/character after returning from PiP
         void renderCompanionStage();
       });
       toast('✅ 画中画已开启，可置顶在所有窗口前');
@@ -4756,6 +4888,7 @@ function _companionOpenPopup() {
 // ── Mini Float Window (within app, for mobile) ──
 let _miniDragging = false, _miniDragX = 0, _miniDragY = 0, _miniInitX = 0, _miniInitY = 0;
 let _miniTimerInt = null;
+let _miniOnDown = null, _miniOnMove = null, _miniOnUp = null;  // keep refs to remove listeners
 
 function companionToggleMini() {
   const win = $i('comp-mini-win'); if (!win) return;
@@ -4772,19 +4905,19 @@ function companionShowMini() {
   saveSetting('companionMiniOpen', true);
   // Render mini content
   _miniRender();
+  // Remove any previously registered listeners before adding new ones
+  _miniRemoveDragListeners();
   // Start drag — but don't intercept clicks on buttons
   const header = $i('comp-mini-header'); if (!header) return;
-  const onDown = e => {
+  _miniOnDown = e => {
     if (e.target.tagName === 'BUTTON') return;
     _miniDragging = false;
     const t = e.touches?.[0] || e;
     const r = win.getBoundingClientRect();
     _miniDragX = t.clientX - r.left; _miniDragY = t.clientY - r.top;
-    // Only mark as dragging on move, not on down — prevents click suppression
   };
-  const onMove = e => {
+  _miniOnMove = e => {
     const t = e.touches?.[0] || e;
-    const dx = t.clientX - _miniDragX, dy = t.clientY - _miniDragY;
     const r = win.getBoundingClientRect();
     if (!_miniDragging && (Math.abs(t.clientX - (r.left + _miniDragX)) > 4 || Math.abs(t.clientY - (r.top + _miniDragY)) > 4)) {
       _miniDragging = true;
@@ -4796,16 +4929,23 @@ function companionShowMini() {
     win.style.bottom = 'auto'; win.style.right = 'auto';
     e.preventDefault();
   };
-  const onUp = () => { _miniDragging = false; };
-  header.addEventListener('mousedown', onDown);
-  header.addEventListener('touchstart', onDown, { passive: true });
-  document.addEventListener('mousemove', onMove);
-  document.addEventListener('touchmove', onMove, { passive: false });
-  document.addEventListener('mouseup', onUp);
-  document.addEventListener('touchend', onUp);
+  _miniOnUp = () => { _miniDragging = false; };
+  header.addEventListener('mousedown', _miniOnDown);
+  header.addEventListener('touchstart', _miniOnDown, { passive: true });
+  document.addEventListener('mousemove', _miniOnMove);
+  document.addEventListener('touchmove', _miniOnMove, { passive: false });
+  document.addEventListener('mouseup', _miniOnUp);
+  document.addEventListener('touchend', _miniOnUp);
   // Update mini timer
   if (_miniTimerInt) clearInterval(_miniTimerInt);
   _miniTimerInt = setInterval(_miniUpdateTimer, 1000);
+}
+function _miniRemoveDragListeners() {
+  const header = $i('comp-mini-header');
+  if (_miniOnDown && header) { header.removeEventListener('mousedown', _miniOnDown); header.removeEventListener('touchstart', _miniOnDown); }
+  if (_miniOnMove) { document.removeEventListener('mousemove', _miniOnMove); document.removeEventListener('touchmove', _miniOnMove); }
+  if (_miniOnUp) { document.removeEventListener('mouseup', _miniOnUp); document.removeEventListener('touchend', _miniOnUp); }
+  _miniOnDown = null; _miniOnMove = null; _miniOnUp = null;
 }
 function companionHideMini() {
   const win = $i('comp-mini-win'); if (!win) return;
@@ -4813,6 +4953,7 @@ function companionHideMini() {
   S._companion.mini = false;
   saveSetting('companionMiniOpen', false);
   if (_miniTimerInt) { clearInterval(_miniTimerInt); _miniTimerInt = null; }
+  _miniRemoveDragListeners();
 }
 async function _miniRender() {
   const stage = $i('comp-mini-stage'); if (!stage) return;

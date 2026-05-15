@@ -18,15 +18,16 @@
 <div id="nav-tabs">
   <button class="nav-logo" type="button" onclick="openWelcomeFromLogo()" title="回到开屏页">R</button>
   <button class="nav-tab active" data-page="chat-page" onclick="switchPage('chat-page')" title="聊天">💬</button>
-  <button class="nav-tab" data-page="contacts-page" onclick="switchPage('contacts-page')" title="AI联系人">👥</button>
-  <button class="nav-tab" data-page="moments-page" onclick="switchPage('moments-page')" title="朋友圈">🌸</button>
-  <button class="nav-tab" data-page="companion-page" onclick="switchPage('companion-page')" title="陪伴">💗</button>
-  <button class="nav-tab" data-page="memory-page" onclick="switchPage('memory-page')" title="记忆库">🧠</button>
-  <button class="nav-tab" data-page="wardrobe-page" onclick="switchPage('wardrobe-page')" title="换装衣柜">👗</button>
-  <button class="nav-tab" data-page="checkin-page" onclick="switchPage('checkin-page')" title="打卡日历">📅</button>
-  <button class="nav-tab" data-page="settings-page" onclick="switchPage('settings-page')" title="设置">⚙️</button>
+  <button class="nav-tab" data-page="contacts-page" onclick="switchPage('contacts-page')" title="AI联系人">🧸</button>
+  <button class="nav-tab mob-hidden" data-page="moments-page" onclick="switchPage('moments-page')" title="朋友圈">🌸</button>
+  <button class="nav-tab mob-hidden" data-page="companion-page" onclick="switchPage('companion-page')" title="陪伴">💗</button>
+  <button class="nav-tab mob-hidden" data-page="memory-page" onclick="switchPage('memory-page')" title="记忆库">⭐</button>
+  <button class="nav-tab mob-hidden" data-page="wardrobe-page" onclick="switchPage('wardrobe-page')" title="换装衣柜">🎀</button>
+  <button class="nav-tab mob-hidden" data-page="checkin-page" onclick="switchPage('checkin-page')" title="打卡日历">📅</button>
+  <button class="nav-tab mob-hidden" data-page="settings-page" onclick="switchPage('settings-page')" title="设置">⚙️</button>
+  <button class="nav-tab mob-only" data-page="explore-page" onclick="switchPage('explore-page')" title="探索">🐾</button>
   <div class="nav-spacer"></div>
-  <button class="nav-tab" id="nav-user-av" onclick="openUserModal()" title="我的账号" style="font-size:22px;position:relative">😊<span id="status-note-badge" style="display:none;position:absolute;top:4px;right:4px;width:8px;height:8px;border-radius:50%;background:#f43f5e;border:1.5px solid var(--bg)"></span></button>
+  <button class="nav-tab" id="nav-user-av" onclick="openMyOrModal()" title="我的" style="font-size:22px;position:relative">😊<span id="status-note-badge" style="display:none;position:absolute;top:4px;right:4px;width:8px;height:8px;border-radius:50%;background:#f43f5e;border:1.5px solid var(--bg)"></span></button>
 </div>
 
 <!-- SIDEBAR OVERLAY (mobile) -->
@@ -90,12 +91,15 @@
     <div id="reply-bar">↩️ <span id="reply-bar-txt"></span><button class="bar-close" onclick="cancelReply()">✕</button></div>
     <div id="img-preview-row"></div>
     <div id="input-row">
-      <!-- ★ 修复：用 id="btn-emoji" 让 outsideClick 能正确识别 -->
       <button class="ibtn ibtn-g" id="btn-emoji" onclick="toggleEmoji(event)" type="button">😊</button>
-      <textarea id="msg-input" placeholder="发消息…（Enter 换行，Ctrl/⌘+Enter 发送）" rows="1" onkeydown="onKey(event)" oninput="autoH(this)"></textarea>
-      <button class="ibtn ibtn-g" onclick="triggerFile()" title="发文件/图片">📎</button>
-      <button class="ibtn ibtn-g" id="btn-voice" onmousedown="startRec()" ontouchstart="startRec(event)" onmouseup="stopRec()" ontouchend="stopRec()">🎤</button>
-      <button class="ibtn" id="btn-send" onclick="sendMsg()">➤</button>
+      <button class="ibtn ibtn-g" id="btn-file" onclick="triggerFileOrStopRec()" title="发文件/图片">📎</button>
+      <div class="input-ta-wrap">
+        <textarea id="msg-input" placeholder="发消息…（Enter 换行，Ctrl/⌘+Enter 发送）" rows="1" onkeydown="onKey(event)" oninput="autoH(this);onInputTyping()"></textarea>
+        <div class="input-float-btns" id="input-float-btns">
+          <button class="ibtn ibtn-g float-ibtn" id="btn-voice" onclick="onVoiceClick(event)" onmousedown="onVoiceMouseDown(event)" onmouseup="onVoiceMouseUp(event)" ontouchstart="onVoiceTouchStart(event)" ontouchend="onVoiceTouchEnd(event)">🎤</button>
+          <button class="ibtn float-ibtn" id="btn-send" onclick="sendMsg()">➤</button>
+        </div>
+      </div>
     </div>
     <div id="input-hints">
       <span id="hint-online" style="display:none">🌐 联网</span>
@@ -371,6 +375,75 @@
   </div>
 </div>
 
+<!-- ── EXPLORE PAGE ── -->
+<div class="page" id="explore-page">
+  <div class="page-header">
+    <h2>🐾 探索</h2>
+  </div>
+  <div class="explore-scroll">
+    <div class="explore-grid" id="explore-grid">
+      <div class="explore-card explore-card-moments" onclick="switchPage('moments-page')">
+        <div class="explore-card-icon">🌸</div>
+        <div class="explore-card-name">朋友圈</div>
+        <div class="explore-card-desc">查看与发布动态</div>
+      </div>
+      <div class="explore-card explore-card-checkin" onclick="switchPage('checkin-page')">
+        <div class="explore-card-icon">📅</div>
+        <div class="explore-card-name">打卡日历</div>
+        <div class="explore-card-desc">坚持习惯记录</div>
+      </div>
+      <div class="explore-card explore-card-wardrobe" onclick="switchPage('wardrobe-page')">
+        <div class="explore-card-icon">🎀</div>
+        <div class="explore-card-name">换装衣柜</div>
+        <div class="explore-card-desc">装扮你的角色</div>
+      </div>
+      <div class="explore-card explore-card-companion" onclick="switchPage('companion-page')">
+        <div class="explore-card-icon">💗</div>
+        <div class="explore-card-name">陪伴模式</div>
+        <div class="explore-card-desc">专注学习伴你左右</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── MY PAGE (mobile) ── -->
+<div class="page" id="my-page">
+  <div class="my-page-header">
+    <div class="my-avatar-wrap" onclick="openUserModal()">
+      <div id="my-page-avatar" class="my-avatar">😊</div>
+      <div class="my-avatar-edit">✏️</div>
+    </div>
+    <div class="my-name" id="my-page-name">我的</div>
+    <div class="my-status" id="my-page-status">在线</div>
+  </div>
+  <div class="my-tiles">
+    <div class="my-tile" onclick="switchPage('settings-page')">
+      <span class="my-tile-icon">⚙️</span>
+      <div class="my-tile-text">
+        <span class="my-tile-label">设置</span>
+        <span class="my-tile-sub">应用配置与外观</span>
+      </div>
+      <span class="my-tile-arrow">›</span>
+    </div>
+    <div class="my-tile" onclick="switchPage('memory-page')">
+      <span class="my-tile-icon">⭐</span>
+      <div class="my-tile-text">
+        <span class="my-tile-label">记忆库</span>
+        <span class="my-tile-sub">AI 对你的了解</span>
+      </div>
+      <span class="my-tile-arrow">›</span>
+    </div>
+    <div class="my-tile" onclick="openAuthModal()">
+      <span class="my-tile-icon">🔐</span>
+      <div class="my-tile-text">
+        <span class="my-tile-label">账号登录</span>
+        <span class="my-tile-sub" id="my-tile-auth-sub">未登录</span>
+      </div>
+      <span class="my-tile-arrow">›</span>
+    </div>
+  </div>
+</div>
+
 </div><!-- #pages -->
 
 <!-- COMPANION MINI WINDOW (floating overlay) -->
@@ -455,7 +528,7 @@
     <div class="mrow"><label>系统提示词</label>
       <div style="flex:1">
         <label style="font-size:12px;color:var(--text3);cursor:pointer;display:flex;align-items:center;gap:5px;margin-bottom:6px"><input type="checkbox" id="cm-system-inherit" onchange="toggleContactSystem()"> 继承全局设置</label>
-        <div id="cm-system-row"><textarea id="cm-system" placeholder="自定义提示词（留空=无提示词）"></textarea></div>
+        <div id="cm-system-row"><textarea id="cm-system" placeholder="自定义提示词（留空=无提示词）" data-expandable="true" data-expand-title="系统提示词"></textarea></div>
       </div>
     </div>
     <div class="mrow"><label>Temperature</label>
@@ -555,7 +628,7 @@
               <option value="add">追加到系统词</option>
               <option value="replace">替换系统词</option>
             </select>
-            <textarea id="cm-x-moment-prompt" rows="2" placeholder="留空继承全局设置" style="width:100%;font-size:12px;resize:vertical"></textarea>
+            <textarea id="cm-x-moment-prompt" rows="2" placeholder="留空继承全局设置" style="width:100%;font-size:12px;resize:vertical" data-expandable="true" data-expand-title="朋友圈提示词"></textarea>
           </div>
         </div>
         <div class="mrow"><label>AI 自动评论</label><label class="toggle"><input type="checkbox" id="cm-x-auto-comment"><span class="tslider"></span></label></div>
@@ -910,6 +983,26 @@
 </div>
 
 
+<!-- Chat Item Ctx Menu (simplified) -->
+<div id="chat-item-menu">
+  <div class="ctx-item" id="cim-pin-item" onclick="pinChatItemMenu()">📌 置顶</div>
+  <div class="ctx-item" onclick="archiveChatItemMenu()">📁 归档</div>
+  <div class="ctx-item" onclick="renameChatItemMenu()">✏️ 重命名</div>
+  <div class="ctx-item danger" onclick="deleteChatItemMenu()">🗑️ 删除</div>
+</div>
+
+<!-- Prompt Expand Modal -->
+<div class="overlay" id="prompt-expand-modal">
+  <div class="modal prompt-expand-inner">
+    <h2 id="prompt-expand-title">📝 编辑提示词 <button class="mclose" onclick="closePromptExpand()">✕</button></h2>
+    <textarea id="prompt-expand-ta" class="prompt-expand-textarea" placeholder="在此输入…"></textarea>
+    <div class="mbtns">
+      <button class="btn-s" onclick="closePromptExpand()">取消</button>
+      <button class="btn-p" onclick="confirmPromptExpand()">确认</button>
+    </div>
+  </div>
+</div>
+
 <!-- Ctx Menu -->
 <div id="ctx-menu">
   <div class="ctx-item" id="ctx-online-item" onclick="toggleOnline()">🌐 联网搜索</div>
@@ -1079,7 +1172,7 @@
               <code style="background:var(--hover);padding:1px 4px;border-radius:4px">{items}</code>
             </div>
             <textarea id="ckg-custom-prompt" rows="4" placeholder="例：我在坚持「{goal}」，今天第{total}天，{notes}。请用好朋友的语气鼓励我，50字以内。"
-              style="width:100%;resize:vertical;background:var(--input-bg);border:1.5px solid var(--border);border-radius:10px;padding:8px 10px;font-size:12px;color:var(--text);font-family:inherit;outline:none"></textarea>
+              style="width:100%;resize:vertical;background:var(--input-bg);border:1.5px solid var(--border);border-radius:10px;padding:8px 10px;font-size:12px;color:var(--text);font-family:inherit;outline:none" data-expandable="true" data-expand-title="打卡点评提示词"></textarea>
             <div style="font-size:11px;color:var(--text3)">💡 自定义提示词会完全替代内置逻辑，你也可以同时启用助手的系统提示词让 AI 有角色感</div>
           </div>
         </div>

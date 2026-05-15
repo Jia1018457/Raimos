@@ -668,7 +668,7 @@ body.comp-immersive #comp-panel{display:none;}
     overflow: hidden;
   }
 
-  /* 聊天气泡宽度放宽 */
+  /* 聊天气泡宽度 - overridden below */
   .bw { max-width: 88%; }
 
   /* emoji picker 手机端固定定位在底部nav上方 */
@@ -957,3 +957,205 @@ body.comp-immersive #comp-panel{display:none;}
 /* ── Dark theme adjustments ── */
 [data-theme="dark"] .ck-stamp-ring{opacity:.75;}
 [data-theme="dark"] .ck-badge-unlock-box{border-color:var(--accent2);}
+
+
+/* ═══════════════════════════════════════
+   REDESIGN — Mobile Nav, Explore, My Page, Input
+═══════════════════════════════════════ */
+
+/* ── mob-hidden / mob-only (default: hidden only hidden on mobile) ── */
+.mob-only { display: none; }
+
+/* ── Chat Item Context Menu ── */
+#chat-item-menu {
+  display: none; position: fixed;
+  background: var(--bg3); border: 1.5px solid var(--border);
+  border-radius: 14px; padding: 5px;
+  box-shadow: 0 8px 28px var(--shadow2); z-index: 600;
+  min-width: 160px;
+  animation: min .18s cubic-bezier(.34,1.56,.64,1);
+}
+#chat-item-menu.show { display: block; }
+
+/* ── Input row: new structure ── */
+.input-ta-wrap { flex: 1; position: relative; display: flex; align-items: flex-end; }
+.input-float-btns {
+  position: absolute; right: 5px; bottom: 4px;
+  display: flex; gap: 3px; align-items: center;
+  pointer-events: all; z-index: 2;
+}
+.float-ibtn { width: 30px; height: 30px; border-radius: 50%; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 15px; flex-shrink: 0; transition: all .2s; }
+#btn-file { order: -1; /* stays before textarea wrapper */ }
+
+/* Desktop: static layout, mic/send after textarea */
+@media (min-width: 769px) {
+  .input-float-btns { position: static; background: none; gap: 5px; }
+  .float-ibtn { width: 34px; height: 34px; font-size: 16px; }
+  #msg-input { padding-right: 13px; }
+  .input-ta-wrap { flex: 1; }
+  .input-ta-wrap.is-typing .input-float-btns { opacity: 1 !important; pointer-events: all !important; }
+}
+
+/* ── Explore Page ── */
+#explore-page { background: var(--bg2); }
+.explore-scroll { flex: 1; overflow-y: auto; padding: 16px; }
+.explore-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px;
+}
+.explore-card {
+  background: var(--bg3);
+  border: 1.5px solid var(--border);
+  border-radius: 20px;
+  padding: 22px 16px;
+  cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  text-align: center;
+  box-shadow: 0 4px 20px var(--shadow);
+  transition: transform .2s, box-shadow .2s;
+  position: relative; overflow: hidden;
+}
+.explore-card::before {
+  content: '';
+  position: absolute; inset: 0;
+  opacity: .08;
+  border-radius: 20px;
+}
+.explore-card:hover { transform: translateY(-3px); box-shadow: 0 10px 32px var(--shadow2); }
+.explore-card:active { transform: scale(.97); }
+.explore-card-moments::before { background: linear-gradient(135deg, #ff8fab, #ffd6e0); }
+.explore-card-checkin::before { background: linear-gradient(135deg, #a78bfa, #e0d4ff); }
+.explore-card-wardrobe::before { background: linear-gradient(135deg, #f472b6, #fce4f3); }
+.explore-card-companion::before { background: linear-gradient(135deg, #fb7185, #fecdd3); }
+.explore-card-icon { font-size: 44px; filter: drop-shadow(0 3px 8px rgba(0,0,0,.15)); }
+.explore-card-name { font-size: 15px; font-weight: 800; color: var(--text); }
+.explore-card-desc { font-size: 11.5px; color: var(--text3); line-height: 1.4; }
+
+/* ── My Page ── */
+#my-page { background: var(--bg2); }
+.my-page-header {
+  background: linear-gradient(160deg, var(--accent3), var(--bg2) 75%);
+  padding: 32px 20px 24px;
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+  flex-shrink: 0;
+}
+.my-avatar-wrap { position: relative; cursor: pointer; }
+.my-avatar {
+  width: 72px; height: 72px; border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent3), var(--accent2));
+  border: 3px solid var(--bg3);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 38px;
+  box-shadow: 0 4px 18px var(--shadow2);
+  overflow: hidden;
+}
+.my-avatar img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
+.my-avatar-edit {
+  position: absolute; bottom: 0; right: 0;
+  width: 22px; height: 22px; border-radius: 50%;
+  background: var(--accent); color: #fff;
+  font-size: 10px; display: flex; align-items: center; justify-content: center;
+  border: 2px solid var(--bg3);
+}
+.my-name { font-size: 18px; font-weight: 900; color: var(--text); }
+.my-status { font-size: 12px; color: var(--accent); font-weight: 600; }
+.my-tiles {
+  flex: 1; overflow-y: auto;
+  padding: 12px 14px;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.my-tile {
+  background: var(--bg3); border: 1.5px solid var(--border);
+  border-radius: 16px; padding: 14px 16px;
+  display: flex; align-items: center; gap: 12px;
+  cursor: pointer; transition: all .15s;
+  box-shadow: 0 2px 10px var(--shadow);
+}
+.my-tile:hover { transform: translateY(-1px); border-color: var(--accent); box-shadow: 0 5px 18px var(--shadow2); }
+.my-tile:active { transform: scale(.98); }
+.my-tile-icon { font-size: 26px; flex-shrink: 0; }
+.my-tile-text { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.my-tile-label { font-size: 14px; font-weight: 800; color: var(--text); }
+.my-tile-sub { font-size: 11px; color: var(--text3); }
+.my-tile-arrow { font-size: 20px; color: var(--text3); font-weight: 300; }
+
+/* ── Prompt Expand Modal ── */
+.prompt-expand-inner { max-width: 600px; display: flex; flex-direction: column; }
+.prompt-expand-textarea {
+  width: 100%; flex: 1;
+  min-height: 52vh; resize: vertical;
+  background: var(--input-bg); border: 1.5px solid var(--border);
+  border-radius: 12px; padding: 12px 14px;
+  font-size: 14px; font-family: inherit; color: var(--text);
+  outline: none; line-height: 1.7;
+  transition: border-color .2s;
+}
+.prompt-expand-textarea:focus { border-color: var(--accent); }
+.expand-btn {
+  width: 22px; height: 22px; border-radius: 6px;
+  background: var(--hover); border: 1.5px solid var(--border);
+  cursor: pointer; font-size: 12px; color: var(--text3);
+  display: inline-flex; align-items: center; justify-content: center;
+  transition: all .15s; flex-shrink: 0; margin-left: 5px;
+}
+.expand-btn:hover { background: var(--accent3); color: var(--accent-dark); border-color: var(--accent2); }
+
+/* ── Chat bubble no-bubble mode ── */
+#chat-area.chat-no-bubble .bubble {
+  background: none !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 2px 0 !important;
+  border-radius: 0 !important;
+}
+#chat-area.chat-no-bubble .bw { max-width: 100% !important; }
+#chat-area.chat-no-bubble .msg-group.user { align-items: flex-end; }
+#chat-area.chat-no-bubble .msg-group.ai .bubble { font-size: var(--font-size); }
+
+/* ══════════════════════════════════════════
+   MOBILE OVERRIDES (≤768px) — Redesign
+════════════════════════════════════════════ */
+@media (max-width: 768px) {
+
+  /* Nav: hide desktop-only tabs, show mobile-only */
+  .mob-hidden { display: none !important; }
+  .mob-only { display: flex !important; }
+
+  /* Wider AI bubbles, slightly narrower user bubbles */
+  .msg-group.ai .bw { max-width: 97% !important; }
+  .msg-group.user .bw { max-width: 85% !important; }
+
+  /* Token/time moved below bubble */
+  .bw { flex-wrap: wrap; align-items: flex-start; }
+  .bubble { order: 1; }
+  .bub-time { order: 2; width: 100%; padding: 3px 4px 0; align-self: auto; }
+  .msg-group.user .bub-time { text-align: right; }
+  .msg-group.ai .bub-time { text-align: left; }
+  .token-row { order: 3; width: 100%; padding: 0 4px; }
+  .msg-group.user .token-row { text-align: right; }
+  .msg-group.ai .token-row { text-align: left; }
+  .token-detail { order: 4; width: 100%; }
+
+  /* Input row: emoji hidden, file on left, mic+send float inside textarea */
+  #btn-emoji { display: none !important; }
+  #btn-file { order: 0; }
+  .input-ta-wrap { order: 1; }
+  #msg-input { padding-right: 74px !important; border-radius: 20px; }
+  #msg-input.is-typing + .input-float-btns,
+  .input-ta-wrap.is-typing .input-float-btns { opacity: 0; pointer-events: none; }
+  .input-float-btns { transition: opacity .15s; }
+  .float-ibtn.ibtn-g { background: none; color: var(--text3); }
+  .float-ibtn.ibtn-g:hover { background: var(--hover); }
+  #btn-send.float-ibtn { background: linear-gradient(135deg, var(--accent), var(--accent-dark)); color: #fff; box-shadow: 0 2px 8px var(--shadow2); }
+  #btn-send.float-ibtn:hover { transform: scale(1.08); }
+
+  /* Explore and My pages fill nicely */
+  .explore-grid { grid-template-columns: repeat(2, 1fr); }
+
+  /* Prompt expand modal: near fullscreen */
+  .prompt-expand-inner { max-height: 90vh; display: flex; flex-direction: column; }
+  .prompt-expand-textarea { min-height: 55vh; }
+
+  /* ctx-menu and chat-item-menu: smart position handled by JS */
+}

@@ -28,7 +28,7 @@ let S = {
   _contacts: {}, _chats: {}, _memories: [], _stickers: [],
   settings: {
     apiKey:'', apiUrl:'', tavilyKey:'', unsplashKey:'',
-    model:'openai/gpt-4o', systemPrompt:'',
+    model:'', systemPrompt:'',
     ttsMode:'browser', browserVoice:'', ttsUrl:'', ttsKey:'', ttsVoice:'cove',
     voiceReplyMode:'text', autoTts:false,
     stream:true, showToken:false, showThink:true,
@@ -45,6 +45,7 @@ let S = {
     userBubble:'#ff8fab', aiBubble:'#ffffff',
     userTextColor:'', aiTextColor:'', fontColor:'',
     theme:'light', chatBg:'#fdf6f0', chatBgImg:'', bgOpacity:1, fontSize:14,
+    userBubbleGradient:false, userBubbleGradientColor:'#ff4a7d', bubbleGlow:false, bubbleGlowStrength:8, bubbleOpacity:1,
     autoMemEnabled:true, autoMemInterval:5,
     welcomeIcon:'🐻', welcomeTitle:'你好呀！', welcomeSub:'点左上角 ＋ 新建对话，或先去⚙️设置里填 OpenRouter API Key 哦～',
 
@@ -1174,11 +1175,15 @@ function parseStickerTags(text) {
 //  GENERATE IMAGE
 // ══════════════════════════════
 async function generateImage(prompt) {
-  if (!S.settings.apiKey) return; toast('🎨 生成图片中…'); showTyping();
+  const contact = S.currentContact ? S._contacts[S.currentContact] : null;
+  const apiKey = contact?.apiKey || S.settings.apiKey;
+  if (!apiKey) return;
+  const apiUrl = contact?.apiUrl || S.settings.apiUrl || 'https://openrouter.ai';
+  toast('🎨 生成图片中…'); showTyping();
   try {
-    const res = await fetch('https://openrouter.ai/api/v1/images/generations', {
-      method:'POST', headers:{'Authorization':`Bearer ${S.settings.apiKey}`,'Content-Type':'application/json'},
-      body:JSON.stringify({ model:cs((S.currentContact?S._contacts[S.currentContact]:null)?.xImgGenModel, S.settings.imgGenModel)||'openai/dall-e-3', prompt, n:1, size:'1024x1024' }),
+    const res = await fetch(apiUrl + '/api/v1/images/generations', {
+      method:'POST', headers:{'Authorization':`Bearer ${apiKey}`,'Content-Type':'application/json'},
+      body:JSON.stringify({ model:cs(contact?.xImgGenModel, S.settings.imgGenModel)||'openai/dall-e-3', prompt, n:1, size:'1024x1024' }),
     });
     const d = await res.json(); const url = d.data?.[0]?.url;
     if (url) { await addMsg(S.currentChat,{role:'ai',type:'img_gen',url,content:'[生成图片]'}); await renderMsgs(); scrollTo_(false); }
@@ -1243,9 +1248,10 @@ async function getRelevantMems(chatId, contactId) {
   const msgs = await dbGetAll('messages','chatId',chatId);
   const lastText = msgs.slice(-3).map(m=>m.content||'').join(' ');
   if (!lastText.trim()) return [];
-  if (!S.settings.apiKey) return pool.slice(0,5);
+  const rKey = (contactId && S._contacts[contactId]?.apiKey) || S.settings.apiKey;
+  if (!rKey) return pool.slice(0,5);
   try {
-    const res = await fetch('https://openrouter.ai/api/v1/chat/completions',{method:'POST',headers:{'Authorization':`Bearer ${S.settings.apiKey}`,'Content-Type':'application/json'},body:JSON.stringify({model:'openai/gpt-4o-mini',max_tokens:150,stream:false,messages:[{role:'system',content:'从记忆列表中找与当前对话相关的条目，返回JSON: {"relevant":[0,2]}，只返回JSON。'},{role:'user',content:`对话: ${lastText}\n记忆:\n${pool.map((m,i)=>`${i}: ${m.text}`).join('\n')}`}]})});
+    const res = await fetch('https://openrouter.ai/api/v1/chat/completions',{method:'POST',headers:{'Authorization':`Bearer ${rKey}`,'Content-Type':'application/json'},body:JSON.stringify({model:'openai/gpt-4o-mini',max_tokens:150,stream:false,messages:[{role:'system',content:'从记忆列表中找与当前对话相关的条目，返回JSON: {"relevant":[0,2]}，只返回JSON。'},{role:'user',content:`对话: ${lastText}\n记忆:\n${pool.map((m,i)=>`${i}: ${m.text}`).join('\n')}`}]})});
     const d = await res.json(); const raw = d.choices?.[0]?.message?.content||'{}';
     const j = JSON.parse(raw.replace(/```json|```/g,'').trim());
     return (j.relevant||[]).map(i=>pool[i]).filter(Boolean);
@@ -1259,9 +1265,10 @@ async function autoMemCheck(chatId, contactId) {
   const aiMsgCount = msgs.filter(m=>m.role==='ai').length;
   if (aiMsgCount % interval !== 0) return;
   const lastText = msgs.slice(-4).map(m=>`${m.role==='user'?'用户':'AI'}: ${m.content||'[媒体]'}`).join('\n');
-  if (!S.settings.apiKey) return;
+  const mKey = (contactId && S._contacts[contactId]?.apiKey) || S.settings.apiKey;
+  if (!mKey) return;
   try {
-    const res = await fetch('https://openrouter.ai/api/v1/chat/completions',{method:'POST',headers:{'Authorization':`Bearer ${S.settings.apiKey}`,'Content-Type':'application/json'},body:JSON.stringify({model:'openai/gpt-4o-mini',max_tokens:200,stream:false,messages:[{role:'system',content:'分析对话，判断是否有值得长期记忆的信息（个人信息/健康禁忌/长期习惯/重要事件），重要程度≥7才记录。返回JSON: {"shouldSave":true,"text":"内容","cat":"健康","score":8}，只返回JSON。'},{role:'user',content:lastText}]})});
+    const res = await fetch('https://openrouter.ai/api/v1/chat/completions',{method:'POST',headers:{'Authorization':`Bearer ${mKey}`,'Content-Type':'application/json'},body:JSON.stringify({model:'openai/gpt-4o-mini',max_tokens:200,stream:false,messages:[{role:'system',content:'分析对话，判断是否有值得长期记忆的信息（个人信息/健康禁忌/长期习惌/重要事件），重要程度≥7才记录。返回JSON: {"shouldSave":true,"text":"内容","cat":"健康","score":8}，只返回JSON。'},{role:'user',content:lastText}]})});
     const d = await res.json(); const raw = d.choices?.[0]?.message?.content||'{}';
     const j = JSON.parse(raw.replace(/```json|```/g,'').trim());
     if (j.shouldSave && j.text && (j.score||0)>=7 && S._memories.length<50) {
@@ -1288,7 +1295,9 @@ async function checkSummary(chatId) {
   await doSummary(chatId, false);
 }
 async function doSummary(chatId, force) {
-  const chat = S._chats[chatId]; if (!S.settings.apiKey) return;
+  const chat = S._chats[chatId]; if (!chat) return;
+  const sumContact = chat.contactId ? S._contacts[chat.contactId] : null;
+  const sumKey = sumContact?.apiKey || S.settings.apiKey; if (!sumKey) return;
   const cSumThresh = parseInt(cs((chat.contactId?S._contacts[chat.contactId]:null)?.xSumThresh, S.settings.sumThresh))||40;
   const msgs = await dbGetAll('messages','chatId',chatId);
   msgs.sort((a,b)=>a.ts-b.ts);
@@ -1296,7 +1305,7 @@ async function doSummary(chatId, force) {
   if (toSum.length < 5) return;
   const hist = toSum.map(m=>`${m.role==='user'?'用户':'AI'}: ${m.content||'[媒体]'}`).join('\n');
   try {
-    const res = await fetch('https://openrouter.ai/api/v1/chat/completions',{method:'POST',headers:{'Authorization':`Bearer ${S.settings.apiKey}`,'Content-Type':'application/json'},body:JSON.stringify({model:'openai/gpt-4o-mini',max_tokens:400,stream:false,messages:[{role:'system',content:'将对话压缩为简洁摘要（200字内），保留关键信息。'},{role:'user',content:hist}]})});
+    const res = await fetch('https://openrouter.ai/api/v1/chat/completions',{method:'POST',headers:{'Authorization':`Bearer ${sumKey}`,'Content-Type':'application/json'},body:JSON.stringify({model:'openai/gpt-4o-mini',max_tokens:400,stream:false,messages:[{role:'system',content:'将对话压缩为简洁摘要（200字内），保留关键信息。'},{role:'user',content:hist}]})});
     const d = await res.json(); const sumText = d.choices?.[0]?.message?.content||'';
     if (sumText) {
       chat.summary = (chat.summary?chat.summary+'\n':'')+sumText;
@@ -1379,7 +1388,7 @@ async function makeMomentCard(m) {
       <div class="moment-actions">
         <button class="m-act-btn${_hasLiked(m)?` liked`:``}" onclick="likeMoment('${m.id}')">❤️ ${m.likes||0}</button>
         <button class="m-act-btn" onclick="toggleComments('${m.id}')">💬 ${comments.length} 评论</button>
-        ${S.settings.apiKey?`<button class="m-act-btn" onclick="openAiCommentModal('${m.id}')">🤖 让AI评论</button>`:''}
+        ${(S.settings.apiKey||Object.values(S._contacts).some(c=>c.apiKey))?`<button class="m-act-btn" onclick="openAiCommentModal('${m.id}')">🤖 让AI评论</button>`:''}
       </div>
       <div class="comments-list" id="clist-${m.id}" style="display:none">${commHTML}</div>
       <div class="reply-input-wrap" id="ri-${m.id}" style="display:none">
@@ -1685,7 +1694,7 @@ function buildDatetimeCtx() {
 
 async function aiPostMoment(contactId, extraImgPromptOverride) {
   const contact = contactId ? S._contacts[contactId] : Object.values(S._contacts)[0];
-  if (!contact || !S.settings.apiKey) { toast('需要配置助手和 API Key'); return; }
+  if (!contact || !(contact.apiKey || S.settings.apiKey)) { toast('需要配置助手和 API Key'); return; }
   const aiName = contact.name || S.settings.aiName || 'AI';
   const aiAvatar = contact.avatar || S.settings.aiAvatar || '🤖';
   const apiKey = contact.apiKey || S.settings.apiKey;
@@ -1777,7 +1786,7 @@ function scheduleMomentComment(contactId) {
   S._momentTimers[contactId].comment = setTimeout(() => triggerMomentComment(contactId), delay);
 }
 async function triggerMomentComment(contactId) {
-  const contact = S._contacts[contactId]; if (!contact || !S.settings.apiKey) return;
+  const contact = S._contacts[contactId]; if (!contact || !(contact.apiKey || S.settings.apiKey)) return;
   const myName = contact.name;
   const moments = await dbGetAll('moments');
   const allComments = await dbGetAll('comments');
@@ -1805,11 +1814,12 @@ async function triggerMomentComment(contactId) {
   scheduleMomentComment(contactId);
 }
 async function aiCommentMoment(momentId, contactId) {
-  const m = await dbGet('moments',momentId); if(!m||!S.settings.apiKey)return;
+  const m = await dbGet('moments',momentId); if(!m)return;
   const contact = contactId ? S._contacts[contactId] : (S.currentContact?S._contacts[S.currentContact]:Object.values(S._contacts)[0]);
   if (!contact) return;
   const aiName = contact?.name||S.settings.aiName||'AI';
   const apiKey = contact?.apiKey||S.settings.apiKey;
+  if (!apiKey) { toast('需要配置 API Key'); return; }
   const apiUrl = (contact?.apiUrl||S.settings.apiUrl||'https://openrouter.ai');
   const maxC = cs(contact?.xMaxComments, S.settings.maxComments) || 1;
   const count = Math.max(1, Math.ceil(Math.random() * maxC));
@@ -1833,7 +1843,7 @@ async function aiCommentMoment(momentId, contactId) {
   } catch(e){toast('AI评论失败');}
 }
 async function aiReplyComment(momentId, commentObj, contactId) {
-  const contact = contactId ? S._contacts[contactId] : null; if (!contact || !S.settings.apiKey) return;
+  const contact = contactId ? S._contacts[contactId] : null; if (!contact || !(contact.apiKey || S.settings.apiKey)) return;
   const aiName = contact.name || 'AI';
   try {
     const moment = await dbGet('moments', momentId);
@@ -1895,11 +1905,12 @@ function removeComposePic(idx, src) {
 async function composeGenImg(src) {
   const p=prompt('描述要生成的图片（可留空自动生成）:');
   if(p===null)return;
-  if(!S.settings.apiKey){toast('需要API Key');return;}
+  const genKey=Object.values(S._contacts).find(c=>c.apiKey)?.apiKey||S.settings.apiKey;
+  if(!genKey){toast('需要API Key');return;}
   toast('🎨 生成中…');
   try {
     const prompt_=p||'a beautiful lifestyle photo';
-    const res=await fetch('https://openrouter.ai/api/v1/images/generations',{method:'POST',headers:{'Authorization':`Bearer ${S.settings.apiKey}`,'Content-Type':'application/json'},body:JSON.stringify({model:S.settings.imgGenModel||'openai/dall-e-3',prompt:prompt_,n:1,size:'1024x1024'})});
+    const res=await fetch('https://openrouter.ai/api/v1/images/generations',{method:'POST',headers:{'Authorization':`Bearer ${genKey}`,'Content-Type':'application/json'},body:JSON.stringify({model:S.settings.imgGenModel||'openai/dall-e-3',prompt:prompt_,n:1,size:'1024x1024'})});
     const d=await res.json();const url=d.data?.[0]?.url;
     if(url){
       const isModal = src === 'modal' || src === 'compose-modal';
@@ -2712,14 +2723,33 @@ function initMinimap(){
 function toggleTheme(){const d=document.documentElement.getAttribute('data-theme')==='dark';document.documentElement.setAttribute('data-theme',d?'light':'dark');S.settings.theme=d?'light':'dark';$i('theme-btn').textContent=d?'🌙':'☀️';saveSetting('theme',S.settings.theme);}
 function applyTheme(){document.documentElement.setAttribute('data-theme',S.settings.theme||'light');const btn=$i('theme-btn');if(btn)btn.textContent=S.settings.theme==='dark'?'☀️':'🌙';}
 function applyBg(){const ca=$i('chat-area');if(!ca)return;ca.style.background=S.settings.chatBg||'var(--bg)';ca.style.backgroundImage=S.settings.chatBgImg?`url(${S.settings.chatBgImg})`:'none';if(S.settings.chatBgImg){ca.style.backgroundSize='cover';ca.style.backgroundPosition='center';}}
+function hexToRgba(hex,a){try{const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);return `rgba(${r},${g},${b},${a})`;}catch{return hex;}}
 function applyBubble(){
-  document.documentElement.style.setProperty('--user-bubble',S.settings.userBubble||'#ff8fab');
-  document.documentElement.style.setProperty('--ai-bubble',S.settings.aiBubble||'#ffffff');
-  const lum=getLum(S.settings.userBubble||'#ff8fab');
+  const s=S.settings;
+  const bOpa=s.bubbleOpacity??1;
+  const root=document.documentElement;
+  root.style.setProperty('--user-bubble',s.userBubble||'#ff8fab');
+  root.style.setProperty('--ai-bubble',s.aiBubble||'#ffffff');
+  const userC=hexToRgba(s.userBubble||'#ff8fab',bOpa);
+  const aiC=hexToRgba(s.aiBubble||'#ffffff',bOpa);
+  if(s.userBubbleGradient){
+    const c2=hexToRgba(s.userBubbleGradientColor||'#ff4a7d',bOpa);
+    root.style.setProperty('--user-bubble-bg',`linear-gradient(135deg,${userC},${c2})`);
+  }else{
+    root.style.setProperty('--user-bubble-bg',userC);
+  }
+  root.style.setProperty('--ai-bubble-bg',aiC);
+  if(s.bubbleGlow){
+    const gs=s.bubbleGlowStrength??8;
+    root.style.setProperty('--user-bubble-glow',`0 0 ${gs}px ${s.userBubble||'#ff8fab'},inset 0 0 ${Math.round(gs*.6)}px rgba(255,255,255,0.35)`);
+  }else{
+    root.style.setProperty('--user-bubble-glow','0 0 0 transparent');
+  }
+  const lum=getLum(s.userBubble||'#ff8fab');
   const autoUserText=lum>.55?'#3d2c35':'#fff';
-  document.documentElement.style.setProperty('--user-text',S.settings.userTextColor||autoUserText);
-  if(S.settings.aiTextColor) document.documentElement.style.setProperty('--ai-text',S.settings.aiTextColor);
-  if(S.settings.fontColor) document.documentElement.style.setProperty('--text',S.settings.fontColor);
+  root.style.setProperty('--user-text',s.userTextColor||autoUserText);
+  if(s.aiTextColor) root.style.setProperty('--ai-text',s.aiTextColor);
+  if(s.fontColor) root.style.setProperty('--text',s.fontColor);
 }
 function getLum(hex){try{const r=parseInt(hex.slice(1,3),16)/255,g=parseInt(hex.slice(3,5),16)/255,b=parseInt(hex.slice(5,7),16)/255;return .299*r+.587*g+.114*b;}catch{return 0;}}
 function applyBubbleSetting(){
@@ -2904,19 +2934,29 @@ function buildSettingsUI() {
     <div class="s-section" hidden><h3>🔑 API 配置（全局默认）</h3>
       <div class="s-row"><label>API Key</label><input type="password" id="s-key" value="${s.apiKey||''}" placeholder="sk-or-… 助手未填时使用此Key"/></div>
       <div class="s-row"><label>API 地址</label><input type="text" id="s-apiurl" value="${s.apiUrl||''}" placeholder="留空用 OpenRouter，助手未填时使用"/></div>
-      <div class="s-row"><label>默认模型</label><input type="text" id="s-model" value="${s.model||'openai/gpt-4o'}" placeholder="openai/gpt-4o"/></div>
+      <div class="s-row"><label>默认模型</label>
+        <div style="flex:1">
+          <input class="model-search-inp" id="s-model-search" placeholder="搜索模型… 助手未设时使用，留空则自动" oninput="filterModels('s')"/>
+          <div class="model-list" id="s-model-list"></div>
+          <input type="hidden" id="s-model" value="${s.model||''}"/>
+        </div>
+      </div>
       <div class="s-row"><label>默认系统提示词</label><textarea id="s-systemprompt" placeholder="助手未设提示词时使用…" style="min-height:56px" data-expandable="true" data-expand-title="全局系统提示词">${s.systemPrompt||''}</textarea></div>
       <div class="s-row"><label>Tavily Key (搜索)</label><input type="password" id="s-tavily" value="${s.tavilyKey||''}" placeholder="可选，联网搜索"/></div>
       <div class="s-row"><label>Unsplash Key (图片)</label><input type="password" id="s-unsplash" value="${s.unsplashKey||''}" placeholder="可选，朋友圈搜图"/></div>
     </div>
     <div class="s-section" hidden><h3>👤 个人信息</h3>
-      <div style="font-size:12px;color:var(--text3);margin-bottom:8px">用于AI发朋友圈时的个性化内容生成</div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:8px">基本信息用于AI天气查询等功能</div>
       <div class="s-row"><label>所在城市</label><input type="text" id="s-city" value="${s.city||''}" placeholder="如：北京、上海（用于查天气）"/></div>
-      <div class="s-row"><label>参考最近聊天</label><label class="toggle"><input type="checkbox" id="s-ref-chat" ${s.refChatEnabled?'checked':''}><span class="tslider"></span></label></div>
-      <div class="s-row"><label>参考条数</label><input type="number" id="s-ref-chat-count" value="${s.refChatCount||5}" min="1" max="50" style="max-width:70px"/> 条</div>
-      <div class="s-row"><label>参考记忆库</label><label class="toggle"><input type="checkbox" id="s-ref-mem" ${s.refMemEnabled!==false?'checked':''}><span class="tslider"></span></label></div>
-      <div class="s-row"><label>AI 自动记忆</label><label class="toggle"><input type="checkbox" id="s-auto-mem" ${s.autoMemEnabled!==false?'checked':''}><span class="tslider"></span></label></div>
-      <div class="s-row"><label>记忆频率</label><input type="number" id="s-auto-mem-interval" value="${s.autoMemInterval||5}" min="1" max="50" style="max-width:70px"/><span style="font-size:11px;color:var(--text3)"> 条AI回复检查一次</span></div>
+      <div style="font-size:11px;color:var(--text3);margin-top:6px;padding:6px 8px;background:var(--hover);border-radius:8px">💡 我的名称、头像在 🎨 外观 中设置；记忆与参考设置请到 🧠 记忆设置</div>
+    </div>
+    <div class="s-section" hidden><h3>🧠 记忆设置</h3>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:8px">控制 AI 发朋友圈/陪伴/聊天 等功能如何参考历史和记忆库</div>
+      <div class="s-row"><label>AI发圈参考最近聊天</label><label class="toggle"><input type="checkbox" id="s-ref-chat" ${s.refChatEnabled?'checked':''}><span class="tslider"></span></label></div>
+      <div class="s-row"><label>参考聊天条数</label><input type="number" id="s-ref-chat-count" value="${s.refChatCount||5}" min="1" max="50" style="max-width:70px"/> 条<span style="font-size:11px;color:var(--text3)">（最近N条对话）</span></div>
+      <div class="s-row"><label>AI发圈参考记忆库</label><label class="toggle"><input type="checkbox" id="s-ref-mem" ${s.refMemEnabled!==false?'checked':''}><span class="tslider"></span></label></div>
+      <div class="s-row"><label>AI 自动记忆</label><label class="toggle"><input type="checkbox" id="s-auto-mem" ${s.autoMemEnabled!==false?'checked':''}><span class="tslider"></span></label><span style="font-size:11px;color:var(--text3)"> 聊天时自动提取重要信息</span></div>
+      <div class="s-row"><label>记忆检查频率</label><input type="number" id="s-auto-mem-interval" value="${s.autoMemInterval||5}" min="1" max="50" style="max-width:70px"/><span style="font-size:11px;color:var(--text3)"> 条AI回复检查一次</span></div>
     </div>
     <div class="s-section" hidden><h3>🖼️ Cloudinary 图床</h3>
       <div style="font-size:12px;color:var(--text3);margin-bottom:8px">用于图片云端存储（头像、表情包、相册等）。<a href="https://cloudinary.com" target="_blank" style="color:var(--accent)">免费注册</a>后填入下方信息。Upload preset 选 unsigned 模式。</div>
@@ -3020,6 +3060,15 @@ function buildSettingsUI() {
       <div class="s-row"><label>显示 AI 头像</label><label class="toggle"><input type="checkbox" id="s-show-ai-av" ${s.showAiAvatar!==false?'checked':''}><span class="tslider"></span></label></div>
       <div class="s-row"><label>显示我的聊天气泡</label><label class="toggle"><input type="checkbox" id="s-show-user-bubble" ${s.showUserBubble!==false?'checked':''}><span class="tslider"></span></label></div>
       <div class="s-row"><label>显示 AI 聊天气泡</label><label class="toggle"><input type="checkbox" id="s-show-ai-bubble" ${s.showAiBubble!==false?'checked':''}><span class="tslider"></span></label></div>
+      <div class="s-row"><label>气泡透明度</label><input type="range" id="s-bubble-opacity" min="0.1" max="1" step="0.05" value="${s.bubbleOpacity??1}" oninput="$i('s-bubble-opacity-v').textContent=Math.round(this.value*100)+'%';S.settings.bubbleOpacity=parseFloat(this.value);applyBubble();saveSetting('bubbleOpacity',parseFloat(this.value))"><span class="rval" id="s-bubble-opacity-v">${Math.round((s.bubbleOpacity??1)*100)}%</span></div>
+      <div class="s-row"><label>用户气泡渐变色</label><label class="toggle"><input type="checkbox" id="s-bubble-gradient" ${s.userBubbleGradient?'checked':''} onchange="S.settings.userBubbleGradient=this.checked;applyBubble();saveSetting('userBubbleGradient',this.checked);$i('s-bubble-gradient-extra').style.display=this.checked?'':'none'"><span class="tslider"></span></label></div>
+      <div id="s-bubble-gradient-extra" style="${s.userBubbleGradient?'':'display:none'}">
+        <div class="s-row"><label>渐变终止色</label><input type="color" id="s-bubble-gradient-color" value="${s.userBubbleGradientColor||'#ff4a7d'}" oninput="S.settings.userBubbleGradientColor=this.value;applyBubble();saveSetting('userBubbleGradientColor',this.value)"/><span style="font-size:11px;color:var(--text3);margin-left:6px">与用户气泡色形成渐变</span></div>
+      </div>
+      <div class="s-row"><label>气泡边缘发光</label><label class="toggle"><input type="checkbox" id="s-bubble-glow" ${s.bubbleGlow?'checked':''} onchange="S.settings.bubbleGlow=this.checked;applyBubble();saveSetting('bubbleGlow',this.checked);$i('s-bubble-glow-extra').style.display=this.checked?'':'none'"><span class="tslider"></span></label></div>
+      <div id="s-bubble-glow-extra" style="${s.bubbleGlow?'':'display:none'}">
+        <div class="s-row"><label>发光范围</label><input type="range" id="s-bubble-glow-strength" min="2" max="30" step="1" value="${s.bubbleGlowStrength??8}" oninput="$i('s-bubble-glow-strength-v').textContent=this.value+'px';S.settings.bubbleGlowStrength=parseInt(this.value);applyBubble();saveSetting('bubbleGlowStrength',parseInt(this.value))"><span class="rval" id="s-bubble-glow-strength-v">${s.bubbleGlowStrength??8}px</span></div>
+      </div>
     </div>
     <div class="s-section" hidden><h3>🐾 主动消息</h3>
       <div style="font-size:11px;color:var(--text3);margin-bottom:8px">需要部署后台服务（Railway）才能离线触发</div>
@@ -3122,6 +3171,7 @@ function buildSettingsUI() {
     const th = $i('s-theme'); if(th)th.value=s.theme||'light';
     onTtsModeChange(); initVoices();
     renderColorPickers($i('cr-user'),$i('cr-ai'));
+    renderModelList('s', s.model||'');
     updateStorageInfo();
     const ai = $i('auth-info');
     if (ai) ai.textContent = window._fbUser ? ('已登录：' + window._fbUser.email) : '未登录';
@@ -3172,7 +3222,7 @@ async function saveAllSettings(){
   const s=S.settings;
   const get=(id,def='')=>{const el=$i(id);return el?el.value:def;};
   const getB=(id)=>{const el=$i(id);return el?el.checked:false;};
-  s.apiKey=get('s-key');s.apiUrl=get('s-apiurl');s.model=get('s-model','openai/gpt-4o');s.systemPrompt=get('s-systemprompt');s.tavilyKey=get('s-tavily');s.unsplashKey=get('s-unsplash');
+  s.apiKey=get('s-key');s.apiUrl=get('s-apiurl');s.model=get('s-model','');s.systemPrompt=get('s-systemprompt');s.tavilyKey=get('s-tavily');s.unsplashKey=get('s-unsplash');
   s.ttsMode=get('s-tts-mode','browser');s.browserVoice=get('s-bvoice');
   s.ttsUrl=get('s-tts-url');s.ttsKey=get('s-tts-key');s.ttsVoice=get('s-tts-voice','cove');
   s.voiceReplyMode=get('s-voice-reply','text');s.autoTts=getB('s-auto-tts');
@@ -3199,6 +3249,12 @@ async function saveAllSettings(){
   s.momentImgPrompt=get('s-moment-img-prompt','').trim();
   s.fontSize=parseInt(get('s-fontsize','14'));s.bgOpacity=parseFloat(get('s-bgopa','1'));
   s.userTextColor=get('s-user-text-color','');s.aiTextColor=get('s-ai-text-color','');s.fontColor=get('s-font-color','');
+  s.bubbleOpacity=parseFloat(get('s-bubble-opacity','1'));
+  s.userBubbleGradient=getB('s-bubble-gradient');
+  s.userBubbleGradientColor=get('s-bubble-gradient-color','#ff4a7d');
+  s.bubbleGlow=getB('s-bubble-glow');
+  s.bubbleGlowStrength=parseInt(get('s-bubble-glow-strength','8'));
+  applyBubble();
   const igm=get('s-imggen-model','openai/dall-e-3');
   s.imgGenModel=igm==='custom'?(get('s-imggen-custom-model')||'openai/dall-e-3'):igm;
   s.imgGenCustomModel=get('s-imggen-custom-model');

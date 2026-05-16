@@ -24,6 +24,7 @@
   <button class="nav-tab mob-hidden" data-page="memory-page" onclick="switchPage('memory-page')" title="记忆库">⭐</button>
   <button class="nav-tab mob-hidden" data-page="wardrobe-page" onclick="switchPage('wardrobe-page')" title="换装衣柜">🎀</button>
   <button class="nav-tab mob-hidden" data-page="checkin-page" onclick="switchPage('checkin-page')" title="打卡日历">📅</button>
+  <button class="nav-tab mob-hidden" data-page="game-hub-page" onclick="switchPage('game-hub-page')" title="小游戏">🎮</button>
   <button class="nav-tab mob-hidden" data-page="settings-page" onclick="switchPage('settings-page')" title="设置">⚙️</button>
   <button class="nav-tab mob-only" data-page="explore-page" onclick="switchPage('explore-page')" title="探索">🐾</button>
   <div class="nav-spacer"></div>
@@ -468,6 +469,11 @@
         <div class="explore-card-name">我们一起的日子</div>
         <div class="explore-card-desc">聊天记录与陪伴统计</div>
       </div>
+      <div class="explore-card explore-card-game" onclick="switchPage('game-hub-page')">
+        <div class="explore-card-icon">🎮</div>
+        <div class="explore-card-name">游戏天地</div>
+        <div class="explore-card-desc">和AI一起玩小游戏</div>
+      </div>
     </div>
   </div>
 </div>
@@ -531,6 +537,117 @@
         <span class="my-tile-sub" id="my-tile-auth-sub">未登录</span>
       </div>
       <span class="my-tile-arrow">›</span>
+    </div>
+  </div>
+</div>
+
+<!-- ── GAME HUB PAGE ── -->
+<div class="page" id="game-hub-page">
+  <div class="page-header game-hub-header">
+    <button class="page-back-btn mob-only" onclick="switchPage('explore-page')">‹ 返回</button>
+    <h2>🎮 游戏天地</h2>
+  </div>
+  <div class="game-hub-content">
+    <div class="game-hub-stars" id="game-hub-stars"></div>
+    <div class="game-orbs-container">
+      <div class="game-orb game-orb-chess" onclick="switchPage('chess-page')">
+        <div class="orb-icon">♟️</div>
+        <div class="orb-name">棋逢对手</div>
+        <div class="orb-sub">五子棋 · 象棋等</div>
+      </div>
+      <div class="game-orb game-orb-match" onclick="toast('消除类游戏即将上线～')">
+        <div class="orb-icon">🫧</div>
+        <div class="orb-name">消消快乐</div>
+        <div class="orb-sub">连连看 · 消消乐</div>
+        <div class="orb-badge">即将推出</div>
+      </div>
+      <div class="game-orb game-orb-board" onclick="toast('大富翁游戏即将上线～')">
+        <div class="orb-icon">🎲</div>
+        <div class="orb-name">幸运大冒险</div>
+        <div class="orb-sub">情侣大富翁等</div>
+        <div class="orb-badge">即将推出</div>
+      </div>
+      <div class="game-orb game-orb-draw" onclick="toast('你画我猜即将上线～')">
+        <div class="orb-icon">🎨</div>
+        <div class="orb-name">你画我猜</div>
+        <div class="orb-sub">创意无限</div>
+        <div class="orb-badge">即将推出</div>
+      </div>
+      <div class="game-orb game-orb-quiz" onclick="toast('知识挑战游戏即将上线～')">
+        <div class="orb-icon">🧠</div>
+        <div class="orb-name">博学知识家</div>
+        <div class="orb-sub">举例 · 自定义主题</div>
+        <div class="orb-badge">即将推出</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── CHESS SELECT PAGE ── -->
+<div class="page" id="chess-page">
+  <div class="page-header">
+    <button class="page-back-btn" onclick="switchPage('game-hub-page')">‹ 返回</button>
+    <h2>♟️ 棋逢对手</h2>
+  </div>
+  <div class="chess-select-wrap">
+    <p class="chess-intro">选择你想挑战的棋类，和 AI 一起对弈！</p>
+    <div class="chess-grid">
+      <div class="chess-card chess-available" onclick="switchPage('gomoku-page');initGomoku()">
+        <div class="chess-icon">⚫⚪</div>
+        <div class="chess-name">五子棋</div>
+        <div class="chess-desc">先连五子者胜</div>
+        <div class="chess-tag chess-tag-available">立即游戏</div>
+      </div>
+      <div class="chess-card chess-coming" onclick="toast('中国象棋即将上线～')">
+        <div class="chess-icon">♜</div>
+        <div class="chess-name">中国象棋</div>
+        <div class="chess-desc">千年智慧博弈</div>
+        <div class="chess-tag chess-tag-coming">即将推出</div>
+      </div>
+      <div class="chess-card chess-coming" onclick="toast('国际象棋即将上线～')">
+        <div class="chess-icon">♛</div>
+        <div class="chess-name">国际象棋</div>
+        <div class="chess-desc">国际智力运动</div>
+        <div class="chess-tag chess-tag-coming">即将推出</div>
+      </div>
+      <div class="chess-card chess-coming" onclick="toast('围棋即将上线～')">
+        <div class="chess-icon">🔵</div>
+        <div class="chess-name">围棋</div>
+        <div class="chess-desc">方圆之道，万变之妙</div>
+        <div class="chess-tag chess-tag-coming">即将推出</div>
+      </div>
+      <div class="chess-card chess-coming" onclick="toast('飞行棋即将上线～')">
+        <div class="chess-icon">✈️</div>
+        <div class="chess-name">飞行棋</div>
+        <div class="chess-desc">欢乐飞行对战</div>
+        <div class="chess-tag chess-tag-coming">即将推出</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── GOMOKU PAGE ── -->
+<div class="page" id="gomoku-page">
+  <div class="page-header">
+    <button class="page-back-btn" onclick="switchPage('chess-page')">‹ 返回</button>
+    <h2>⚫ 五子棋</h2>
+    <button class="btn-s" onclick="initGomoku()" style="margin-left:auto;font-size:12px">🔄 重开</button>
+  </div>
+  <div class="gomoku-wrap">
+    <div class="gomoku-info-bar">
+      <div class="gomoku-player">
+        <div class="gmk-stone-indicator black"></div>
+        <span>你（黑子）</span>
+      </div>
+      <div class="gomoku-status" id="gomoku-status">等待开始…</div>
+      <div class="gomoku-player">
+        <div class="gmk-stone-indicator white"></div>
+        <span id="gomoku-ai-name">AI（白子）</span>
+      </div>
+    </div>
+    <div class="gomoku-ai-say" id="gomoku-comment"></div>
+    <div class="gomoku-board-scroll">
+      <div class="gomoku-board" id="gomoku-board"></div>
     </div>
   </div>
 </div>

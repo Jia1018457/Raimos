@@ -159,6 +159,7 @@ function switchPage(id) {
   if (id === 'contacts-page') renderContacts();
   if (id === 'moments-page') renderMoments();
   if (id === 'settings-page') { buildSettingsUI(); updateStorageInfo(); }
+  if (id === 'game-hub-page') initGameHubStars();
 }
 
 // ══════════════════════════════
@@ -1953,7 +1954,256 @@ async function saveStickerLibConfig() {
 window.addEventListener('message', async (e) => {
   if (!e.data || e.data.type !== 'WARDROBE_DATA') return;
   const items = e.data.items || [];
-  // 将衣柜数据持久化到 IndexedDB，供云同步使用
   await dbClear('wardrobeItems');
   for (const item of items) await dbPut('wardrobeItems', item);
 });
+
+// ══════════════════════════════════════════
+//  MINI GAMES
+// ══════════════════════════════════════════
+
+// ── Game Hub: Floating Stars ──
+function initGameHubStars() {
+  const el = $i('game-hub-stars');
+  if (!el || el.children.length > 0) return;
+  for (let i = 0; i < 90; i++) {
+    const s = document.createElement('div');
+    const sz = Math.random() * 2.5 + 0.5;
+    s.style.cssText = `position:absolute;width:${sz}px;height:${sz}px;border-radius:50%;background:#fff;`
+      + `opacity:${(Math.random() * 0.6 + 0.15).toFixed(2)};`
+      + `left:${(Math.random() * 100).toFixed(1)}%;top:${(Math.random() * 100).toFixed(1)}%;`
+      + `animation:star-twinkle ${(2 + Math.random() * 3).toFixed(1)}s ease-in-out infinite ${(Math.random() * 4).toFixed(1)}s`;
+    el.appendChild(s);
+  }
+}
+
+// ══ Gomoku (五子棋) ══════════════════════
+const GOMOKU = {
+  board: null,      // 15×15, 0=empty 1=player(black) 2=ai(white)
+  turn: 'player',   // 'player' | 'ai'
+  over: false,
+  lastMove: null,
+  thinking: false,
+};
+
+function initGomoku() {
+  GOMOKU.board = Array.from({ length: 15 }, () => Array(15).fill(0));
+  GOMOKU.turn = 'player';
+  GOMOKU.over = false;
+  GOMOKU.lastMove = null;
+  GOMOKU.thinking = false;
+  const contact = S.currentContact ? S._contacts[S.currentContact] : Object.values(S._contacts)[0];
+  const aiName = contact?.name || 'AI';
+  const el = $i('gomoku-ai-name');
+  if (el) el.textContent = `${aiName}（白子）`;
+  renderGomokuBoard();
+  gomokuSetStatus('你先行棋，落下黑子！');
+  const greeting = contact
+    ? `你好呀！我是${aiName}，我们来下五子棋吧，看谁先赢～`
+    : '游戏开始！请先在「AI联系人」里选一个助手一起玩哦～';
+  gomokuSay(greeting);
+}
+
+function renderGomokuBoard() {
+  const el = $i('gomoku-board');
+  if (!el) return;
+  el.innerHTML = '';
+  for (let r = 0; r < 15; r++) {
+    for (let c = 0; c < 15; c++) {
+      const cell = document.createElement('div');
+      cell.className = 'gmk-cell';
+      if (GOMOKU.lastMove && GOMOKU.lastMove[0] === r && GOMOKU.lastMove[1] === c) {
+        cell.classList.add('last-move');
+      }
+      const v = GOMOKU.board[r][c];
+      if (v !== 0) {
+        const stone = document.createElement('div');
+        stone.className = `gmk-stone-piece ${v === 1 ? 'black' : 'white'}`;
+        cell.appendChild(stone);
+      } else if (!GOMOKU.over && GOMOKU.turn === 'player' && !GOMOKU.thinking) {
+        cell.classList.add('clickable');
+        cell.addEventListener('click', () => gomokuPlayerMove(r, c));
+      }
+      el.appendChild(cell);
+    }
+  }
+}
+
+function gomokuSetStatus(msg) {
+  const el = $i('gomoku-status');
+  if (el) el.textContent = msg;
+}
+
+function gomokuSay(text) {
+  const el = $i('gomoku-comment');
+  if (!el || !text) return;
+  el.textContent = text;
+  el.style.opacity = '1';
+  clearTimeout(el._t);
+  el._t = setTimeout(() => { if (el) el.style.opacity = '0'; }, 5500);
+}
+
+async function gomokuPlayerMove(r, c) {
+  if (GOMOKU.over || GOMOKU.turn !== 'player' || GOMOKU.thinking) return;
+  if (GOMOKU.board[r][c] !== 0) return;
+  GOMOKU.board[r][c] = 1;
+  GOMOKU.lastMove = [r, c];
+  GOMOKU.turn = 'ai';
+  renderGomokuBoard();
+  if (gomokuCheckWin(r, c, 1)) {
+    GOMOKU.over = true;
+    gomokuSetStatus('🎉 你赢了！');
+    await gomokuEndComment('player_win');
+    return;
+  }
+  if (gomokuBoardFull()) {
+    GOMOKU.over = true;
+    gomokuSetStatus('平局！势均力敌～');
+    gomokuSay('哇，平局了！咱们真是旗鼓相当呢！');
+    return;
+  }
+  gomokuSetStatus('AI思考中…');
+  GOMOKU.thinking = true;
+  renderGomokuBoard();
+  await gomokuAiMove();
+}
+
+function gomokuCheckWin(r, c, player) {
+  const dirs = [[0,1],[1,0],[1,1],[1,-1]];
+  for (const [dr, dc] of dirs) {
+    let cnt = 1;
+    for (let i = 1; i < 5; i++) {
+      const nr = r + dr*i, nc = c + dc*i;
+      if (nr < 0 || nr >= 15 || nc < 0 || nc >= 15 || GOMOKU.board[nr][nc] !== player) break;
+      cnt++;
+    }
+    for (let i = 1; i < 5; i++) {
+      const nr = r - dr*i, nc = c - dc*i;
+      if (nr < 0 || nr >= 15 || nc < 0 || nc >= 15 || GOMOKU.board[nr][nc] !== player) break;
+      cnt++;
+    }
+    if (cnt >= 5) return true;
+  }
+  return false;
+}
+
+function gomokuBoardFull() {
+  return GOMOKU.board.every(row => row.every(v => v !== 0));
+}
+
+async function gomokuAiMove() {
+  const s = S.settings;
+  const contact = S.currentContact ? S._contacts[S.currentContact] : Object.values(S._contacts)[0];
+  const useKey = contact?.apiKey || s.apiKey;
+  const useUrl = contact?.apiUrl || 'https://openrouter.ai/api/v1/chat/completions';
+  let row, col, comment;
+
+  if (useKey) {
+    const blacks = [], whites = [];
+    for (let r = 0; r < 15; r++) for (let c = 0; c < 15; c++) {
+      if (GOMOKU.board[r][c] === 1) blacks.push(`(${r},${c})`);
+      else if (GOMOKU.board[r][c] === 2) whites.push(`(${r},${c})`);
+    }
+    const boardTxt = `黑子(你的对手)：${blacks.join('') || '无'}\n白子(你)：${whites.join('') || '无'}`;
+    const aiName = contact?.name || 'AI';
+    const personality = (contact?.system || '你是可爱温柔的AI助手').slice(0, 120);
+    const model = contact?.model || 'openai/gpt-4o-mini';
+    const prompt = `你是${aiName}，正在和用户下五子棋。你执白子，用户执黑子，棋盘15×15（行列均为0-14）。\n当前棋局：\n${boardTxt}\n你的性格：${personality}\n根据你的性格选择落子策略（温柔性格可偶尔礼让，强势性格尽力争胜），在空位落一子并用1-2句符合性格的话回应。\n只返回JSON：{"row":数字,"col":数字,"comment":"你的话"}`;
+    try {
+      const res = await fetch(useUrl, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${useKey}`, 'Content-Type': 'application/json', 'HTTP-Referer': 'https://raimos.app', 'X-Title': 'Raimos' },
+        body: JSON.stringify({ model, max_tokens: 80, stream: false, temperature: 0.75, messages: [{ role: 'user', content: prompt }] }),
+      });
+      const data = await res.json();
+      const txt = data.choices?.[0]?.message?.content || '';
+      const m = txt.match(/\{[\s\S]*?\}/);
+      if (m) { const p = JSON.parse(m[0]); row = p.row; col = p.col; comment = p.comment; }
+    } catch (e) {}
+  }
+
+  // Validate; fall back to heuristic if AI gave bad coords
+  if (typeof row !== 'number' || typeof col !== 'number' ||
+      row < 0 || row >= 15 || col < 0 || col >= 15 || GOMOKU.board[row][col] !== 0) {
+    const h = gomokuHeuristic();
+    row = h.r; col = h.c;
+    if (!comment) comment = '让我想想……就这里吧！';
+  }
+
+  GOMOKU.board[row][col] = 2;
+  GOMOKU.lastMove = [row, col];
+  GOMOKU.turn = 'player';
+  GOMOKU.thinking = false;
+  renderGomokuBoard();
+  gomokuSay(comment || '');
+
+  if (gomokuCheckWin(row, col, 2)) {
+    GOMOKU.over = true;
+    gomokuSetStatus('AI赢了！再来一局？');
+    return;
+  }
+  if (gomokuBoardFull()) {
+    GOMOKU.over = true;
+    gomokuSetStatus('平局！势均力敌～');
+    gomokuSay('平局！你好厉害呢！');
+    return;
+  }
+  gomokuSetStatus('轮到你了！');
+}
+
+// Simple heuristic: win > block > score proximity
+function gomokuHeuristic() {
+  for (let r = 0; r < 15; r++) for (let c = 0; c < 15; c++) {
+    if (GOMOKU.board[r][c] !== 0) continue;
+    GOMOKU.board[r][c] = 2;
+    const win = gomokuCheckWin(r, c, 2);
+    GOMOKU.board[r][c] = 0;
+    if (win) return { r, c };
+  }
+  for (let r = 0; r < 15; r++) for (let c = 0; c < 15; c++) {
+    if (GOMOKU.board[r][c] !== 0) continue;
+    GOMOKU.board[r][c] = 1;
+    const win = gomokuCheckWin(r, c, 1);
+    GOMOKU.board[r][c] = 0;
+    if (win) return { r, c };
+  }
+  let best = null, bestScore = -1;
+  for (let r = 0; r < 15; r++) for (let c = 0; c < 15; c++) {
+    if (GOMOKU.board[r][c] !== 0) continue;
+    let score = 0;
+    for (let dr = -2; dr <= 2; dr++) for (let dc = -2; dc <= 2; dc++) {
+      const nr = r+dr, nc = c+dc;
+      if (nr>=0&&nr<15&&nc>=0&&nc<15&&GOMOKU.board[nr][nc]!==0) score += 2;
+    }
+    score += 8 / (1 + Math.abs(r-7) + Math.abs(c-7));
+    if (score > bestScore) { bestScore = score; best = { r, c }; }
+  }
+  return best || { r: 7, c: 7 };
+}
+
+async function gomokuEndComment(event) {
+  const contact = S.currentContact ? S._contacts[S.currentContact] : Object.values(S._contacts)[0];
+  const useKey = contact?.apiKey || S.settings.apiKey;
+  if (!useKey) {
+    gomokuSay(event === 'player_win' ? '哇，你赢了！好厉害！再来一局？' : '哈哈我赢了！再来？');
+    return;
+  }
+  const aiName = contact?.name || 'AI';
+  const personality = (contact?.system || '你是可爱温柔的AI助手').slice(0, 100);
+  const result = event === 'player_win' ? '你输了' : '你赢了';
+  const prompt = `你是${aiName}，性格：${personality}。我们刚下完五子棋，${result}。用1-2句符合你性格的话回应。只返回JSON：{"comment":"你的话"}`;
+  try {
+    const res = await fetch(contact?.apiUrl || 'https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${useKey}`, 'Content-Type': 'application/json', 'HTTP-Referer': 'https://raimos.app', 'X-Title': 'Raimos' },
+      body: JSON.stringify({ model: contact?.model || 'openai/gpt-4o-mini', max_tokens: 60, stream: false, messages: [{ role: 'user', content: prompt }] }),
+    });
+    const data = await res.json();
+    const txt = data.choices?.[0]?.message?.content || '';
+    const m = txt.match(/\{[\s\S]*?\}/);
+    if (m) gomokuSay(JSON.parse(m[0]).comment || '');
+    else gomokuSay(event === 'player_win' ? '你赢了！好厉害！' : '我赢啦！再来一局？');
+  } catch (e) {
+    gomokuSay(event === 'player_win' ? '你赢了，好厉害！再来一局？' : '我赢了！再来？');
+  }
+}

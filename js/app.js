@@ -1350,7 +1350,25 @@ async function _renderMomentsNotif(moments) {
   if (msgs.length) {
     notifEl.textContent = msgs.join('　') + '　点击查看 →';
     notifEl.style.display = 'block';
-    notifEl.onclick = () => { notifEl.style.display='none'; saveSetting('lastMomentsVisit', Date.now()); };
+    const firstNewComment = newComments[0];
+    notifEl.onclick = () => {
+      notifEl.style.display='none';
+      saveSetting('lastMomentsVisit', Date.now());
+      if (firstNewComment) {
+        const card = $i('mc-'+firstNewComment.momentId);
+        if (card) {
+          card.scrollIntoView({behavior:'smooth', block:'center'});
+          // Expand comments and highlight
+          const cl = $i('clist-'+firstNewComment.momentId), ri = $i('ri-'+firstNewComment.momentId);
+          if (cl) { cl.style.display='flex'; cl.style.flexDirection='column'; cl.style.gap='5px'; }
+          if (ri) ri.style.display='flex';
+          setTimeout(() => {
+            const ci = $i('ci-'+firstNewComment.id);
+            if (ci) { ci.style.background='color-mix(in srgb,var(--accent) 15%,transparent)'; ci.style.borderRadius='8px'; setTimeout(()=>ci.style.background='',2000); }
+          }, 400);
+        }
+      }
+    };
   } else {
     notifEl.style.display = 'none';
   }
@@ -1395,7 +1413,7 @@ async function makeMomentCard(m) {
       </div>
       <div class="comments-list" id="clist-${m.id}" style="display:none">${commHTML}</div>
       <div class="reply-input-wrap" id="ri-${m.id}" style="display:none">
-        <input type="text" id="rinp-${m.id}" placeholder="写评论…" onkeydown="if(event.key==='Enter')submitComment('${m.id}')"/>
+        <textarea id="rinp-${m.id}" placeholder="写评论…" rows="1" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();submitComment('${m.id}')}else{setTimeout(()=>{this.style.height='auto';this.style.height=Math.min(this.scrollHeight,120)+'px'},0)}"></textarea>
         <button class="reply-send" onclick="submitComment('${m.id}')">➤</button>
       </div>
     </div>`;
@@ -1525,7 +1543,7 @@ let _replyingTo = {};
 function replyComment(momentId, commentId, author) {
   _replyingTo[momentId] = {commentId, author};
   const inp = $i('rinp-'+momentId);
-  if (inp) { inp.placeholder=`回复 ${author}…`; inp.focus(); }
+  if (inp) { inp.placeholder=`回复 ${author}…`; inp.focus(); inp.style.height='auto'; }
   const cl = $i('clist-'+momentId), ri = $i('ri-'+momentId);
   if(cl) cl.style.display='flex';
   if(ri) ri.style.display='flex';
@@ -1535,7 +1553,7 @@ async function submitComment(momentId) {
   const text=inp.value.trim(); if(!text)return;
   const rt=_replyingTo[momentId];
   const c={id:uid(),momentId,author:S.settings.userName||'我',text,replyTo:rt?.author||null,ts:Date.now()};
-  await dbPut('comments',c); delete _replyingTo[momentId]; inp.value='';
+  await dbPut('comments',c); delete _replyingTo[momentId]; inp.value=''; inp.style.height='auto';
   // Write to Firestore so backend can trigger AI reply
   if (window._fbUser && window._fbDb && window._fbLib) {
     try {
@@ -1832,8 +1850,8 @@ async function aiCommentMoment(momentId, contactId) {
     for (let i = 0; i < count; i++) {
       if (i > 0) await new Promise(r => setTimeout(r, 1500 + Math.random()*3000));
       const prevCtx = prevTexts.length ? `\n你刚才说了：${prevTexts.join('；')}。再补充一句不同的话，自然衔接但不重复。` : '';
-      const res = await fetch(apiUrl+'/api/v1/chat/completions',{method:'POST',headers:{'Authorization':`Bearer ${apiKey}`,'Content-Type':'application/json'},body:JSON.stringify({model:contact?.model||'openai/gpt-4o-mini',max_tokens:80,stream:false,messages:[{role:'system',content:`你是${aiName}，${buildMomentSysPrompt(contact)}，用1句话自然地评论朋友圈，像真实朋友一样。${prevCtx}`},{role:'user',content:`朋友圈内容: ${m.text||'[图片]'}`}]})});
-      const d=await res.json(); const comment=d.choices?.[0]?.message?.content?.trim()||'';
+      const res = await fetch(apiUrl+'/api/v1/chat/completions',{method:'POST',headers:{'Authorization':`Bearer ${apiKey}`,'Content-Type':'application/json'},body:JSON.stringify({model:contact?.model||'openai/gpt-4o-mini',max_tokens:80,stream:false,messages:[{role:'system',content:`你是${aiName}，${buildMomentSysPrompt(contact)}，用1句话自然地评论朋友圈，像真实朋友一样。直接输出评论内容，不要加任何名字前缀或冒号。${prevCtx}`},{role:'user',content:`朋友圈内容: ${m.text||'[图片]'}`}]})});
+      const d=await res.json(); const comment=(d.choices?.[0]?.message?.content?.trim()||'').replace(/^[\w\s一-龥]{1,15}[：:]\s*/u,'').trim();
       if(comment){
         prevTexts.push(comment);
         const c={id:uid(),momentId,author:aiName,text:comment,replyTo:null,ts:Date.now()};
@@ -1856,8 +1874,9 @@ async function aiReplyComment(momentId, commentObj, contactId) {
       ? '\n\n评论区已有内容：\n' + allComments.slice(-6).map(c => `${c.author}：${c.text}`).join('\n')
       : '';
     const postText = moment?.text ? `朋友圈内容：${moment.text}\n\n` : '';
-    const res = await fetch((contact.apiUrl||S.settings.apiUrl||'https://openrouter.ai')+'/api/v1/chat/completions',{method:'POST',headers:{'Authorization':`Bearer ${contact.apiKey||S.settings.apiKey}`,'Content-Type':'application/json'},body:JSON.stringify({model:contact.model||'openai/gpt-4o-mini',max_tokens:60,stream:false,messages:[{role:'system',content:`你是${aiName}，${buildMomentSysPrompt(contact)}，简短自然地回复朋友圈评论，1句话，像真实朋友一样。`},{role:'user',content:`${postText}朋友"${commentObj.author}"说：${commentObj.text}${threadCtx}`}]})});
-    const d=await res.json(); const reply=d.choices?.[0]?.message?.content||'';
+    const res = await fetch((contact.apiUrl||S.settings.apiUrl||'https://openrouter.ai')+'/api/v1/chat/completions',{method:'POST',headers:{'Authorization':`Bearer ${contact.apiKey||S.settings.apiKey}`,'Content-Type':'application/json'},body:JSON.stringify({model:contact.model||'openai/gpt-4o-mini',max_tokens:60,stream:false,messages:[{role:'system',content:`你是${aiName}，${buildMomentSysPrompt(contact)}，简短自然地回复朋友圈评论，1句话，像真实朋友一样。直接输出回复内容，不要加任何名字前缀或冒号。`},{role:'user',content:`${postText}朋友"${commentObj.author}"说：${commentObj.text}${threadCtx}`}]})});
+    const d=await res.json(); let reply=d.choices?.[0]?.message?.content||'';
+    reply = reply.replace(/^[\w\s一-龥]{1,15}[：:]\s*/u, '').trim();
     if(reply){
       const c={id:uid(),momentId,author:aiName,text:reply,replyTo:commentObj.author,ts:Date.now()};
       await dbPut('comments',c);
@@ -2294,6 +2313,12 @@ async function uploadAlbumPhotos(input) {
     url = url || compressed;
     const photo = {id:uid(), url, label: label.trim(), ts:Date.now()};
     await dbPut('album', photo);
+    // Auto-save URL to Firestore if we have a cloud URL
+    if (url && url.startsWith('https://') && window._fbUser && window._fbLib && window._fbDb) {
+      const { doc, setDoc } = window._fbLib;
+      setDoc(doc(window._fbDb, 'users', window._fbUser.uid, 'album', photo.id),
+        { id: photo.id, url, label: photo.label, ts: photo.ts }).catch(() => {});
+    }
   }
   input.value='';
   renderAlbum();
@@ -3963,7 +3988,11 @@ async function syncToCloud() {
     const { doc, setDoc } = window._fbLib;
     const fsDb = window._fbDb;
     const settingsData = {};
-    for (const [k,v] of Object.entries(S.settings)) settingsData[k] = v ?? null;
+    const SKIP_AVATAR_KEYS = new Set(['aiAvatar', 'userAvatar']);
+    for (const [k,v] of Object.entries(S.settings)) {
+      if (SKIP_AVATAR_KEYS.has(k)) continue; // avatars are device-local only
+      settingsData[k] = v ?? null;
+    }
     await setDoc(doc(fsDb, 'users', uid, 'meta', 'settings'), settingsData);
 
     const contacts = await dbGetAll('contacts');
@@ -4040,7 +4069,16 @@ async function syncToCloud() {
       if (r.date >= cutoffStr) { await setDoc(doc(fsDb, 'users', uid, 'checkinRecords', r.id), r); ckRecCount++; }
     }
 
-    let msg = `✅ 同步完成！${contacts.length}个助手，${chats.length}个对话（${totalMsgs}条消息），${memories.length}条记忆，${moments.length}条朋友圈，${album.length}张相册，${ckGoals.length}个打卡目标（${ckRecCount}条记录）`;
+    // 陪伴统计（近 60 天）
+    const compStats = await dbGetAll('companionStats');
+    const compCutoff = new Date(); compCutoff.setDate(compCutoff.getDate() - 60);
+    const compCutoffStr = compCutoff.toISOString().slice(0,10);
+    let compStatCount = 0;
+    for (const s of compStats) {
+      if (s.date >= compCutoffStr) { await setDoc(doc(fsDb, 'users', uid, 'companionStats', s.date), s); compStatCount++; }
+    }
+
+    let msg = `✅ 同步完成！${contacts.length}个助手，${chats.length}个对话（${totalMsgs}条消息），${memories.length}条记忆，${moments.length}条朋友圈，${album.length}张相册，${ckGoals.length}个打卡目标（${ckRecCount}条记录），${compStatCount}条陪伴记录`;
     if (localPhotos > 0 && !hasCloudinary) msg += `\n⚠️ ${localPhotos}张照片是本地上传的，未配置Cloudinary故无法跨设备同步`;
     toast(msg);
   } catch(e) {
@@ -4058,11 +4096,13 @@ async function restoreFromCloud() {
   try {
     const { collection, getDocs, doc, getDoc } = window._fbLib;
     const fsDb = window._fbDb;
-    // 1. 设置（API Key、主题等）
+    // 1. 设置（API Key、主题等，头像设备本地保留不覆盖）
+    const SKIP_AVATAR_KEYS = new Set(['aiAvatar', 'userAvatar']);
     const settingsDoc = await getDoc(doc(fsDb, 'users', uid, 'meta', 'settings'));
     if (settingsDoc.exists()) {
       const settingsData = settingsDoc.data();
       for (const [k, v] of Object.entries(settingsData)) {
+        if (SKIP_AVATAR_KEYS.has(k)) continue;
         if (v !== null && v !== undefined) {
           await setSetting(k, v);
           S.settings[k] = v;
@@ -4071,10 +4111,16 @@ async function restoreFromCloud() {
       applyTheme(); applyBg(); applyBubble(); buildSettingsUI();
     }
 
-    // 2. 联系人
+    // 2. 联系人（头像为 __local__ 则保留本地）
     const contactsSnap = await getDocs(collection(fsDb, 'users', uid, 'contacts'));
     for (const d of contactsSnap.docs) {
-      const data = d.data(); await dbPut('contacts', data); S._contacts[data.id] = data;
+      const data = d.data();
+      if (data.avatar === '__local__') {
+        const existing = await dbGet('contacts', data.id);
+        if (existing?.avatar) data.avatar = existing.avatar;
+        else delete data.avatar;
+      }
+      await dbPut('contacts', data); S._contacts[data.id] = data;
     }
 
     // 3. 对话
@@ -4126,6 +4172,10 @@ async function restoreFromCloud() {
     const ckRecsSnap = await getDocs(collection(fsDb, 'users', uid, 'checkinRecords'));
     for (const d of ckRecsSnap.docs) { await dbPut('checkinRecords', d.data()); }
 
+    // 10. 陪伴统计
+    const compStatsSnap = await getDocs(collection(fsDb, 'users', uid, 'companionStats'));
+    for (const d of compStatsSnap.docs) { await dbPut('companionStats', d.data()); }
+
     S.kwAnims = await dbGetAll('kwAnims');
     renderChatList(); renderContacts(); renderMemories(); renderMoments();
     // 刷新打卡页面
@@ -4135,7 +4185,7 @@ async function restoreFromCloud() {
     }
     // 刷新陪伴页面（若已打开）
     if ($i('companion-page')?.classList.contains('active')) renderCompanionPage();
-    toast('✅ 恢复完成！设置、联系人、对话、打卡数据已全部恢复');
+    toast('✅ 恢复完成！设置、联系人、对话、打卡、陪伴记录已全部恢复');
   } catch(e) {
     toast('❌ 恢复失败：' + e.message);
     console.error(e);
@@ -4610,6 +4660,50 @@ async function _updateCompanionStats({ msgDelta=0, charDelta=0, sessDelta=0, con
   if (contactId && !existing.companions.includes(contactId)) existing.companions.push(contactId);
   await dbPut('companionStats', existing);
 }
+// ── DAY COUNTERS (纪念日) ──
+function _loadDayCounters() { try { return JSON.parse(localStorage.getItem('raimosDayCounters')||'[]'); } catch { return []; } }
+function _saveDayCounters(arr) { localStorage.setItem('raimosDayCounters', JSON.stringify(arr)); }
+function renderDayCounters() {
+  const list = $i('ch-counters-list'); if (!list) return;
+  const counters = _loadDayCounters();
+  if (!counters.length) {
+    list.innerHTML = '<div style="font-size:12px;color:var(--text3);text-align:center;padding:6px">暂无纪念日，点击「+」添加</div>';
+    return;
+  }
+  const today = new Date(); today.setHours(0,0,0,0);
+  list.innerHTML = counters.map((c, i) => {
+    const d = new Date(c.date); d.setHours(0,0,0,0);
+    const days = Math.round((today - d) / 86400000);
+    const result = days > 0 ? `已过 <b>${days}</b> 天` : days === 0 ? '<b>就是今天 🎉</b>' : `还有 <b>${-days}</b> 天`;
+    return `<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--hover);border-radius:10px;font-size:13px;margin-bottom:6px">
+      <div style="flex:1"><div style="font-weight:700;color:var(--text)">${esc(c.label)}</div><div style="color:var(--text3);font-size:11px;margin-top:2px">${c.date} · ${result}</div></div>
+      <button style="background:none;border:none;cursor:pointer;color:var(--text3);font-size:13px;padding:2px 5px" onclick="delDayCounter(${i})">✕</button>
+    </div>`;
+  }).join('');
+}
+function addDayCounter() {
+  const form = $i('ch-add-counter-form');
+  if (form) { form.style.display = form.style.display==='none'?'flex':'none'; return; }
+}
+function _submitDayCounter() {
+  const label = ($i('ch-cnt-label')?.value||'').trim();
+  const date = $i('ch-cnt-date')?.value||'';
+  if (!label) { toast('请输入纪念日名称'); return; }
+  if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) { toast('请选择日期'); return; }
+  const counters = _loadDayCounters();
+  counters.push({ id: uid(), label, date });
+  _saveDayCounters(counters);
+  const form = $i('ch-add-counter-form');
+  if (form) { $i('ch-cnt-label').value=''; form.style.display='none'; }
+  renderDayCounters();
+}
+function delDayCounter(i) {
+  const counters = _loadDayCounters();
+  counters.splice(i, 1);
+  _saveDayCounters(counters);
+  renderDayCounters();
+}
+
 async function openCompanionHistory() {
   const all = (await dbGetAll('companionStats')).sort((a,b)=>b.date.localeCompare(a.date));
   const modal = $i('companion-history-modal');
@@ -4642,6 +4736,7 @@ async function openCompanionHistory() {
       }).join('');
     }
   }
+  renderDayCounters();
   modal.classList.add('show');
 }
 

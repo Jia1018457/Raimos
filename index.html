@@ -28,7 +28,19 @@
   <button class="nav-tab mob-hidden" data-page="settings-page" onclick="switchPage('settings-page')" title="设置">⚙️</button>
   <button class="nav-tab mob-only" data-page="explore-page" onclick="switchPage('explore-page')" title="探索">🐾</button>
   <div class="nav-spacer"></div>
-  <button class="nav-tab" id="nav-user-av" onclick="openMyOrModal()" title="我的" style="font-size:22px;position:relative">😊<span id="status-note-badge" style="display:none;position:absolute;top:4px;right:4px;width:8px;height:8px;border-radius:50%;background:#f43f5e;border:1.5px solid var(--bg)"></span></button>
+
+  <!-- Me/User: smiley face, heartbeat (content dynamic via JS) -->
+  <button class="nav-tab icon-me-btn" id="nav-user-av" onclick="openMyOrModal()" title="我的" style="font-size:22px;position:relative">
+    <span class="nav-icon icon-me nav-me-icon"><svg class="nav-svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="10"/>
+      <circle cx="9" cy="10" r="1.3" fill="currentColor" stroke="none"/>
+      <circle cx="15" cy="10" r="1.3" fill="currentColor" stroke="none"/>
+      <path d="M7.5 14.5 Q9.5 17.5 12 17.5 Q14.5 17.5 16.5 14.5"/>
+      <circle cx="7.5" cy="13.5" r="1.5" fill="currentColor" stroke="none" opacity="0.12"/>
+      <circle cx="16.5" cy="13.5" r="1.5" fill="currentColor" stroke="none" opacity="0.12"/>
+    </svg></span>
+    <span id="status-note-badge" style="display:none;position:absolute;top:4px;right:4px;width:8px;height:8px;border-radius:50%;background:#f43f5e;border:1.5px solid var(--bg)"></span>
+  </button>
 </div>
 
 <!-- SIDEBAR OVERLAY (mobile) -->
@@ -445,27 +457,66 @@
   <div class="explore-scroll">
     <div class="explore-grid" id="explore-grid">
       <div class="explore-card explore-card-moments" onclick="switchPage('moments-page')">
-        <div class="explore-card-icon">🌸</div>
+        <div class="explore-card-icon">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <ellipse cx="12" cy="7.5" rx="2.8" ry="4.2" fill="rgba(255,162,196,.4)" stroke="currentColor"/>
+            <ellipse cx="12" cy="7.5" rx="2.8" ry="4.2" transform="rotate(72 12 12)" fill="rgba(255,162,196,.4)" stroke="currentColor"/>
+            <ellipse cx="12" cy="7.5" rx="2.8" ry="4.2" transform="rotate(144 12 12)" fill="rgba(255,162,196,.4)" stroke="currentColor"/>
+            <ellipse cx="12" cy="7.5" rx="2.8" ry="4.2" transform="rotate(216 12 12)" fill="rgba(255,162,196,.4)" stroke="currentColor"/>
+            <ellipse cx="12" cy="7.5" rx="2.8" ry="4.2" transform="rotate(288 12 12)" fill="rgba(255,162,196,.4)" stroke="currentColor"/>
+            <circle cx="12" cy="12" r="2.5" fill="currentColor" stroke="none"/>
+          </svg>
+        </div>
         <div class="explore-card-name">朋友圈</div>
         <div class="explore-card-desc">查看与发布动态</div>
       </div>
       <div class="explore-card explore-card-checkin" onclick="switchPage('checkin-page')">
-        <div class="explore-card-icon">📅</div>
+        <div class="explore-card-icon">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="4" width="18" height="18" rx="3"/>
+            <line x1="16" y1="2" x2="16" y2="6"/>
+            <line x1="8" y1="2" x2="8" y2="6"/>
+            <line x1="3" y1="10" x2="21" y2="10"/>
+            <path d="M8.5 15.5l2.5 2.5 4.5-4.5"/>
+          </svg>
+        </div>
         <div class="explore-card-name">打卡日历</div>
         <div class="explore-card-desc">坚持习惯记录</div>
       </div>
       <div class="explore-card explore-card-wardrobe" onclick="switchPage('wardrobe-page')">
-        <div class="explore-card-icon">🎀</div>
+        <div class="explore-card-icon">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 12 Q7 5.5 3.5 8.5 Q2.5 11.5 5.5 13.5 Q8.5 15.5 12 12Z" fill="currentColor" opacity="0.8" stroke="none"/>
+            <path d="M12 12 Q17 5.5 20.5 8.5 Q21.5 11.5 18.5 13.5 Q15.5 15.5 12 12Z" fill="currentColor" opacity="0.8" stroke="none"/>
+            <path d="M12 12 L10.5 16.5" stroke-width="1.6"/>
+            <path d="M12 12 L13.5 16.5" stroke-width="1.6"/>
+            <circle cx="12" cy="12" r="2" fill="currentColor" stroke="none"/>
+          </svg>
+        </div>
         <div class="explore-card-name">换装衣柜</div>
         <div class="explore-card-desc">装扮你的角色</div>
       </div>
       <div class="explore-card explore-card-companion" onclick="switchPage('companion-page')">
-        <div class="explore-card-icon">💗</div>
+        <div class="explore-card-icon">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" fill="currentColor" stroke="none" opacity="0.85"/>
+            <circle cx="19" cy="4" r="1" fill="currentColor" stroke="none"/>
+            <circle cx="5" cy="6" r="0.8" fill="currentColor" stroke="none"/>
+          </svg>
+        </div>
         <div class="explore-card-name">陪伴模式</div>
         <div class="explore-card-desc">专注学习伴你左右</div>
       </div>
       <div class="explore-card explore-card-comp-history" onclick="openCompanionHistory()">
-        <div class="explore-card-icon">📖</div>
+        <div class="explore-card-icon">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+            <line x1="8" y1="7" x2="16" y2="7"/>
+            <line x1="8" y1="11" x2="16" y2="11"/>
+            <line x1="8" y1="15" x2="13" y2="15"/>
+          </svg>
+        </div>
         <div class="explore-card-name">我们一起的日子</div>
         <div class="explore-card-desc">聊天记录与陪伴统计</div>
       </div>

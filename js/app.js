@@ -2852,8 +2852,20 @@ function openAvatarModal(){buildAvatarGrid();$i('avatar-modal').classList.add('s
 function updateNavUserAv() {
   const btn = $i('nav-user-av'); if (!btn) return;
   const av = S.settings.userAvatar || '😊';
-  if (av.startsWith('data:')) btn.innerHTML = `<img src="${av}" style="width:28px;height:28px;border-radius:50%;object-fit:cover">`;
-  else btn.textContent = av;
+  const iconSpan = btn.querySelector('.nav-me-icon');
+  if (iconSpan) {
+    if (av.startsWith('data:')) {
+      iconSpan.innerHTML = `<img src="${av}" style="width:28px;height:28px;border-radius:50%;object-fit:cover">`;
+    } else if (av === '😊') {
+      iconSpan.innerHTML = `<svg class="nav-svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="9" cy="10" r="1.3" fill="currentColor" stroke="none"/><circle cx="15" cy="10" r="1.3" fill="currentColor" stroke="none"/><path d="M7.5 14.5 Q9.5 17.5 12 17.5 Q14.5 17.5 16.5 14.5"/><circle cx="7.5" cy="13.5" r="1.5" fill="currentColor" stroke="none" opacity="0.12"/><circle cx="16.5" cy="13.5" r="1.5" fill="currentColor" stroke="none" opacity="0.12"/></svg>`;
+    } else {
+      iconSpan.innerHTML = `<span style="font-size:20px;line-height:1">${av}</span>`;
+    }
+  } else {
+    // Fallback for old structure
+    if (av.startsWith('data:')) btn.innerHTML = `<img src="${av}" style="width:28px;height:28px;border-radius:50%;object-fit:cover">`;
+    else btn.textContent = av;
+  }
 }
 function openUserModal() {
   const s = S.settings;
@@ -3261,7 +3273,10 @@ function initSettingsSubpages(){
   sections.forEach((section,idx)=>{
     const title=section.querySelector('h3')?.textContent?.trim()||`设置 ${idx+1}`;
     const tile=document.createElement('button'); tile.type='button'; tile.className='settings-tile';
-    tile.innerHTML=`<span>${esc(title)}</span><small>进入设置 ›</small>`;
+    // Extract leading emoji for the icon badge
+    const chars=[...title]; const hasEmoji=chars[0]&&chars[0].codePointAt(0)>127;
+    const iconEmoji=hasEmoji?chars[0]:'⚙'; const titleText=(hasEmoji?chars.slice(1).join(''):title).trim();
+    tile.innerHTML=`<div class="s-tile-icon-wrap"><span>${iconEmoji}</span></div><div class="s-tile-info"><span class="s-tile-name">${esc(titleText)}</span><small>进入设置 ›</small></div>`;
     tile.onclick=()=>openSettingsSection(section,title,home);
     home.appendChild(tile); section.hidden=true;
   });

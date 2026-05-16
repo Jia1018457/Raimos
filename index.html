@@ -477,6 +477,22 @@
   <div class="modal" style="max-width:480px;max-height:80vh;display:flex;flex-direction:column">
     <h2>📖 我们一起的日子 <button class="mclose" onclick="closeModal('companion-history-modal')">✕</button></h2>
     <div id="ch-summary" style="font-size:13px;color:var(--text2);margin-bottom:12px;padding:10px;background:var(--hover);border-radius:10px;line-height:1.8"></div>
+    <!-- 纪念日计数器 -->
+    <div style="margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <span style="font-size:13px;font-weight:800;color:var(--accent)">📅 纪念日</span>
+        <button class="btn-s" style="font-size:11px;padding:3px 10px" onclick="addDayCounter()">＋ 添加</button>
+      </div>
+      <div id="ch-counters-list"></div>
+      <div id="ch-add-counter-form" style="display:none;flex-direction:column;gap:6px;padding:10px;background:var(--hover);border-radius:10px;margin-top:6px">
+        <input id="ch-cnt-label" type="text" placeholder="纪念日名称（如：在一起纪念日）" style="background:var(--input-bg);border:1.5px solid var(--border);border-radius:10px;padding:6px 10px;font-size:12px;color:var(--text);outline:none;font-family:inherit"/>
+        <input id="ch-cnt-date" type="date" style="background:var(--input-bg);border:1.5px solid var(--border);border-radius:10px;padding:6px 10px;font-size:12px;color:var(--text);outline:none;font-family:inherit"/>
+        <div style="display:flex;gap:6px;justify-content:flex-end">
+          <button class="btn-s" onclick="$i('ch-add-counter-form').style.display='none'">取消</button>
+          <button class="btn-p" onclick="_submitDayCounter()">确定</button>
+        </div>
+      </div>
+    </div>
     <div id="ch-list" style="overflow-y:auto;flex:1"></div>
   </div>
 </div>

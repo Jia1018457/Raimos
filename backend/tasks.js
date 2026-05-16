@@ -219,7 +219,7 @@ async function replyToComment(comment) {
     `朋友圈内容：「${moment.text || '[图片]'}」\n\n` +
     `评论区：\n${thread}\n\n` +
     `请用自然口吻回复 "${comment.author}" 说的"${comment.text}"` +
-    `（不超过40字，不加引号，像真实朋友一样）：`;
+    `（不超过40字，不加引号，像真实朋友一样，直接输出回复内容，不要在开头加名字或冒号）：`;
 
   const { content, tokens } = await callAI({
     apiKey,
@@ -231,13 +231,16 @@ async function replyToComment(comment) {
 
   if (!content) return;
 
+  // Strip any accidental "name: " prefix the model may have added
+  const cleanContent = content.replace(/^[\w\s一-龥]{1,15}[：:]\s*/u, '').trim() || content;
+
   const replyId = genId();
   await db.doc(`users/${UID}/comments/${replyId}`).set({
     id: replyId,
     momentId: comment.momentId,
     author: contact.name,
     avatar: contact.avatar || '🤖',
-    text: content,
+    text: cleanContent,
     replyTo: comment.author,
     ts: Date.now(),
     needsAiReply: false,

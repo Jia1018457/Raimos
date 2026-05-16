@@ -1183,6 +1183,104 @@ body.comp-immersive #comp-panel{display:none;}
 .gmk-stone-piece.black { background: radial-gradient(circle at 35% 35%, #666, #0a0a0a); box-shadow: 2px 2px 5px rgba(0,0,0,.55); }
 .gmk-stone-piece.white { background: radial-gradient(circle at 35% 35%, #fff, #d4d4d4); box-shadow: 2px 2px 5px rgba(0,0,0,.3); border: .5px solid #bbb; }
 .gmk-cell.last-move .gmk-stone-piece::after { content:''; position:absolute; inset:20%; border-radius:50%; background:rgba(220,50,50,.75); }
+/* Emoji piece style */
+.gmk-cell.emoji-piece { font-size: clamp(12px, 3.5vw, 20px); line-height:1; z-index:2; animation: stone-drop .12s ease-out; cursor:default; }
+.gmk-cell.emoji-piece.clickable { cursor:pointer; }
+
+/* Board color themes */
+.gmk-board-wood { background:#c8a05e; --gmk-line:rgba(80,40,0,.4); }
+.gmk-board-pink { background:#f5b8cc; --gmk-line:rgba(160,60,80,.3); }
+.gmk-board-purple { background:#c8b8f5; --gmk-line:rgba(80,50,180,.25); }
+.gmk-board-blue { background:#b8d8f5; --gmk-line:rgba(40,80,160,.25); }
+.gmk-board-green { background:#b8f0d0; --gmk-line:rgba(20,100,60,.25); }
+.gmk-board-dark { background:#4a3728; --gmk-line:rgba(200,160,100,.4); }
+.gomoku-board { background: var(--board-bg, #c8a05e); }
+.gmk-cell::before { border-top-color: var(--gmk-line, rgba(80,40,0,.4)); border-left-color: var(--gmk-line, rgba(80,40,0,.4)); }
+.gmk-cell:nth-child(15n)::before { border-right-color: var(--gmk-line, rgba(80,40,0,.4)); }
+.gmk-cell:nth-last-child(-n+15)::before { border-bottom-color: var(--gmk-line, rgba(80,40,0,.4)); }
+
+/* Gomoku Settings Panel */
+.gmk-settings-panel {
+  background: var(--bg3); border-bottom: 1.5px solid var(--border);
+  padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; flex-shrink: 0;
+}
+.gmk-settings-section { display: flex; flex-direction: column; gap: 7px; }
+.gmk-settings-label { font-size: 11px; font-weight: 800; color: var(--text3); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 0; }
+.gmk-ai-selector { display: flex; gap: 8px; flex-wrap: wrap; }
+.gmk-ai-btn {
+  display: flex; align-items: center; gap: 6px;
+  padding: 5px 10px; border-radius: 20px; border: 1.5px solid var(--border);
+  background: var(--bg2); cursor: pointer; font-size: 12px; font-weight: 700;
+  color: var(--text2); transition: all .15s; white-space: nowrap; font-family: inherit;
+}
+.gmk-ai-btn.active { border-color: var(--accent); background: var(--accent3); color: var(--accent); }
+.gmk-color-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.gmk-color-swatch {
+  width: 30px; height: 30px; border-radius: 50%; cursor: pointer;
+  border: 3px solid transparent; transition: transform .15s, border-color .15s;
+  box-shadow: 0 2px 8px rgba(0,0,0,.2);
+}
+.gmk-color-swatch:hover { transform: scale(1.15); }
+.gmk-color-swatch.active { border-color: var(--accent); transform: scale(1.1); }
+.gmk-piece-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.gmk-piece-btn {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 6px 10px; border-radius: 12px; border: 1.5px solid var(--border);
+  background: var(--bg2); cursor: pointer; font-size: 15px; font-family: inherit;
+  transition: all .15s;
+}
+.gmk-piece-btn span { font-size: 9px; color: var(--text3); font-weight: 700; }
+.gmk-piece-btn.active { border-color: var(--accent); background: var(--accent3); }
+.gmk-piece-btn:hover { transform: scale(1.05); }
+
+/* ── Gomoku Result Modal ── */
+#gomoku-result-overlay { background: rgba(0,0,0,.65); backdrop-filter: blur(8px); z-index: 3000; }
+.gmk-result-card {
+  background: var(--bg3); border-radius: 24px;
+  padding: 28px 24px 22px;
+  max-width: 360px; width: calc(100vw - 40px);
+  display: flex; flex-direction: column; align-items: center; gap: 16px;
+  position: relative; overflow: hidden;
+  box-shadow: 0 24px 80px rgba(0,0,0,.4);
+  animation: result-card-in .4s cubic-bezier(.34,1.56,.64,1) both;
+}
+@keyframes result-card-in { from{transform:scale(.7) translateY(40px);opacity:0} to{transform:none;opacity:1} }
+.gmk-result-confetti { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+@keyframes confetti-fall {
+  0%{transform:translateY(-10px) rotate(0deg);opacity:1}
+  100%{transform:translateY(240px) rotate(540deg);opacity:0}
+}
+.gmk-confetti-piece { position: absolute; top: 0; border-radius: 2px; }
+
+/* CSS Cat Animations */
+.gmk-cat-win, .gmk-cat-lose { width: 110px; height: auto; display: block; }
+@keyframes cat-bounce { 0%,100%{transform:translateY(0) rotate(-3deg)} 50%{transform:translateY(-12px) rotate(3deg)} }
+@keyframes cat-droop { 0%{transform:rotate(0deg) translateY(0);opacity:1} 60%{transform:rotate(85deg) translateY(8px);opacity:0.85} 100%{transform:rotate(90deg) translateY(12px);opacity:0.75} }
+.gmk-cat-win { animation: cat-bounce .8s ease-in-out infinite; }
+.gmk-cat-lose { animation: cat-droop .6s ease-out forwards; }
+
+.gmk-result-title { font-size: 22px; font-weight: 900; color: var(--text); }
+.gmk-result-title.win { color: var(--accent); }
+.gmk-result-title.draw { color: var(--text2); }
+.gmk-result-vs { display: flex; align-items: center; gap: 16px; width: 100%; justify-content: center; }
+.gmk-result-player { display: flex; flex-direction: column; align-items: center; gap: 5px; }
+.gmk-result-avatar { font-size: 44px; width: 64px; height: 64px; border-radius: 50%; background: var(--hover); display: flex; align-items: center; justify-content: center; border: 3px solid var(--border); overflow: hidden; }
+.gmk-result-avatar img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
+.gmk-result-name { font-size: 12px; font-weight: 700; color: var(--text2); }
+.gmk-result-badge { font-size: 18px; min-height: 22px; }
+.gmk-result-vstext { font-size: 18px; font-weight: 900; color: var(--text3); flex-shrink: 0; }
+.gmk-result-stats { font-size: 12px; color: var(--text3); text-align: center; line-height: 1.8; }
+.gmk-result-btns { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; width: 100%; }
+.gmk-result-btns .btn-p, .gmk-result-btns .btn-s { flex: 1; min-width: 80px; text-align: center; }
+
+/* Gomoku Records Modal */
+.gmk-record-item {
+  display: flex; align-items: center; gap: 10px; padding: 10px 12px;
+  background: var(--hover); border-radius: 12px; font-size: 12px; color: var(--text2);
+}
+.gmk-record-result { font-size: 18px; flex-shrink: 0; }
+.gmk-record-info { flex: 1; }
+.gmk-record-meta { font-size: 10.5px; color: var(--text3); margin-top: 2px; }
 
 /* ── My Page ── */
 #my-page { background: var(--bg2); }

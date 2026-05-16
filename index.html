@@ -628,31 +628,113 @@
 
 <!-- ── GOMOKU PAGE ── -->
 <div class="page" id="gomoku-page">
-  <div class="page-header">
+  <div class="page-header" style="flex-wrap:wrap;gap:6px">
     <button class="page-back-btn" onclick="switchPage('chess-page')">‹ 返回</button>
     <h2>⚫ 五子棋</h2>
-    <button class="btn-s" onclick="initGomoku()" style="margin-left:auto;font-size:12px">🔄 重开</button>
+    <div style="display:flex;gap:5px;margin-left:auto;flex-shrink:0">
+      <button class="btn-s" style="font-size:11px;padding:4px 9px" onclick="openGomokuRecords()" title="对战记录">📊 战绩</button>
+      <button class="btn-s" style="font-size:11px;padding:4px 9px" onclick="toggleGomokuSettings()" title="棋盘设置">⚙️ 设置</button>
+      <button class="btn-s" style="font-size:11px;padding:4px 9px" onclick="initGomoku()">🔄 重开</button>
+    </div>
+  </div>
+  <!-- Settings Panel -->
+  <div class="gmk-settings-panel" id="gomoku-settings" style="display:none">
+    <div class="gmk-settings-section">
+      <div class="gmk-settings-label">选择对手</div>
+      <div class="gmk-ai-selector" id="gmk-ai-selector"></div>
+    </div>
+    <div class="gmk-settings-section">
+      <div class="gmk-settings-label">棋盘颜色</div>
+      <div class="gmk-color-row" id="gmk-color-row">
+        <div class="gmk-color-swatch active" data-color="wood" style="background:#c8a05e" title="木色" onclick="setGomokuBoard('wood',this)"></div>
+        <div class="gmk-color-swatch" data-color="pink" style="background:#f5b8cc" title="樱粉" onclick="setGomokuBoard('pink',this)"></div>
+        <div class="gmk-color-swatch" data-color="purple" style="background:#c8b8f5" title="薰衣草" onclick="setGomokuBoard('purple',this)"></div>
+        <div class="gmk-color-swatch" data-color="blue" style="background:#b8d8f5" title="天蓝" onclick="setGomokuBoard('blue',this)"></div>
+        <div class="gmk-color-swatch" data-color="green" style="background:#b8f0d0" title="抹茶" onclick="setGomokuBoard('green',this)"></div>
+        <div class="gmk-color-swatch" data-color="dark" style="background:#4a3728" title="深棕" onclick="setGomokuBoard('dark',this)"></div>
+      </div>
+    </div>
+    <div class="gmk-settings-section">
+      <div class="gmk-settings-label">棋子样式</div>
+      <div class="gmk-piece-row" id="gmk-piece-row">
+        <button class="gmk-piece-btn active" data-style="classic" onclick="setGomokuPiece('classic',this)">⚫⚪<span>经典</span></button>
+        <button class="gmk-piece-btn" data-style="bear" onclick="setGomokuPiece('bear',this)">🐻🐼<span>小熊</span></button>
+        <button class="gmk-piece-btn" data-style="cat" onclick="setGomokuPiece('cat',this)">🐱😺<span>小猫</span></button>
+        <button class="gmk-piece-btn" data-style="fox" onclick="setGomokuPiece('fox',this)">🦊🦝<span>小狐</span></button>
+        <button class="gmk-piece-btn" data-style="rabbit" onclick="setGomokuPiece('rabbit',this)">🐰🐇<span>小兔</span></button>
+        <button class="gmk-piece-btn" data-style="dog" onclick="setGomokuPiece('dog',this)">🐶🐕<span>小狗</span></button>
+        <button class="gmk-piece-btn" data-style="wolf" onclick="setGomokuPiece('wolf',this)">🐺🦴<span>小狼</span></button>
+      </div>
+    </div>
+    <div class="gmk-settings-section" style="flex-direction:row;align-items:center;justify-content:space-between">
+      <div class="gmk-settings-label" style="margin-bottom:0">游戏过程中AI评论</div>
+      <label class="toggle" style="flex-shrink:0">
+        <input type="checkbox" id="gmk-commentary-toggle" onchange="toggleGomokuCommentary(this.checked)"/>
+        <span class="tslider"></span>
+      </label>
+    </div>
   </div>
   <div class="gomoku-wrap">
     <div class="gomoku-info-bar">
       <div class="gomoku-player">
-        <div class="gmk-stone-indicator black"></div>
-        <span>你（黑子）</span>
+        <div class="gmk-stone-indicator black" id="gmk-player-piece"></div>
+        <span id="gmk-player-label">你（黑子）</span>
       </div>
       <div class="gomoku-status" id="gomoku-status">等待开始…</div>
       <div class="gomoku-player">
-        <div class="gmk-stone-indicator white"></div>
+        <div class="gmk-stone-indicator white" id="gmk-ai-piece"></div>
         <span id="gomoku-ai-name">AI（白子）</span>
       </div>
     </div>
     <div class="gomoku-ai-say" id="gomoku-comment"></div>
     <div class="gomoku-board-scroll">
-      <div class="gomoku-board" id="gomoku-board"></div>
+      <div class="gomoku-board gmk-board-wood" id="gomoku-board"></div>
     </div>
   </div>
 </div>
 
 </div><!-- #pages -->
+
+<!-- ── GOMOKU RESULT MODAL ── -->
+<div class="overlay" id="gomoku-result-overlay">
+  <div class="gmk-result-card">
+    <div class="gmk-result-confetti" id="gmk-confetti"></div>
+    <div class="gmk-result-cat" id="gmk-result-cat"></div>
+    <div class="gmk-result-title" id="gmk-result-title">游戏结束</div>
+    <div class="gmk-result-vs">
+      <div class="gmk-result-player">
+        <div class="gmk-result-avatar" id="gmk-result-player-av">😊</div>
+        <div class="gmk-result-name">你</div>
+        <div class="gmk-result-badge" id="gmk-result-player-badge"></div>
+      </div>
+      <div class="gmk-result-vstext">VS</div>
+      <div class="gmk-result-player">
+        <div class="gmk-result-avatar" id="gmk-result-ai-av">🤖</div>
+        <div class="gmk-result-name" id="gmk-result-ai-name">AI</div>
+        <div class="gmk-result-badge" id="gmk-result-ai-badge"></div>
+      </div>
+    </div>
+    <div class="gmk-result-stats" id="gmk-result-stats"></div>
+    <div class="gmk-result-btns">
+      <button class="btn-s" onclick="closeGomokuResult();switchPage('chess-page')">返回</button>
+      <button class="btn-p" onclick="closeGomokuResult();initGomoku()">再来一局</button>
+      <button class="btn-s" onclick="gomokuShareToMoments()" id="gmk-share-btn">发朋友圈</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── GOMOKU RECORDS MODAL ── -->
+<div class="overlay" id="gomoku-records-modal">
+  <div class="modal" style="max-width:420px;max-height:80vh;display:flex;flex-direction:column">
+    <h2>📊 五子棋战绩 <button class="mclose" onclick="closeModal('gomoku-records-modal')">✕</button></h2>
+    <div id="gmk-records-summary" style="display:flex;gap:12px;margin-bottom:12px;padding:10px;background:var(--hover);border-radius:12px;text-align:center"></div>
+    <div id="gmk-records-list" style="flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:8px"></div>
+    <div class="mbtns" style="margin-top:10px">
+      <button class="btn-s" style="color:#e74c3c;font-size:11px" onclick="clearGomokuRecords()">清空记录</button>
+      <button class="btn-p" onclick="closeModal('gomoku-records-modal')">关闭</button>
+    </div>
+  </div>
+</div>
 
 <!-- COMPANION MINI WINDOW (floating overlay) -->
 <div id="comp-mini-win" style="display:none">

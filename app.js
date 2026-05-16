@@ -159,6 +159,7 @@ function switchPage(id) {
   if (id === 'contacts-page') renderContacts();
   if (id === 'moments-page') renderMoments();
   if (id === 'settings-page') { buildSettingsUI(); updateStorageInfo(); }
+  if (id === 'game-hub-page') initGameHubStars();
 }
 
 // ══════════════════════════════
@@ -1953,7 +1954,593 @@ async function saveStickerLibConfig() {
 window.addEventListener('message', async (e) => {
   if (!e.data || e.data.type !== 'WARDROBE_DATA') return;
   const items = e.data.items || [];
-  // 将衣柜数据持久化到 IndexedDB，供云同步使用
   await dbClear('wardrobeItems');
   for (const item of items) await dbPut('wardrobeItems', item);
 });
+
+// ══════════════════════════════════════════
+//  MINI GAMES
+// ══════════════════════════════════════════
+
+// ── Game Hub: Floating Stars ──
+function initGameHubStars() {
+  const el = $i('game-hub-stars');
+  if (!el || el.children.length > 0) return;
+  for (let i = 0; i < 90; i++) {
+    const s = document.createElement('div');
+    const sz = Math.random() * 2.5 + 0.5;
+    s.style.cssText = `position:absolute;width:${sz}px;height:${sz}px;border-radius:50%;background:#fff;`
+      + `opacity:${(Math.random() * 0.6 + 0.15).toFixed(2)};`
+      + `left:${(Math.random() * 100).toFixed(1)}%;top:${(Math.random() * 100).toFixed(1)}%;`
+      + `animation:star-twinkle ${(2 + Math.random() * 3).toFixed(1)}s ease-in-out infinite ${(Math.random() * 4).toFixed(1)}s`;
+    el.appendChild(s);
+  }
+}
+
+// ══ Gomoku (五子棋) ══════════════════════
+const PIECE_STYLES = {
+  classic: { p: null,   ai: null },
+  bear:    { p: '🐻',  ai: '🐼' },
+  cat:     { p: '🐱',  ai: '😺' },
+  fox:     { p: '🦊',  ai: '🦝' },
+  rabbit:  { p: '🐰',  ai: '🐇' },
+  dog:     { p: '🐶',  ai: '🐕' },
+  wolf:    { p: '🐺',  ai: '🦴' },
+};
+const BOARD_COLORS = {
+  wood:'gmk-board-wood', pink:'gmk-board-pink', purple:'gmk-board-purple',
+  blue:'gmk-board-blue', green:'gmk-board-green', dark:'gmk-board-dark',
+};
+
+const GOMOKU = {
+  board: null,
+  turn: 'player',
+  over: false,
+  lastMove: null,
+  thinking: false,
+  moveCount: 0,
+  startTime: 0,
+  contactId: null,   // currently selected AI contact id
+  prefs: { boardColor:'wood', pieceStyle:'classic', commentary:true },
+};
+
+// ── Prefs load/save ──
+async function loadGomokuPrefs() {
+  const saved = await getSetting('gomokuPrefs');
+  if (saved) Object.assign(GOMOKU.prefs, saved);
+  // Apply UI state
+  const ct = $i('gmk-commentary-toggle');
+  if (ct) ct.checked = GOMOKU.prefs.commentary;
+  // board color swatch
+  document.querySelectorAll('.gmk-color-swatch').forEach(el => {
+    el.classList.toggle('active', el.dataset.color === GOMOKU.prefs.boardColor);
+  });
+  // piece btn
+  document.querySelectorAll('.gmk-piece-btn').forEach(el => {
+    el.classList.toggle('active', el.dataset.style === GOMOKU.prefs.pieceStyle);
+  });
+}
+async function saveGomokuPrefs() { await saveSetting('gomokuPrefs', GOMOKU.prefs); }
+
+function setGomokuBoard(color, el) {
+  GOMOKU.prefs.boardColor = color;
+  document.querySelectorAll('.gmk-color-swatch').forEach(s => s.classList.remove('active'));
+  el.classList.add('active');
+  const board = $i('gomoku-board');
+  if (board) { board.className = 'gomoku-board ' + (BOARD_COLORS[color] || 'gmk-board-wood'); }
+  saveGomokuPrefs();
+}
+function setGomokuPiece(style, el) {
+  GOMOKU.prefs.pieceStyle = style;
+  document.querySelectorAll('.gmk-piece-btn').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+  // Update indicator circles in info bar
+  gmkUpdatePlayerIndicators();
+  saveGomokuPrefs();
+}
+function toggleGomokuCommentary(val) {
+  GOMOKU.prefs.commentary = val;
+  saveGomokuPrefs();
+}
+
+function gmkUpdatePlayerIndicators() {
+  const ps = GOMOKU.prefs.pieceStyle;
+  const pInfo = PIECE_STYLES[ps] || PIECE_STYLES.classic;
+  const pEl = $i('gmk-player-piece'), aEl = $i('gmk-ai-piece');
+  if (pInfo.p) {
+    if (pEl) { pEl.className='gmk-stone-indicator'; pEl.textContent=pInfo.p; pEl.style.fontSize='18px'; pEl.style.background='none'; pEl.style.boxShadow='none'; }
+    if (aEl) { aEl.className='gmk-stone-indicator'; aEl.textContent=pInfo.ai; aEl.style.fontSize='18px'; aEl.style.background='none'; aEl.style.boxShadow='none'; }
+  } else {
+    if (pEl) { pEl.className='gmk-stone-indicator black'; pEl.textContent=''; pEl.style=''; }
+    if (aEl) { aEl.className='gmk-stone-indicator white'; aEl.textContent=''; aEl.style=''; }
+  }
+}
+
+// ── AI Selector ──
+function renderGomokuAiSelector() {
+  const el = $i('gmk-ai-selector');
+  if (!el) return;
+  el.innerHTML = '';
+  const contacts = Object.values(S._contacts);
+  if (!contacts.length) { el.innerHTML = '<span style="font-size:12px;color:var(--text3)">还没有AI助手，先去添加～</span>'; return; }
+  contacts.forEach(c => {
+    const btn = document.createElement('button');
+    btn.className = 'gmk-ai-btn' + (GOMOKU.contactId === c.id ? ' active' : '');
+    const av = c.avatar?.startsWith('data:') ? `<img src="${c.avatar}" style="width:18px;height:18px;border-radius:50%;object-fit:cover">` : `<span>${c.avatar || '🤖'}</span>`;
+    btn.innerHTML = `${av}<span>${esc(c.name)}</span>`;
+    btn.onclick = () => { GOMOKU.contactId = c.id; renderGomokuAiSelector(); updateGomokuAiDisplay(); };
+    el.appendChild(btn);
+  });
+}
+
+function updateGomokuAiDisplay() {
+  const contact = GOMOKU.contactId ? S._contacts[GOMOKU.contactId] : (S.currentContact ? S._contacts[S.currentContact] : Object.values(S._contacts)[0]);
+  const aiName = contact?.name || 'AI';
+  const el = $i('gomoku-ai-name');
+  if (el) el.textContent = `${aiName}（白子）`;
+}
+
+function toggleGomokuSettings() {
+  const panel = $i('gomoku-settings');
+  if (!panel) return;
+  const show = panel.style.display === 'none';
+  panel.style.display = show ? '' : 'none';
+  if (show) {
+    renderGomokuAiSelector();
+    loadGomokuPrefs();
+  }
+}
+
+function initGomoku() {
+  GOMOKU.board = Array.from({ length: 15 }, () => Array(15).fill(0));
+  GOMOKU.turn = 'player';
+  GOMOKU.over = false;
+  GOMOKU.lastMove = null;
+  GOMOKU.thinking = false;
+  GOMOKU.moveCount = 0;
+  GOMOKU.startTime = Date.now();
+  // pick contact
+  if (!GOMOKU.contactId) {
+    GOMOKU.contactId = S.currentContact || Object.keys(S._contacts)[0] || null;
+  }
+  loadGomokuPrefs().then(() => {
+    gmkUpdatePlayerIndicators();
+    // apply board color
+    const board = $i('gomoku-board');
+    if (board) board.className = 'gomoku-board ' + (BOARD_COLORS[GOMOKU.prefs.boardColor] || 'gmk-board-wood');
+  });
+  updateGomokuAiDisplay();
+  renderGomokuBoard();
+  gomokuSetStatus('你先行棋，落下黑子！');
+  const contact = GOMOKU.contactId ? S._contacts[GOMOKU.contactId] : null;
+  const aiName = contact?.name || 'AI';
+  const greeting = contact
+    ? `你好呀！我是${aiName}，我们来下五子棋吧，看谁先赢～`
+    : '游戏开始！请在设置里选一个AI助手一起玩哦～';
+  gomokuSay(greeting);
+  // close settings if open
+  const panel = $i('gomoku-settings');
+  if (panel) panel.style.display = 'none';
+}
+
+function renderGomokuBoard() {
+  const el = $i('gomoku-board');
+  if (!el) return;
+  el.innerHTML = '';
+  const ps = GOMOKU.prefs.pieceStyle;
+  const pInfo = PIECE_STYLES[ps] || PIECE_STYLES.classic;
+  for (let r = 0; r < 15; r++) {
+    for (let c = 0; c < 15; c++) {
+      const cell = document.createElement('div');
+      cell.className = 'gmk-cell';
+      if (GOMOKU.lastMove && GOMOKU.lastMove[0] === r && GOMOKU.lastMove[1] === c) {
+        cell.classList.add('last-move');
+      }
+      const v = GOMOKU.board[r][c];
+      if (v !== 0) {
+        if (pInfo.p) {
+          // Emoji piece
+          cell.classList.add('emoji-piece');
+          cell.textContent = v === 1 ? pInfo.p : pInfo.ai;
+        } else {
+          const stone = document.createElement('div');
+          stone.className = `gmk-stone-piece ${v === 1 ? 'black' : 'white'}`;
+          cell.appendChild(stone);
+        }
+      } else if (!GOMOKU.over && GOMOKU.turn === 'player' && !GOMOKU.thinking) {
+        cell.classList.add('clickable');
+        cell.addEventListener('click', () => gomokuPlayerMove(r, c));
+      }
+      el.appendChild(cell);
+    }
+  }
+}
+
+function gomokuSetStatus(msg) {
+  const el = $i('gomoku-status');
+  if (el) el.textContent = msg;
+}
+
+function gomokuSay(text) {
+  const el = $i('gomoku-comment');
+  if (!el || !text) return;
+  el.textContent = text;
+  el.style.opacity = '1';
+  clearTimeout(el._t);
+  el._t = setTimeout(() => { if (el) el.style.opacity = '0'; }, 5500);
+}
+
+async function gomokuPlayerMove(r, c) {
+  if (GOMOKU.over || GOMOKU.turn !== 'player' || GOMOKU.thinking) return;
+  if (GOMOKU.board[r][c] !== 0) return;
+  GOMOKU.board[r][c] = 1;
+  GOMOKU.lastMove = [r, c];
+  GOMOKU.turn = 'ai';
+  GOMOKU.moveCount++;
+  renderGomokuBoard();
+  if (gomokuCheckWin(r, c, 1)) {
+    GOMOKU.over = true;
+    gomokuSetStatus('🎉 你赢了！');
+    await gomokuFinish('player_win');
+    return;
+  }
+  if (gomokuBoardFull()) {
+    GOMOKU.over = true;
+    gomokuSetStatus('平局！势均力敌～');
+    await gomokuFinish('draw');
+    return;
+  }
+  gomokuSetStatus('AI思考中…');
+  GOMOKU.thinking = true;
+  renderGomokuBoard();
+  await gomokuAiMove();
+}
+
+function gomokuCheckWin(r, c, player) {
+  const dirs = [[0,1],[1,0],[1,1],[1,-1]];
+  for (const [dr, dc] of dirs) {
+    let cnt = 1;
+    for (let i = 1; i < 5; i++) {
+      const nr = r + dr*i, nc = c + dc*i;
+      if (nr < 0 || nr >= 15 || nc < 0 || nc >= 15 || GOMOKU.board[nr][nc] !== player) break;
+      cnt++;
+    }
+    for (let i = 1; i < 5; i++) {
+      const nr = r - dr*i, nc = c - dc*i;
+      if (nr < 0 || nr >= 15 || nc < 0 || nc >= 15 || GOMOKU.board[nr][nc] !== player) break;
+      cnt++;
+    }
+    if (cnt >= 5) return true;
+  }
+  return false;
+}
+
+function gomokuBoardFull() {
+  return GOMOKU.board.every(row => row.every(v => v !== 0));
+}
+
+// ── Threat detection: how many in a row for player after placing at (r,c) ──
+function gomokuMaxLine(r, c, player) {
+  let max = 0;
+  const dirs = [[0,1],[1,0],[1,1],[1,-1]];
+  for (const [dr,dc] of dirs) {
+    let cnt = 1;
+    for (let i=1;i<5;i++){const nr=r+dr*i,nc=c+dc*i;if(nr<0||nr>=15||nc<0||nc>=15||GOMOKU.board[nr][nc]!==player)break;cnt++;}
+    for (let i=1;i<5;i++){const nr=r-dr*i,nc=c-dc*i;if(nr<0||nr>=15||nc<0||nc>=15||GOMOKU.board[nr][nc]!==player)break;cnt++;}
+    max = Math.max(max, cnt);
+  }
+  return max;
+}
+
+function gomokuGetContact() {
+  return (GOMOKU.contactId ? S._contacts[GOMOKU.contactId] : null)
+    || (S.currentContact ? S._contacts[S.currentContact] : null)
+    || Object.values(S._contacts)[0] || null;
+}
+
+async function gomokuAiMove() {
+  const contact = gomokuGetContact();
+  const useKey = contact?.apiKey || S.settings.apiKey;
+  const useUrl = contact?.apiUrl || 'https://openrouter.ai/api/v1/chat/completions';
+  let row, col, comment;
+  GOMOKU.moveCount++;
+
+  // Determine game phase
+  const phase = GOMOKU.moveCount <= 6 ? 'early' : GOMOKU.moveCount <= 20 ? 'mid' : 'late';
+  const phaseHint = phase==='early'?'开局阶段，可以随意发挥':phase==='mid'?'中局关键期，要认真思考':'终局阶段，胜负即将揭晓';
+
+  // Check if player has a threatening line (for commentary)
+  const playerLastR = GOMOKU.lastMove?.[0], playerLastC = GOMOKU.lastMove?.[1];
+  const playerThreat = (playerLastR!=null) ? gomokuMaxLine(playerLastR, playerLastC, 1) : 0;
+
+  if (useKey) {
+    const blacks = [], whites = [];
+    for (let r=0;r<15;r++) for (let c=0;c<15;c++) {
+      if (GOMOKU.board[r][c]===1) blacks.push(`(${r},${c})`);
+      else if (GOMOKU.board[r][c]===2) whites.push(`(${r},${c})`);
+    }
+    const boardTxt = `黑子(对手)：${blacks.join('')||'无'}  白子(你)：${whites.join('')||'无'}`;
+    const aiName = contact?.name || 'AI';
+    const personality = (contact?.system || '你是可爱温柔的AI助手').slice(0, 130);
+    const model = contact?.model || 'openai/gpt-4o-mini';
+    // Commentary hint: if player is threatening, AI may warn/tease; if early game, be casual
+    const commentHint = playerThreat >= 4
+      ? '对手刚连了4子，你需要反应！评论可以紧张/惊讶/挑衅'
+      : playerThreat >= 3
+      ? '对手有威胁，评论可以提示/安慰/警告'
+      : GOMOKU.prefs.commentary && GOMOKU.moveCount%4===0
+      ? '过程评论，可以说游戏感受/小技巧/鼓励/调侃'
+      : '';
+    const prompt = `你是${aiName}，和用户下五子棋。你执白子，用户执黑子，棋盘15×15（行列0-14）。\n${boardTxt}\n性格：${personality}\n阶段：第${GOMOKU.moveCount}步，${phaseHint}。\n策略要求：根据性格和阶段灵活决策。温柔性格不代表一直让，可能开始认真、局势好时才礼让一步；强势性格会全力争胜；总之要有真实的游戏节奏感，避免机械。${commentHint ? '\n评论方向：'+commentHint : ''}\n在空位落子并用1句符合性格的话回应（${commentHint?'按方向':'可以是棋局感受'}）。\n只返回JSON：{"row":数字,"col":数字,"comment":"一句话"}`;
+    try {
+      const res = await fetch(useUrl, {
+        method:'POST',
+        headers:{'Authorization':`Bearer ${useKey}`,'Content-Type':'application/json','HTTP-Referer':'https://raimos.app','X-Title':'Raimos'},
+        body:JSON.stringify({model,max_tokens:90,stream:false,temperature:0.8,messages:[{role:'user',content:prompt}]}),
+      });
+      const data = await res.json();
+      const txt = data.choices?.[0]?.message?.content || '';
+      const m = txt.match(/\{[\s\S]*?\}/);
+      if (m) { const p = JSON.parse(m[0]); row=p.row; col=p.col; comment=p.comment; }
+    } catch(e) {}
+  }
+
+  // Validate / heuristic fallback
+  if (typeof row!=='number'||typeof col!=='number'||row<0||row>=15||col<0||col>=15||GOMOKU.board[row][col]!==0) {
+    const h = gomokuHeuristic();
+    row=h.r; col=h.c;
+    if (!comment) comment = playerThreat>=4 ? '好险，我得拦住你！' : '嗯，就这里！';
+  }
+
+  GOMOKU.board[row][col] = 2;
+  GOMOKU.lastMove = [row, col];
+  GOMOKU.turn = 'player';
+  GOMOKU.thinking = false;
+  renderGomokuBoard();
+  if (comment && GOMOKU.prefs.commentary) gomokuSay(comment);
+
+  if (gomokuCheckWin(row, col, 2)) {
+    GOMOKU.over = true;
+    gomokuSetStatus('AI赢了！再来一局？');
+    await gomokuFinish('ai_win');
+    return;
+  }
+  if (gomokuBoardFull()) {
+    GOMOKU.over = true;
+    gomokuSetStatus('平局！势均力敌～');
+    await gomokuFinish('draw');
+    return;
+  }
+  gomokuSetStatus('轮到你了！');
+}
+
+// Heuristic: win > block > weighted proximity + center bias
+function gomokuHeuristic() {
+  for (let r=0;r<15;r++) for (let c=0;c<15;c++) {
+    if (GOMOKU.board[r][c]!==0) continue;
+    GOMOKU.board[r][c]=2; const w=gomokuCheckWin(r,c,2); GOMOKU.board[r][c]=0;
+    if (w) return {r,c};
+  }
+  for (let r=0;r<15;r++) for (let c=0;c<15;c++) {
+    if (GOMOKU.board[r][c]!==0) continue;
+    GOMOKU.board[r][c]=1; const w=gomokuCheckWin(r,c,1); GOMOKU.board[r][c]=0;
+    if (w) return {r,c};
+  }
+  let best=null, bestScore=-1;
+  for (let r=0;r<15;r++) for (let c=0;c<15;c++) {
+    if (GOMOKU.board[r][c]!==0) continue;
+    let score=0;
+    for (let dr=-2;dr<=2;dr++) for (let dc=-2;dc<=2;dc++) {
+      const nr=r+dr,nc=c+dc;
+      if (nr>=0&&nr<15&&nc>=0&&nc<15&&GOMOKU.board[nr][nc]!==0) score+=2;
+    }
+    score += 8/(1+Math.abs(r-7)+Math.abs(c-7));
+    if (score>bestScore){bestScore=score;best={r,c};}
+  }
+  return best||{r:7,c:7};
+}
+
+// ── Game End ──
+async function gomokuFinish(result) {
+  const contact = gomokuGetContact();
+  const elapsed = Math.round((Date.now() - GOMOKU.startTime) / 1000);
+  // save record
+  await saveGomokuRecord({ result, moves: GOMOKU.moveCount, elapsed, aiName: contact?.name||'AI', aiContactId: GOMOKU.contactId, date: Date.now() });
+  // get AI comment
+  let aiComment = '';
+  const useKey = contact?.apiKey || S.settings.apiKey;
+  if (useKey) {
+    try {
+      const aiName = contact?.name||'AI', personality=(contact?.system||'').slice(0,100);
+      const resultDesc = result==='player_win'?'你输了':result==='ai_win'?'你赢了':'平局';
+      const prompt = `你是${aiName}，性格：${personality||'可爱温柔'}。五子棋结束，${resultDesc}。用1句符合性格的话回应。只返回JSON：{"comment":"话"}`;
+      const res = await fetch(contact?.apiUrl||'https://openrouter.ai/api/v1/chat/completions',{method:'POST',headers:{'Authorization':`Bearer ${useKey}`,'Content-Type':'application/json','HTTP-Referer':'https://raimos.app','X-Title':'Raimos'},body:JSON.stringify({model:contact?.model||'openai/gpt-4o-mini',max_tokens:60,stream:false,messages:[{role:'user',content:prompt}]})});
+      const data=await res.json();const txt=data.choices?.[0]?.message?.content||'';const m=txt.match(/\{[\s\S]*?\}/);
+      if (m) aiComment=JSON.parse(m[0]).comment||'';
+    } catch(e){}
+  }
+  if (!aiComment) aiComment = result==='player_win'?'你赢了！再来一局吧～':result==='ai_win'?'哈哈，我赢了！再来？':'平局！旗鼓相当呢～';
+  gomokuSay(aiComment);
+  // Show result modal after brief delay
+  setTimeout(() => showGomokuResult(result, elapsed, aiComment, contact), 800);
+}
+
+function showGomokuResult(result, elapsed, aiComment, contact) {
+  const overlay = $i('gomoku-result-overlay');
+  if (!overlay) return;
+  overlay.classList.add('show');
+
+  // Title
+  const titleEl = $i('gmk-result-title');
+  if (titleEl) {
+    const titles = { player_win:'🎉 你赢了！', ai_win:'💫 AI赢了！', draw:'🤝 平局！' };
+    titleEl.textContent = titles[result] || '游戏结束';
+    titleEl.className = `gmk-result-title ${result==='player_win'?'win':result==='draw'?'draw':''}`;
+  }
+
+  // Badges
+  const badges = { player_win:['🏆','💔'], ai_win:['💔','🏆'], draw:['🤝','🤝'] };
+  const [pb, ab] = badges[result] || ['',''];
+  const pbEl=$i('gmk-result-player-badge'), abEl=$i('gmk-result-ai-badge');
+  if (pbEl) pbEl.textContent=pb;
+  if (abEl) abEl.textContent=ab;
+
+  // Avatars
+  const userAv = S.settings.userAvatar || S.settings.avatar || '😊';
+  const pAvEl = $i('gmk-result-player-av');
+  if (pAvEl) { if (userAv.startsWith('data:')) pAvEl.innerHTML=`<img src="${userAv}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`; else pAvEl.textContent=userAv; }
+  const aiAv = contact?.avatar || '🤖';
+  const aAvEl = $i('gmk-result-ai-av');
+  if (aAvEl) { if (aiAv.startsWith('data:')) aAvEl.innerHTML=`<img src="${aiAv}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`; else aAvEl.textContent=aiAv; }
+  const aiNameEl=$i('gmk-result-ai-name'); if (aiNameEl) aiNameEl.textContent=contact?.name||'AI';
+
+  // Stats
+  const mm=Math.floor(elapsed/60), ss=elapsed%60;
+  const statsEl=$i('gmk-result-stats');
+  if (statsEl) statsEl.textContent=`本局用时 ${mm>0?mm+'分':''} ${ss}秒  ·  共落子 ${GOMOKU.moveCount} 步\n"${aiComment}"`;
+
+  // Cat SVG animation
+  const catEl = $i('gmk-result-cat');
+  if (catEl) {
+    if (result === 'player_win') {
+      catEl.innerHTML = gomokuWinCatSVG();
+    } else if (result === 'ai_win') {
+      catEl.innerHTML = gomokuLoseCatSVG();
+    } else {
+      catEl.innerHTML = '<div style="font-size:60px;animation:cat-bounce .8s ease-in-out infinite">🐱</div>';
+    }
+  }
+
+  // Confetti on win
+  const confEl = $i('gmk-confetti');
+  if (confEl) {
+    confEl.innerHTML = '';
+    if (result === 'player_win') {
+      const cols = ['#ff8fab','#a78bfa','#fcd34d','#6ee7b7','#67e8f9','#f472b6','#fb923c'];
+      for (let i=0;i<36;i++) {
+        const el=document.createElement('div');
+        el.className='gmk-confetti-piece';
+        const sz=6+Math.random()*7;
+        el.style.cssText=`left:${Math.random()*100}%;width:${sz}px;height:${sz}px;background:${cols[i%cols.length]};border-radius:${Math.random()>.5?'50%':'3px'};animation:confetti-fall ${1.2+Math.random()*0.8}s ease-in ${Math.random()*0.5}s forwards`;
+        confEl.appendChild(el);
+      }
+    }
+  }
+}
+
+function gomokuWinCatSVG() {
+  return `<svg class="gmk-cat-win" viewBox="0 0 100 110" xmlns="http://www.w3.org/2000/svg">
+    <path d="M26,18 L38,32 L60,10" stroke="#a78bfa" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+    <path d="M22,50 L15,30 L34,46" fill="#fce4f3" stroke="#d48cb8" stroke-width="2" stroke-linejoin="round"/>
+    <path d="M78,50 L85,30 L66,46" fill="#fce4f3" stroke="#d48cb8" stroke-width="2" stroke-linejoin="round"/>
+    <circle cx="50" cy="62" r="24" fill="#fff5f8" stroke="#d48cb8" stroke-width="2.5"/>
+    <path d="M38,57 Q41,53 44,57" fill="none" stroke="#333" stroke-width="2.5" stroke-linecap="round"/>
+    <path d="M56,57 Q59,53 62,57" fill="none" stroke="#333" stroke-width="2.5" stroke-linecap="round"/>
+    <ellipse cx="50" cy="64" rx="2.5" ry="1.8" fill="#ffb3c1"/>
+    <path d="M45,69 Q50,75 55,69" fill="none" stroke="#d48cb8" stroke-width="2" stroke-linecap="round"/>
+    <ellipse cx="36" cy="65" rx="5" ry="3" fill="#ffb3c1" opacity="0.45"/>
+    <ellipse cx="64" cy="65" rx="5" ry="3" fill="#ffb3c1" opacity="0.45"/>
+    <rect x="34" y="84" width="32" height="22" rx="11" fill="#fff5f8" stroke="#d48cb8" stroke-width="2.5"/>
+    <path d="M34,92 L16,72" stroke="#d48cb8" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="14" cy="70" r="5" fill="#fff5f8" stroke="#d48cb8" stroke-width="2"/>
+    <path d="M66,92 L84,72" stroke="#d48cb8" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="86" cy="70" r="5" fill="#fff5f8" stroke="#d48cb8" stroke-width="2"/>
+  </svg>`;
+}
+
+function gomokuLoseCatSVG() {
+  return `<svg class="gmk-cat-lose" viewBox="0 0 130 80" xmlns="http://www.w3.org/2000/svg">
+    <ellipse cx="82" cy="56" rx="36" ry="17" fill="#fff5f8" stroke="#d48cb8" stroke-width="2.5"/>
+    <circle cx="30" cy="44" r="21" fill="#fff5f8" stroke="#d48cb8" stroke-width="2.5"/>
+    <path d="M14,27 L8,12 L24,24" fill="#fce4f3" stroke="#d48cb8" stroke-width="2" stroke-linejoin="round"/>
+    <path d="M42,25 L48,11 L44,24" fill="#fce4f3" stroke="#d48cb8" stroke-width="2" stroke-linejoin="round"/>
+    <path d="M19,40 Q22,44 25,40" fill="none" stroke="#888" stroke-width="2" stroke-linecap="round"/>
+    <path d="M29,40 Q32,44 35,40" fill="none" stroke="#888" stroke-width="2" stroke-linecap="round"/>
+    <ellipse cx="19" cy="47" rx="2" ry="3.5" fill="#90cdf4" opacity="0.75"/>
+    <ellipse cx="36" cy="50" rx="2.5" ry="1.8" fill="#ffb3c1"/>
+    <path d="M28,56 Q32,51 36,56" fill="none" stroke="#d48cb8" stroke-width="2" stroke-linecap="round"/>
+    <ellipse cx="17" cy="50" rx="4" ry="2.5" fill="#ffb3c1" opacity="0.4"/>
+    <path d="M51,63 L66,71" stroke="#d48cb8" stroke-width="3" stroke-linecap="round"/>
+    <path d="M92,70 L107,64" stroke="#d48cb8" stroke-width="3" stroke-linecap="round"/>
+    <path d="M118,54 C127,43 129,30 119,22" stroke="#d48cb8" stroke-width="2.5" stroke-linecap="round" fill="none"/>
+  </svg>`;
+}
+
+function closeGomokuResult() {
+  closeModal('gomoku-result-overlay');
+}
+
+// ── Records ──
+async function saveGomokuRecord(rec) {
+  let records = (await getSetting('gomokuRecords')) || [];
+  records.unshift({ ...rec, id: uid() });
+  if (records.length > 60) records = records.slice(0, 60);
+  await saveSetting('gomokuRecords', records);
+}
+
+async function openGomokuRecords() {
+  const records = (await getSetting('gomokuRecords')) || [];
+  const overlay = $i('gomoku-records-modal');
+  if (!overlay) return;
+  overlay.classList.add('show');
+
+  // Summary
+  const wins = records.filter(r=>r.result==='player_win').length;
+  const losses = records.filter(r=>r.result==='ai_win').length;
+  const draws = records.filter(r=>r.result==='draw').length;
+  const sumEl = $i('gmk-records-summary');
+  if (sumEl) sumEl.innerHTML = `
+    <div style="flex:1"><div style="font-size:22px;font-weight:900;color:#4ade80">${wins}</div><div style="font-size:11px;color:var(--text3)">胜</div></div>
+    <div style="flex:1"><div style="font-size:22px;font-weight:900;color:#f87171">${losses}</div><div style="font-size:11px;color:var(--text3)">负</div></div>
+    <div style="flex:1"><div style="font-size:22px;font-weight:900;color:var(--text2)">${draws}</div><div style="font-size:11px;color:var(--text3)">平</div></div>
+    <div style="flex:1"><div style="font-size:22px;font-weight:900;color:var(--accent)">${records.length}</div><div style="font-size:11px;color:var(--text3)">总局</div></div>`;
+
+  // List
+  const listEl = $i('gmk-records-list');
+  if (!listEl) return;
+  if (!records.length) { listEl.innerHTML = '<div style="text-align:center;padding:30px;color:var(--text3);font-size:13px">还没有对战记录，快去下一局吧！</div>'; return; }
+  listEl.innerHTML = '';
+  records.forEach(r => {
+    const icons = { player_win:'🏆', ai_win:'💔', draw:'🤝' };
+    const labels = { player_win:'胜利', ai_win:'败北', draw:'平局' };
+    const mm=Math.floor((r.elapsed||0)/60), ss=(r.elapsed||0)%60;
+    const date=r.date?new Date(r.date).toLocaleDateString('zh-CN',{month:'numeric',day:'numeric'}):'';
+    const el=document.createElement('div');
+    el.className='gmk-record-item';
+    el.innerHTML=`<div class="gmk-record-result">${icons[r.result]||'🎮'}</div><div class="gmk-record-info"><div style="font-weight:700;color:var(--text)">${labels[r.result]||'未知'} · vs ${esc(r.aiName||'AI')}</div><div class="gmk-record-meta">${date} · ${mm>0?mm+'分':''} ${ss}秒 · ${r.moves||0}步</div></div>`;
+    listEl.appendChild(el);
+  });
+}
+
+async function clearGomokuRecords() {
+  if (!confirm('确认清空所有五子棋战绩？')) return;
+  await saveSetting('gomokuRecords', []);
+  openGomokuRecords();
+}
+
+// ── Share to Moments ──
+async function gomokuShareToMoments() {
+  const records = (await getSetting('gomokuRecords')) || [];
+  const last = records[0];
+  const contact = gomokuGetContact();
+  const aiName = contact?.name || 'AI';
+  const labels = { player_win:'赢了🏆', ai_win:'输了💔', draw:'平局🤝' };
+  const mm=Math.floor((last?.elapsed||0)/60), ss=(last?.elapsed||0)%60;
+  const text = last
+    ? `刚刚和 ${aiName} 下了一局五子棋，${labels[last.result]||'结束'}！共走了 ${last.moves} 步，用时 ${mm>0?mm+'分':''}${ss}秒～ #五子棋 #和AI下棋`
+    : `和 ${aiName} 下了一局五子棋，好好玩！ #五子棋 #和AI下棋`;
+  closeGomokuResult();
+  // Navigate to moments and pre-fill the compose text area
+  switchPage('moments-page');
+  await new Promise(r => setTimeout(r, 200));
+  const ta = $i('compose-text');
+  if (ta) { ta.value = text; ta.dispatchEvent(new Event('input')); }
+  // Open modal on mobile
+  const modal = $i('compose-moment-modal');
+  if (modal && window.innerWidth <= 768) {
+    const taM = modal.querySelector('textarea');
+    if (taM) taM.value = text;
+    openModal('compose-moment-modal');
+  }
+  toast('已跳转到朋友圈，发送即可～');
+}

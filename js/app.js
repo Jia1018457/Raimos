@@ -4750,6 +4750,8 @@ function companionStart() {
   const s = S.settings, mode = s.companionTimerMode || 'pomodoro';
   S._companion.mode = mode; S._companion.running = true;
   S._companion.sessionStartSec = S._companion.elapsedSec || 0;
+  S._companion.sessionRealStart = Date.now(); // track real time for all modes
+  S._companion._ckMinutesLogged = S._companion._ckMinutesLogged || 0; // accumulated since last pause
   if (mode === 'countup') {
     if (!S._companion.elapsedSec) S._companion.elapsedSec = 0;
   } else if (mode === 'countdown') {
@@ -4780,6 +4782,17 @@ function companionStart() {
       }
     }
     updateCompanionTimerText();
+    // Mirror timer to PiP window if open
+    if (_pipWin && !_pipWin.closed) {
+      try {
+        const pipTimer = _pipWin.document.getElementById('comp-timer');
+        if (pipTimer) {
+          const pm = S.settings.companionTimerMode || 'pomodoro';
+          const psec = pm === 'countup' ? S._companion.elapsedSec : (S._companion.remainingSec || 0);
+          pipTimer.innerHTML = fmtSec(psec);
+        }
+      } catch(e) {}
+    }
     // Record 1 second of companion time every 60 ticks to avoid excessive DB writes
     if (!S._companion._statTick) S._companion._statTick = 0;
     S._companion._statTick++;
@@ -4787,6 +4800,17 @@ function companionStart() {
       S._companion._statTick = 0;
       const cid = S.currentChat ? S._chats[S.currentChat]?.contactId : null;
       void _updateCompanionStats({ sessDelta: 60, contactId: cid });
+      // Periodically log minutes to linked check-in goal (every 5 min)
+      const linkedId = S.settings.companionLinkedGoalId;
+      if (linkedId && S._companion.sessionRealStart) {
+        const totalElapsed = Math.floor((Date.now() - S._companion.sessionRealStart) / 1000);
+        const totalMins = Math.floor(totalElapsed / 60);
+        const newMins = totalMins - (S._companion._ckMinutesLogged || 0);
+        if (newMins >= 5 && typeof ckAddCompanionMinutes === 'function') {
+          S._companion._ckMinutesLogged = totalMins;
+          void ckAddCompanionMinutes(linkedId, newMins);
+        }
+      }
     }
   }, 1000);
   companionSetupSpeechTimer();
@@ -4800,16 +4824,16 @@ async function companionPause() {
   if (S._companion.speechTimer) { clearInterval(S._companion.speechTimer); S._companion.speechTimer = null; }
   const a = $i('comp-audio'); if (a) a.pause();
   updateCompanionStartBtn();
-  // Log time to linked checkin goal
+  // Log time to linked checkin goal (all timer modes, using real time)
   const linkedId = S.settings.companionLinkedGoalId;
-  if (linkedId && S._companion.mode === 'countup') {
-    const sessionSecs = (S._companion.elapsedSec || 0) - (S._companion.sessionStartSec || 0);
-    const sessionMins = Math.floor(sessionSecs / 60);
-    if (sessionMins > 0) {
-      S._companion.sessionStartSec = S._companion.elapsedSec;
-      if (typeof ckAddCompanionMinutes === 'function') {
-        await ckAddCompanionMinutes(linkedId, sessionMins);
-      }
+  if (linkedId && S._companion.sessionRealStart) {
+    const totalElapsed = Math.floor((Date.now() - S._companion.sessionRealStart) / 1000);
+    const totalMins = Math.floor(totalElapsed / 60);
+    const newMins = totalMins - (S._companion._ckMinutesLogged || 0);
+    S._companion.sessionRealStart = null;
+    S._companion._ckMinutesLogged = 0;
+    if (newMins > 0 && typeof ckAddCompanionMinutes === 'function') {
+      await ckAddCompanionMinutes(linkedId, newMins);
     }
   }
 }
@@ -4817,6 +4841,7 @@ async function companionPause() {
 function companionReset() {
   companionPause();
   S._companion.phase = 'focus'; S._companion.elapsedSec = 0; S._companion.remainingSec = 0;
+  S._companion.sessionRealStart = null; S._companion._ckMinutesLogged = 0;
   updateCompanionTimerText(); companionHideBubble();
 }
 
@@ -5217,7 +5242,10 @@ async function _miniRender() {
 }
 function _miniUpdateTimer() {
   const el = $i('comp-mini-timer'); if (!el) return;
-  el.textContent = $i('comp-timer')?.textContent?.replace(/[⏰]/g,'').trim() || '00:00';
+  // Calculate directly from state so it works even when companion page is hidden or in PiP
+  const mode = S.settings.companionTimerMode || 'pomodoro';
+  const sec = mode === 'countup' ? (S._companion.elapsedSec || 0) : (S._companion.remainingSec || 0);
+  el.textContent = fmtSec(sec);
   const mb = $i('comp-mini-start'); if (mb) mb.textContent = S._companion.running ? '⏸' : '▶︎';
   // Mirror speech bubble
   const b = $i('comp-bubble'); const mb2 = $i('comp-mini-bubble');

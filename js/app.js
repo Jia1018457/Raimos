@@ -4,6 +4,7 @@
 'use strict';
 
 const $i = id => document.getElementById(id);
+const _msgTextCache = new Map();
 
 // ── GLOBAL STATE (runtime only, persisted via IndexedDB) ──
 let S = {
@@ -930,6 +931,7 @@ function makeBubble(msg) {
   const showingAlt = msg.altVersions?.length && msg.altIdx != null;
   const displayContent = showingAlt ? (msg.altVersions[msg.altIdx]?.content ?? msg.content) : msg.content;
   const displayThinking = showingAlt ? (msg.altVersions[msg.altIdx]?.thinking ?? null) : msg.thinking;
+  if (msg.id) _msgTextCache.set(msg.id, displayContent || msg.content || '');
   if (msg.type === 'voice') {
     b.innerHTML = makeVoiceHTML(msg);
     if (msg.transcript && S.settings.voiceReplyMode !== 'voice') {
@@ -2602,7 +2604,22 @@ async function addTextSticker(){const t=window.prompt('输入文字/emoji表情�
 // ══════════════════════════════
 //  MSG ACTIONS
 // ══════════════════════════════
-async function copyMsg(id){const msgs=await dbGetAll('messages','chatId',S.currentChat);const msg=msgs.find(m=>m.id===id);if(!msg)return;const txt=(msg.altVersions?.length&&msg.altIdx!=null)?msg.altVersions[msg.altIdx]?.content:msg.content;if(!txt)return;try{await navigator.clipboard.writeText(txt);haptic([5,3,5]);toast('✓ 已复制');}catch(e){const ta=document.createElement('textarea');ta.value=txt;ta.setAttribute('readonly','');ta.style.cssText='position:fixed;top:0;left:0;width:1px;height:1px;opacity:0;pointer-events:none';document.body.appendChild(ta);ta.focus({preventScroll:true});ta.setSelectionRange(0,txt.length);try{const ok=document.execCommand('copy');haptic([5,3,5]);toast(ok?'✓ 已复制':'❌ 复制失败，请长按手动复制');}catch(e2){toast('❌ 复制失败，请长按手动复制');}finally{document.body.removeChild(ta);}}}
+function copyMsg(id) {
+  const txt = _msgTextCache.get(id);
+  if (!txt) { toast('复制失败，请长按手动复制'); return; }
+  // Must be fully synchronous to preserve user-gesture context on iOS
+  const ta = document.createElement('textarea');
+  ta.value = txt;
+  ta.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0.01;font-size:16px';
+  document.body.appendChild(ta);
+  ta.focus(); ta.select(); ta.setSelectionRange(0, txt.length);
+  let ok = false;
+  try { ok = document.execCommand('copy'); } catch(_) {}
+  document.body.removeChild(ta);
+  if (ok) { haptic([5,3,5]); toast('✓ 已复制'); return; }
+  // Modern async clipboard as last resort (may fail on iOS if gesture context is stale)
+  navigator.clipboard?.writeText(txt).then(() => { haptic([5,3,5]); toast('✓ 已复制'); }).catch(() => toast('复制失败，请长按手动复制'));
+}
 async function deleteMsg(id){if(!confirm('删除这条消息？（不影响上下文其他内容）'))return;await dbDel('messages',id);fbDel('messages',id);haptic(15);await renderMsgs();}
 async function replyMsg(id){const msgs=await dbGetAll('messages','chatId',S.currentChat);const msg=msgs.find(m=>m.id===id);if(!msg)return;S.replyTo=msg;$i('reply-bar-txt').textContent=(msg.content||'[媒体]').slice(0,50);$i('reply-bar').classList.add('show');$i('msg-input').focus();}
 function cancelReply(){S.replyTo=null;$i('reply-bar').classList.remove('show');}

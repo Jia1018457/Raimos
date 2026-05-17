@@ -118,6 +118,7 @@
         <div class="input-float-btns" id="input-float-btns">
           <button class="ibtn ibtn-g float-ibtn" id="btn-voice" onclick="onVoiceClick(event)" onmousedown="onVoiceMouseDown(event)" onmouseup="onVoiceMouseUp(event)" ontouchstart="onVoiceTouchStart(event)" ontouchend="onVoiceTouchEnd(event)">🎤</button>
           <button class="ibtn float-ibtn" id="btn-send" onclick="sendMsg()">➤</button>
+          <button class="ibtn float-ibtn" id="btn-stop" onclick="stopGeneration()" style="display:none;background:var(--accent);color:#fff" title="停止生成">■</button>
         </div>
       </div>
     </div>
@@ -224,7 +225,8 @@
       </div>
       <div id="comp-bubble" style="display:none"></div>
       <!-- Immersive-mode floating controls (hidden in normal mode) -->
-      <div id="comp-imm-bar" style="position:relative">
+      <button id="comp-imm-toggle" onclick="toggleImmBar()" title="显示/隐藏控制栏">⋯</button>
+      <div id="comp-imm-bar">
         <button class="comp-imm-btn" onclick="companionExitImmersive()" title="退出全屏">✕ 退出</button>
         <div style="position:relative;display:inline-block">
           <button class="comp-imm-btn" id="comp-imm-speak" onclick="companionSpeakClick(event)" title="单击短语，双击说一句">💬</button>

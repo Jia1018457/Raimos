@@ -493,9 +493,19 @@ body{font-family:'Nunito','Noto Sans SC',sans-serif;background:var(--bg);color:v
 /* Immersive mode floating controls bar */
 #comp-imm-bar{
   position:absolute;bottom:16px;right:16px;z-index:10;
-  display:none;gap:8px;align-items:center;flex-direction:column;
+  display:none;gap:8px;align-items:flex-end;flex-direction:column;
 }
 body.comp-immersive #comp-imm-bar{display:flex;}
+body.comp-immersive #comp-imm-bar.imm-hidden{display:none;}
+#comp-imm-toggle{
+  position:absolute;bottom:16px;right:16px;z-index:11;
+  display:none;background:rgba(255,255,255,.55);border:1.5px solid rgba(255,255,255,.5);
+  backdrop-filter:blur(8px);border-radius:50%;width:32px;height:32px;
+  font-size:16px;font-weight:900;color:var(--text);cursor:pointer;
+  align-items:center;justify-content:center;font-family:inherit;line-height:1;
+}
+body.comp-immersive #comp-imm-toggle{display:flex;}
+[data-theme="dark"] #comp-imm-toggle{background:rgba(20,12,26,.6);border-color:rgba(255,255,255,.14);color:var(--text);}
 .comp-imm-btn{
   background:rgba(255,255,255,.82);border:1.5px solid rgba(255,255,255,.6);
   backdrop-filter:blur(10px);border-radius:12px;padding:8px 14px;

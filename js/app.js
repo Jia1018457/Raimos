@@ -5323,6 +5323,23 @@ function _miniUpdateTimer() {
   }
 }
 // ══ Gomoku (五子棋) ══════════════════════
+const PIECE_OPTIONS = [
+  { key: 'classic', label: '⚫经典', emoji: null },
+  { key: 'bear',    label: '🐻', emoji: '🐻' },
+  { key: 'panda',   label: '🐼', emoji: '🐼' },
+  { key: 'cat',     label: '🐱', emoji: '🐱' },
+  { key: 'smile-cat', label: '😺', emoji: '😺' },
+  { key: 'fox',     label: '🦊', emoji: '🦊' },
+  { key: 'raccoon', label: '🦝', emoji: '🦝' },
+  { key: 'rabbit',  label: '🐰', emoji: '🐰' },
+  { key: 'bunny',   label: '🐇', emoji: '🐇' },
+  { key: 'dog',     label: '🐶', emoji: '🐶' },
+  { key: 'star',    label: '⭐', emoji: '⭐' },
+  { key: 'heart',   label: '💗', emoji: '💗' },
+  { key: 'moon',    label: '🌙', emoji: '🌙' },
+  { key: 'flower',  label: '🌸', emoji: '🌸' },
+];
+// Legacy mapping for backward compat
 const PIECE_STYLES = {
   classic: { p: null,   ai: null },
   bear:    { p: '🐻',  ai: '🐼' },
@@ -5346,23 +5363,44 @@ const GOMOKU = {
   moveCount: 0,
   startTime: 0,
   contactId: null,   // currently selected AI contact id
-  prefs: { boardColor:'wood', pieceStyle:'classic', commentary:true },
+  prefs: { boardColor:'wood', pieceStyle:'classic', playerPiece:'classic', aiPiece:'panda', commentary:true, difficulty:'normal', commentFreq:'normal' },
 };
 
 // ── Prefs load/save ──
 async function loadGomokuPrefs() {
   const saved = await getSetting('gomokuPrefs');
-  if (saved) Object.assign(GOMOKU.prefs, saved);
+  if (saved) {
+    Object.assign(GOMOKU.prefs, saved);
+    // Migrate old pieceStyle to new separate player/AI pieces
+    if (saved.pieceStyle && !saved.playerPiece) {
+      const old = PIECE_STYLES[saved.pieceStyle];
+      GOMOKU.prefs.playerPiece = old?.p ? saved.pieceStyle : 'classic';
+      const aiEmoji = old?.ai;
+      const found = PIECE_OPTIONS.find(o => o.emoji === aiEmoji);
+      GOMOKU.prefs.aiPiece = found ? found.key : 'panda';
+      delete GOMOKU.prefs.pieceStyle;
+    }
+  }
   // Apply UI state
   const ct = $i('gmk-commentary-toggle');
   if (ct) ct.checked = GOMOKU.prefs.commentary;
   // board color swatch
-  document.querySelectorAll('.gmk-color-swatch').forEach(el => {
+  document.querySelectorAll('#gmk-color-row .gmk-color-swatch').forEach(el => {
     el.classList.toggle('active', el.dataset.color === GOMOKU.prefs.boardColor);
   });
-  // piece btn
-  document.querySelectorAll('.gmk-piece-btn').forEach(el => {
-    el.classList.toggle('active', el.dataset.style === GOMOKU.prefs.pieceStyle);
+  // difficulty buttons
+  document.querySelectorAll('#gomoku-settings .gmk-diff-btn').forEach(el => {
+    el.classList.toggle('active', el.dataset.diff === GOMOKU.prefs.difficulty);
+  });
+  // comment freq
+  const cf = $i('gmk-comment-freq');
+  if (cf) cf.value = GOMOKU.prefs.commentFreq || 'normal';
+  // piece option buttons
+  document.querySelectorAll('#gmk-player-piece-row .gmk-piece-opt').forEach(el => {
+    el.classList.toggle('active', el.dataset.key === GOMOKU.prefs.playerPiece);
+  });
+  document.querySelectorAll('#gmk-ai-piece-row .gmk-piece-opt').forEach(el => {
+    el.classList.toggle('active', el.dataset.key === GOMOKU.prefs.aiPiece);
   });
 }
 async function saveGomokuPrefs() { await saveSetting('gomokuPrefs', GOMOKU.prefs); }
@@ -5388,17 +5426,48 @@ function toggleGomokuCommentary(val) {
   saveGomokuPrefs();
 }
 
+function gmkGetPieceEmoji(key) {
+  const opt = PIECE_OPTIONS.find(o => o.key === key);
+  return opt ? opt.emoji : null;
+}
 function gmkUpdatePlayerIndicators() {
-  const ps = GOMOKU.prefs.pieceStyle;
-  const pInfo = PIECE_STYLES[ps] || PIECE_STYLES.classic;
+  const playerEmoji = gmkGetPieceEmoji(GOMOKU.prefs.playerPiece);
+  const aiEmoji = gmkGetPieceEmoji(GOMOKU.prefs.aiPiece);
   const pEl = $i('gmk-player-piece'), aEl = $i('gmk-ai-piece');
-  if (pInfo.p) {
-    if (pEl) { pEl.className='gmk-stone-indicator'; pEl.textContent=pInfo.p; pEl.style.fontSize='18px'; pEl.style.background='none'; pEl.style.boxShadow='none'; }
-    if (aEl) { aEl.className='gmk-stone-indicator'; aEl.textContent=pInfo.ai; aEl.style.fontSize='18px'; aEl.style.background='none'; aEl.style.boxShadow='none'; }
+  if (playerEmoji) {
+    if (pEl) { pEl.className='gmk-stone-indicator'; pEl.textContent=playerEmoji; pEl.style.fontSize='18px'; pEl.style.background='none'; pEl.style.boxShadow='none'; }
   } else {
     if (pEl) { pEl.className='gmk-stone-indicator black'; pEl.textContent=''; pEl.style=''; }
+  }
+  if (aiEmoji) {
+    if (aEl) { aEl.className='gmk-stone-indicator'; aEl.textContent=aiEmoji; aEl.style.fontSize='18px'; aEl.style.background='none'; aEl.style.boxShadow='none'; }
+  } else {
     if (aEl) { aEl.className='gmk-stone-indicator white'; aEl.textContent=''; aEl.style=''; }
   }
+}
+function setGomokuPlayerPiece(key, el) {
+  GOMOKU.prefs.playerPiece = key;
+  document.querySelectorAll('#gmk-player-piece-row .gmk-piece-opt').forEach(b => b.classList.remove('active'));
+  if (el) el.classList.add('active');
+  gmkUpdatePlayerIndicators();
+  saveGomokuPrefs();
+}
+function setGomokuAiPiece(key, el) {
+  GOMOKU.prefs.aiPiece = key;
+  document.querySelectorAll('#gmk-ai-piece-row .gmk-piece-opt').forEach(b => b.classList.remove('active'));
+  if (el) el.classList.add('active');
+  gmkUpdatePlayerIndicators();
+  saveGomokuPrefs();
+}
+function setGomokuDiff(diff, el) {
+  GOMOKU.prefs.difficulty = diff;
+  document.querySelectorAll('#gomoku-settings .gmk-diff-btn').forEach(b => b.classList.remove('active'));
+  if (el) el.classList.add('active');
+  saveGomokuPrefs();
+}
+function setGomokuCommentFreq(val) {
+  GOMOKU.prefs.commentFreq = val;
+  saveGomokuPrefs();
 }
 
 // ── AI Selector ──
@@ -5472,8 +5541,8 @@ function renderGomokuBoard() {
   const el = $i('gomoku-board');
   if (!el) return;
   el.innerHTML = '';
-  const ps = GOMOKU.prefs.pieceStyle;
-  const pInfo = PIECE_STYLES[ps] || PIECE_STYLES.classic;
+  const playerEmoji = gmkGetPieceEmoji(GOMOKU.prefs.playerPiece);
+  const aiEmoji = gmkGetPieceEmoji(GOMOKU.prefs.aiPiece);
   for (let r = 0; r < 15; r++) {
     for (let c = 0; c < 15; c++) {
       const cell = document.createElement('div');
@@ -5483,10 +5552,10 @@ function renderGomokuBoard() {
       }
       const v = GOMOKU.board[r][c];
       if (v !== 0) {
-        if (pInfo.p) {
-          // Emoji piece
+        const emoji = v === 1 ? playerEmoji : aiEmoji;
+        if (emoji) {
           cell.classList.add('emoji-piece');
-          cell.textContent = v === 1 ? pInfo.p : pInfo.ai;
+          cell.textContent = emoji;
         } else {
           const stone = document.createElement('div');
           stone.className = `gmk-stone-piece ${v === 1 ? 'black' : 'white'}`;
@@ -5901,7 +5970,7 @@ const XIANGQI = {
   moveCount: 0,
   startTime: 0,
   contactId: null,
-  prefs: { boardColor:'classic', commentary:true },
+  prefs: { boardColor:'classic', commentary:true, difficulty:'normal' },
 };
 
 const XQ_BOARD_COLORS = { classic:'xq-board-classic', pink:'xq-board-pink', purple:'xq-board-purple', green:'xq-board-green', dark:'xq-board-dark' };
@@ -6084,6 +6153,15 @@ async function loadXiangqiPrefs() {
   document.querySelectorAll('#xq-color-row .gmk-color-swatch').forEach(el => {
     el.classList.toggle('active', el.dataset.color === XIANGQI.prefs.boardColor);
   });
+  document.querySelectorAll('#xiangqi-settings .gmk-diff-btn').forEach(el => {
+    el.classList.toggle('active', el.dataset.diff === XIANGQI.prefs.difficulty);
+  });
+}
+function setXiangqiDiff(diff, el) {
+  XIANGQI.prefs.difficulty = diff;
+  document.querySelectorAll('#xiangqi-settings .gmk-diff-btn').forEach(b => b.classList.remove('active'));
+  if (el) el.classList.add('active');
+  saveXiangqiPrefs();
 }
 async function saveXiangqiPrefs() { await saveSetting('xiangqiPrefs', XIANGQI.prefs); }
 
@@ -6370,7 +6448,7 @@ const INTCHESS = {
   moveCount: 0,
   startTime: 0,
   contactId: null,
-  prefs: { boardColor:'classic', commentary:true },
+  prefs: { boardColor:'classic', commentary:true, difficulty:'normal' },
   enPassant: null,  // square pawn can capture en passant
   castling: { wK:true, wQR:true, bK:true, bQR:true }, // can castle flags
 };
@@ -6514,8 +6592,22 @@ async function loadIntChessPrefs() {
   const saved=await getSetting('intChessPrefs');if(saved)Object.assign(INTCHESS.prefs,saved);
   const ct=$i('ic-commentary-toggle');if(ct)ct.checked=INTCHESS.prefs.commentary;
   document.querySelectorAll('#ic-color-row .gmk-color-swatch').forEach(el=>el.classList.toggle('active',el.dataset.color===INTCHESS.prefs.boardColor));
+  document.querySelectorAll('#intchess-settings .gmk-diff-btn').forEach(el=>el.classList.toggle('active',el.dataset.diff===INTCHESS.prefs.difficulty));
 }
 async function saveIntChessPrefs(){await saveSetting('intChessPrefs',INTCHESS.prefs);}
+function setIntChessDiff(diff,el){
+  INTCHESS.prefs.difficulty=diff;
+  document.querySelectorAll('#intchess-settings .gmk-diff-btn').forEach(b=>b.classList.remove('active'));
+  if(el)el.classList.add('active');
+  saveIntChessPrefs();
+}
+function setIntChessColor(color,el){
+  INTCHESS.prefs.boardColor=color;
+  document.querySelectorAll('#ic-color-row .ic-color-swatch').forEach(s=>s.classList.remove('active'));
+  if(el)el.classList.add('active');
+  const board=$i('ic-board');if(board)board.className='ic-board '+(IC_BOARD_COLORS[color]||'ic-board-classic');
+  saveIntChessPrefs();
+}
 function setIntChessBoard(color,el){
   INTCHESS.prefs.boardColor=color;
   document.querySelectorAll('#ic-color-row .gmk-color-swatch').forEach(s=>s.classList.remove('active'));el.classList.add('active');
@@ -6704,3 +6796,1293 @@ async function intChessShareToMoments(){
   const modal=$i('compose-moment-modal');if(modal&&window.innerWidth<=768){const taM=modal.querySelector('textarea');if(taM)taM.value=text;openModal('compose-moment-modal');}
   toast('已跳转到朋友圈，发送即可～');
 }
+
+// ══ Go (围棋) ══════════════════════
+const GO = {
+  SIZE: 13,
+  board: null,
+  turn: 'player',
+  over: false,
+  lastMove: null,
+  thinking: false,
+  passCount: 0,
+  captures: { player: 0, ai: 0 },
+  koPoint: null,
+  prevBoardState: null,
+  startTime: 0,
+  contactId: null,
+  prefs: { boardColor: 'wood', playerPiece: 'classic', aiPiece: 'panda', commentary: true, difficulty: 'normal', commentFreq: 'normal' },
+};
+
+// ── Prefs ──
+async function loadGoPrefs() {
+  const saved = await getSetting('goPrefs');
+  if (saved) {
+    Object.assign(GO.prefs, saved);
+    // Migrate old pieceStyle
+    if (saved.pieceStyle && !saved.playerPiece) {
+      const old = PIECE_STYLES[saved.pieceStyle];
+      GO.prefs.playerPiece = old?.p ? saved.pieceStyle : 'classic';
+      const aiEmoji = old?.ai;
+      const found = PIECE_OPTIONS.find(o => o.emoji === aiEmoji);
+      GO.prefs.aiPiece = found ? found.key : 'panda';
+      delete GO.prefs.pieceStyle;
+    }
+  }
+  const ct = $i('go-commentary-toggle');
+  if (ct) ct.checked = GO.prefs.commentary;
+  document.querySelectorAll('#go-color-row .gmk-color-swatch').forEach(el => {
+    el.classList.toggle('active', el.dataset.color === GO.prefs.boardColor);
+  });
+  document.querySelectorAll('#go-settings .gmk-diff-btn').forEach(el => {
+    el.classList.toggle('active', el.dataset.diff === GO.prefs.difficulty);
+  });
+  const cf = $i('go-comment-freq');
+  if (cf) cf.value = GO.prefs.commentFreq || 'normal';
+  document.querySelectorAll('#go-player-piece-row .gmk-piece-opt').forEach(el => {
+    el.classList.toggle('active', el.dataset.key === GO.prefs.playerPiece);
+  });
+  document.querySelectorAll('#go-ai-piece-row .gmk-piece-opt').forEach(el => {
+    el.classList.toggle('active', el.dataset.key === GO.prefs.aiPiece);
+  });
+}
+async function saveGoPrefs() { await saveSetting('goPrefs', GO.prefs); }
+
+function setGoBoard(color, el) {
+  GO.prefs.boardColor = color;
+  const board = $i('go-board');
+  if (board) board.className = 'go-board ' + (BOARD_COLORS[color] || 'gmk-board-wood');
+  document.querySelectorAll('#go-color-row .gmk-color-swatch').forEach(e => e.classList.toggle('active', e === el));
+  saveGoPrefs();
+}
+function setGoPiece(style, el) {
+  GO.prefs.playerPiece = style;
+  renderGoBoard();
+  saveGoPrefs();
+}
+function setGoPlayerPiece(key, el) {
+  GO.prefs.playerPiece = key;
+  document.querySelectorAll('#go-player-piece-row .gmk-piece-opt').forEach(b => b.classList.remove('active'));
+  if (el) el.classList.add('active');
+  goUpdateAiPieceDisplay();
+  renderGoBoard();
+  saveGoPrefs();
+}
+function setGoAiPiece(key, el) {
+  GO.prefs.aiPiece = key;
+  document.querySelectorAll('#go-ai-piece-row .gmk-piece-opt').forEach(b => b.classList.remove('active'));
+  if (el) el.classList.add('active');
+  goUpdateAiPieceDisplay();
+  renderGoBoard();
+  saveGoPrefs();
+}
+function setGoDiff(diff, el) {
+  GO.prefs.difficulty = diff;
+  document.querySelectorAll('#go-settings .gmk-diff-btn').forEach(b => b.classList.remove('active'));
+  if (el) el.classList.add('active');
+  saveGoPrefs();
+}
+function setGoCommentFreq(val) { GO.prefs.commentFreq = val; saveGoPrefs(); }
+function toggleGoCommentary(val) { GO.prefs.commentary = val; saveGoPrefs(); }
+function toggleGoSettings() {
+  const s = $i('go-settings');
+  if (!s) return;
+  const show = s.style.display === 'none';
+  s.style.display = show ? '' : 'none';
+  if (show) { renderGoAiSelector(); loadGoPrefs(); }
+}
+
+// ── AI Selector ──
+function renderGoAiSelector() {
+  const el = $i('go-ai-selector');
+  if (!el) return;
+  el.innerHTML = '';
+  const contacts = Object.values(S._contacts || {});
+  contacts.forEach(c => {
+    const btn = document.createElement('button');
+    btn.className = 'gmk-ai-btn' + (GO.contactId === c.id ? ' active' : '');
+    const av = c.avatar || '🤖';
+    btn.innerHTML = `<span style="font-size:16px">${av.startsWith('data:')?`<img src="${av}" style="width:20px;height:20px;border-radius:50%;object-fit:cover">`:av}</span><span style="font-size:11px;font-weight:700">${esc(c.name)}</span>`;
+    btn.onclick = () => { GO.contactId = c.id; renderGoAiSelector(); updateGoAiDisplay(); };
+    el.appendChild(btn);
+  });
+}
+function goGetContact() {
+  return GO.contactId ? S._contacts[GO.contactId]
+    : (S.currentContact ? S._contacts[S.currentContact] : Object.values(S._contacts||{})[0]);
+}
+function goUpdateAiPieceDisplay() {
+  const aiEmoji = gmkGetPieceEmoji(GO.prefs.aiPiece);
+  const playerEmoji = gmkGetPieceEmoji(GO.prefs.playerPiece);
+  const pEl = $i('go-player-piece'), aEl = $i('go-ai-piece');
+  if (playerEmoji) {
+    if (pEl) { pEl.className='gmk-stone-indicator'; pEl.textContent=playerEmoji; pEl.style.fontSize='18px'; pEl.style.background='none'; pEl.style.boxShadow='none'; }
+  } else {
+    if (pEl) { pEl.className='gmk-stone-indicator black'; pEl.textContent=''; pEl.style=''; }
+  }
+  if (aiEmoji) {
+    if (aEl) { aEl.className='gmk-stone-indicator'; aEl.textContent=aiEmoji; aEl.style.fontSize='18px'; aEl.style.background='none'; aEl.style.boxShadow='none'; }
+  } else {
+    if (aEl) { aEl.className='gmk-stone-indicator white'; aEl.textContent=''; aEl.style=''; }
+  }
+}
+function updateGoAiDisplay() {
+  const contact = goGetContact();
+  const aiNameEl = $i('go-ai-name');
+  if (aiNameEl) aiNameEl.textContent = contact?.name || 'AI（白子）';
+  goUpdateAiPieceDisplay();
+}
+
+// ── Init ──
+async function initGo() {
+  const N = GO.SIZE;
+  GO.board = Array.from({ length: N }, () => Array(N).fill(0));
+  GO.turn = 'player';
+  GO.over = false;
+  GO.lastMove = null;
+  GO.thinking = false;
+  GO.passCount = 0;
+  GO.captures = { player: 0, ai: 0 };
+  GO.koPoint = null;
+  GO.prevBoardState = null;
+  GO.startTime = Date.now();
+
+  if (!GO.contactId) {
+    GO.contactId = S.currentContact || Object.keys(S._contacts || {})[0] || null;
+  }
+
+  await loadGoPrefs();
+  const board = $i('go-board');
+  if (board) board.className = 'go-board ' + (BOARD_COLORS[GO.prefs.boardColor] || 'gmk-board-wood');
+
+  renderGoAiSelector();
+  updateGoAiDisplay();
+  renderGoBoard();
+
+  const statusEl = $i('go-status');
+  if (statusEl) statusEl.textContent = '你先行（黑子）';
+  const commentEl = $i('go-comment');
+  if (commentEl) commentEl.textContent = '';
+  goUpdateCaptures();
+}
+
+function goUpdateCaptures() {
+  const pc = $i('go-player-caps');
+  const ac = $i('go-ai-caps');
+  if (pc) pc.textContent = `提${GO.captures.player}子`;
+  if (ac) ac.textContent = `提${GO.captures.ai}子`;
+}
+
+function goSay(msg) {
+  const el = $i('go-comment');
+  if (el) { el.textContent = msg; el.style.display = msg ? '' : 'none'; }
+}
+
+// ── Board Render ──
+function renderGoBoard() {
+  const boardEl = $i('go-board');
+  if (!boardEl) return;
+  boardEl.innerHTML = '';
+  const N = GO.SIZE;
+  const playerEmoji = gmkGetPieceEmoji(GO.prefs.playerPiece);
+  const aiEmoji = gmkGetPieceEmoji(GO.prefs.aiPiece);
+
+  // Star points (hoshi) for 13x13: 0-indexed
+  const starSet = new Set([
+    '2,2','2,6','2,10',
+    '6,2','6,6','6,10',
+    '10,2','10,6','10,10',
+  ]);
+
+  for (let r = 0; r < N; r++) {
+    for (let c = 0; c < N; c++) {
+      const cell = document.createElement('div');
+      cell.className = 'go-cell';
+      cell.id = `go-cell-${r}-${c}`;
+
+      // Star point
+      if (starSet.has(`${r},${c}`)) {
+        const star = document.createElement('div');
+        star.className = 'go-star';
+        cell.appendChild(star);
+      }
+
+      const v = GO.board[r][c];
+      if (v !== 0) {
+        // last move indicator
+        if (GO.lastMove && GO.lastMove[0] === r && GO.lastMove[1] === c) {
+          cell.classList.add('last-move');
+        }
+        const stone = document.createElement('div');
+        const emoji = v === 1 ? playerEmoji : aiEmoji;
+        if (emoji) {
+          stone.className = 'go-stone emoji';
+          stone.textContent = emoji;
+        } else {
+          stone.className = 'go-stone ' + (v === 1 ? 'black' : 'white');
+        }
+        cell.appendChild(stone);
+      } else if (!GO.over && GO.turn === 'player' && !GO.thinking) {
+        cell.onclick = () => goPlayerMove(r, c);
+      }
+
+      boardEl.appendChild(cell);
+    }
+  }
+}
+
+// ── Move Logic ──
+function goBoardToString() {
+  return GO.board.map(row => row.join('')).join('|');
+}
+
+function goCountLiberties(r, c) {
+  const N = GO.SIZE;
+  const color = GO.board[r][c];
+  if (color === 0) return { liberties: new Set(), group: new Set() };
+  const group = new Set();
+  const liberties = new Set();
+  const queue = [[r, c]];
+  group.add(`${r},${c}`);
+  while (queue.length) {
+    const [cr, cc] = queue.shift();
+    for (const [dr, dc] of [[-1,0],[1,0],[0,-1],[0,1]]) {
+      const nr = cr + dr, nc = cc + dc;
+      if (nr < 0 || nr >= N || nc < 0 || nc >= N) continue;
+      const key = `${nr},${nc}`;
+      if (GO.board[nr][nc] === 0) {
+        liberties.add(key);
+      } else if (GO.board[nr][nc] === color && !group.has(key)) {
+        group.add(key);
+        queue.push([nr, nc]);
+      }
+    }
+  }
+  return { liberties, group };
+}
+
+function goCapture(color) {
+  const N = GO.SIZE;
+  let captured = 0;
+  const visited = new Set();
+  for (let r = 0; r < N; r++) {
+    for (let c = 0; c < N; c++) {
+      if (GO.board[r][c] !== color) continue;
+      const key = `${r},${c}`;
+      if (visited.has(key)) continue;
+      const { liberties, group } = goCountLiberties(r, c);
+      group.forEach(k => visited.add(k));
+      if (liberties.size === 0) {
+        group.forEach(k => {
+          const [gr, gc] = k.split(',').map(Number);
+          GO.board[gr][gc] = 0;
+          captured++;
+        });
+      }
+    }
+  }
+  return captured;
+}
+
+function goPlayerMove(r, c) {
+  if (GO.over || GO.turn !== 'player' || GO.thinking) return;
+  if (GO.board[r][c] !== 0) return;
+
+  // Ko check
+  if (GO.koPoint && GO.koPoint[0] === r && GO.koPoint[1] === c) {
+    toast('劫争！不能在此处落子');
+    return;
+  }
+
+  // Place stone temporarily
+  GO.board[r][c] = 1;
+
+  // Capture enemy groups
+  const capturedAI = goCapture(2);
+
+  // Check suicide: own group has no liberties and we captured nothing
+  const { liberties: ownLibs } = goCountLiberties(r, c);
+  if (ownLibs.size === 0 && capturedAI === 0) {
+    GO.board[r][c] = 0;
+    toast('不合法落子（自杀）');
+    return;
+  }
+
+  // Ko rule: if captured exactly 1 and board returns to previous state
+  const newState = goBoardToString();
+  if (GO.prevBoardState && newState === GO.prevBoardState && capturedAI === 1) {
+    GO.board[r][c] = 0;
+    // Undo captures by re-running without the move
+    toast('劫争！此落子违反劫争规则');
+    return;
+  }
+
+  GO.prevBoardState = newState;
+  GO.koPoint = capturedAI === 1 ? [r, c] : null;
+  GO.captures.player += capturedAI;
+  GO.passCount = 0;
+  GO.lastMove = [r, c];
+  GO.turn = 'ai';
+
+  renderGoBoard();
+  goUpdateCaptures();
+
+  const statusEl = $i('go-status');
+  if (statusEl) statusEl.textContent = 'AI思考中…';
+
+  setTimeout(goAiMove, 400);
+}
+
+function goPass() {
+  if (GO.over || GO.turn !== 'player' || GO.thinking) return;
+  GO.passCount++;
+  GO.lastMove = null;
+  goSay('你选择虚手');
+  if (GO.passCount >= 2) {
+    goFinish('double_pass');
+    return;
+  }
+  GO.turn = 'ai';
+  const statusEl = $i('go-status');
+  if (statusEl) statusEl.textContent = 'AI思考中…';
+  setTimeout(goAiMove, 600);
+}
+
+// ── AI Move ──
+async function goAiMove() {
+  GO.thinking = true;
+  const statusEl = $i('go-status');
+  if (statusEl) statusEl.textContent = 'AI思考中…';
+
+  let move = null;
+  const contact = goGetContact();
+  const useKey = contact?.apiKey || S.settings.apiKey;
+  const difficulty = GO.prefs.difficulty || 'normal';
+
+  // Beginner: always use heuristic (with 40% random)
+  if (difficulty === 'beginner') {
+    move = goHeuristic();
+    if (move && Math.random() < 0.4) {
+      // pick a random nearby legal move
+      const N = GO.SIZE;
+      const candidates = [];
+      for (let r=0;r<N;r++) for (let c=0;c<N;c++) {
+        if (GO.board[r][c] !== 0) continue;
+        if (GO.koPoint && GO.koPoint[0]===r && GO.koPoint[1]===c) continue;
+        for (const [dr,dc] of [[-1,0],[1,0],[0,-1],[0,1]]) {
+          const nr=r+dr,nc=c+dc;
+          if (nr>=0&&nr<N&&nc>=0&&nc<N&&GO.board[nr][nc]!==0) { candidates.push({row:r,col:c,comment:'嘻嘻随便下～'}); break; }
+        }
+      }
+      if (candidates.length) move = candidates[Math.floor(Math.random()*candidates.length)];
+    }
+  } else if (useKey) {
+    try { move = await goCallAI(contact, useKey); } catch(e) {}
+  }
+
+  if (!move) move = goHeuristic();
+
+  GO.thinking = false;
+
+  if (!move) {
+    // AI passes
+    GO.passCount++;
+    goSay('AI选择虚手');
+    if (GO.passCount >= 2) { goFinish('double_pass'); return; }
+    GO.turn = 'player';
+    if (statusEl) statusEl.textContent = '你的回合（黑子）';
+    renderGoBoard();
+    return;
+  }
+
+  const { row, col, comment, pass } = move;
+  if (pass) {
+    GO.passCount++;
+    goSay(comment || 'AI选择虚手');
+    if (GO.passCount >= 2) { goFinish('double_pass'); return; }
+    GO.turn = 'player';
+    if (statusEl) statusEl.textContent = '你的回合（黑子）';
+    renderGoBoard();
+    return;
+  }
+
+  if (typeof row !== 'number' || row < 0 || row >= GO.SIZE || GO.board[row][col] !== 0) {
+    // Fallback heuristic
+    const fallback = goHeuristic();
+    if (!fallback) {
+      GO.passCount++;
+      if (GO.passCount >= 2) { goFinish('double_pass'); return; }
+      GO.turn = 'player';
+      if (statusEl) statusEl.textContent = '你的回合（黑子）';
+      renderGoBoard();
+      return;
+    }
+    move = fallback;
+  }
+
+  const mr = move.row ?? row, mc = move.col ?? col;
+
+  GO.board[mr][mc] = 2;
+  const capturedPlayer = goCapture(1);
+  GO.captures.ai += capturedPlayer;
+  GO.passCount = 0;
+  GO.prevBoardState = goBoardToString();
+  GO.lastMove = [mr, mc];
+  GO.turn = 'player';
+
+  const goFreqMap = { off: 0, low: 5, normal: 3, high: 1 };
+  const goFreq = goFreqMap[GO.prefs.commentFreq ?? 'normal'] ?? 3;
+  const goMoveNum = GO.captures.ai + GO.captures.player + 1;
+  const goShouldComment = goFreq > 0 && goMoveNum % goFreq === 0;
+  if (comment && goShouldComment) goSay(comment);
+
+  renderGoBoard();
+  goUpdateCaptures();
+  if (statusEl) statusEl.textContent = '你的回合（黑子）';
+}
+
+async function goCallAI(contact, apiKey) {
+  const N = GO.SIZE;
+  const lines = [];
+  const cols = '０１２３４５６７８９ＡＢＣ'.slice(0, N);
+  lines.push('  ' + [...cols].join(' '));
+  for (let r = 0; r < N; r++) {
+    const rowStr = String(r).padStart(2, ' ') + ' ' + GO.board[r].map(v => v===1?'B':v===2?'W':'.').join(' ');
+    lines.push(rowStr);
+  }
+  const boardTxt = lines.join('\n');
+  const aiName = contact?.name || 'AI';
+  const personality = (contact?.system || '').slice(0, 100);
+  const prompt = `你是${aiName}，和用户下围棋13×13。你执白子(W)，用户执黑子(B)，.表示空格。\n${boardTxt}\n性格：${personality||'聪明温柔'}。请找出最佳落子位置（0-12行列），或选择虚手。用1句符合性格的话评论。\n只返回JSON：{"row":数字,"col":数字,"comment":"一句话"} 或 {"pass":true,"comment":"一句话"}`;
+
+  const res = await fetch(contact?.apiUrl || 'https://openrouter.ai/api/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+      'HTTP-Referer': 'https://raimos.app',
+      'X-Title': 'Raimos',
+    },
+    body: JSON.stringify({
+      model: contact?.model || S.settings.model || 'openai/gpt-4o-mini',
+      max_tokens: 80,
+      stream: false,
+      messages: [{ role: 'user', content: prompt }],
+    }),
+  });
+  const data = await res.json();
+  const txt = data.choices?.[0]?.message?.content || '';
+  const m = txt.match(/\{[\s\S]*?\}/);
+  if (!m) return null;
+  return JSON.parse(m[0]);
+}
+
+function goHeuristic() {
+  const N = GO.SIZE;
+  const center = Math.floor(N / 2);
+  let bestScore = -Infinity, best = null;
+
+  // First: check immediate capture moves (AI captures player's group)
+  for (let r = 0; r < N; r++) {
+    for (let c = 0; c < N; c++) {
+      if (GO.board[r][c] !== 0) continue;
+      GO.board[r][c] = 2;
+      const caps = goCapture(1);
+      if (caps > 0) {
+        GO.board[r][c] = 0;
+        // Undo captures
+        renderGoBoard(); // will be re-rendered
+        return { row: r, col: c, comment: null };
+      }
+      GO.board[r][c] = 0;
+    }
+  }
+
+  // Score each empty cell
+  for (let r = 0; r < N; r++) {
+    for (let c = 0; c < N; c++) {
+      if (GO.board[r][c] !== 0) continue;
+
+      // Ko restriction
+      if (GO.koPoint && GO.koPoint[0] === r && GO.koPoint[1] === c) continue;
+
+      // Suicide check
+      GO.board[r][c] = 2;
+      const capTest = goCapture(1);
+      const { liberties: ownLibs } = goCountLiberties(r, c);
+      const suicide = ownLibs.size === 0 && capTest === 0;
+      // Restore
+      GO.board[r][c] = 0;
+      if (suicide) continue;
+
+      let score = 0;
+      // Capture threat
+      for (const [dr, dc] of [[-1,0],[1,0],[0,-1],[0,1]]) {
+        const nr = r + dr, nc = c + dc;
+        if (nr < 0 || nr >= N || nc < 0 || nc >= N) continue;
+        if (GO.board[nr][nc] === 1) {
+          GO.board[r][c] = 2;
+          const { liberties: enemyLibs } = goCountLiberties(nr, nc);
+          GO.board[r][c] = 0;
+          if (enemyLibs.size <= 1) score += 500; // atari / capture
+        }
+        if (GO.board[nr][nc] === 2) score += 10; // extend own
+        if (GO.board[nr][nc] === 1) score -= 3; // near enemy
+      }
+      // Centrality
+      score += 8 / (1 + Math.abs(r - center) + Math.abs(c - center));
+      // Slight randomness
+      score += Math.random() * 2;
+
+      if (score > bestScore) { bestScore = score; best = { row: r, col: c, comment: null }; }
+    }
+  }
+  return best;
+}
+
+// ── Scoring ──
+function goScore() {
+  const N = GO.SIZE;
+  const visited = new Set();
+  let playerTerritory = 0, aiTerritory = 0;
+
+  for (let r = 0; r < N; r++) {
+    for (let c = 0; c < N; c++) {
+      if (GO.board[r][c] !== 0 || visited.has(`${r},${c}`)) continue;
+      // Flood fill empty region
+      const region = [];
+      const queue = [[r, c]];
+      visited.add(`${r},${c}`);
+      let touchesPlayer = false, touchesAI = false;
+      while (queue.length) {
+        const [cr, cc] = queue.shift();
+        region.push([cr, cc]);
+        for (const [dr, dc] of [[-1,0],[1,0],[0,-1],[0,1]]) {
+          const nr = cr + dr, nc = cc + dc;
+          if (nr < 0 || nr >= N || nc < 0 || nc >= N) continue;
+          const v = GO.board[nr][nc];
+          if (v === 1) touchesPlayer = true;
+          else if (v === 2) touchesAI = true;
+          else if (!visited.has(`${nr},${nc}`)) {
+            visited.add(`${nr},${nc}`);
+            queue.push([nr, nc]);
+          }
+        }
+      }
+      if (touchesPlayer && !touchesAI) playerTerritory += region.length;
+      else if (touchesAI && !touchesPlayer) aiTerritory += region.length;
+    }
+  }
+
+  const playerScore = playerTerritory + GO.captures.player;
+  const aiScore = aiTerritory + GO.captures.ai + 6.5; // komi
+  return { playerScore, aiScore, playerTerritory, aiTerritory };
+}
+
+// ── Finish ──
+async function goFinish(reason) {
+  GO.over = true;
+  const { playerScore, aiScore, playerTerritory, aiTerritory } = goScore();
+  const contact = goGetContact();
+  const elapsed = Math.round((Date.now() - GO.startTime) / 1000);
+  const result = playerScore > aiScore ? 'player_win' : 'ai_win';
+
+  await saveGoRecord({ result, playerScore, aiScore, elapsed, aiName: contact?.name || 'AI', aiContactId: GO.contactId, date: Date.now() });
+
+  setTimeout(() => showGoResult(playerScore, aiScore, reason, elapsed, contact), 600);
+}
+
+function showGoResult(playerScore, aiScore, reason, elapsed, contact) {
+  const overlay = $i('go-result-overlay');
+  if (!overlay) return;
+  overlay.classList.add('show');
+
+  const win = playerScore > aiScore;
+  const titleEl = $i('go-result-title');
+  if (titleEl) {
+    titleEl.textContent = win ? '🎉 你赢了！' : '💫 AI赢了！';
+    titleEl.className = `gmk-result-title${win ? ' win' : ''}`;
+  }
+
+  const pb = win ? '🏆' : '💔', ab = win ? '💔' : '🏆';
+  const pbEl = $i('go-result-player-badge'), abEl = $i('go-result-ai-badge');
+  if (pbEl) pbEl.textContent = pb;
+  if (abEl) abEl.textContent = ab;
+
+  const userAv = S.settings.userAvatar || S.settings.avatar || '😊';
+  const pAvEl = $i('go-result-player-av');
+  if (pAvEl) { if (userAv.startsWith('data:')) pAvEl.innerHTML = `<img src="${userAv}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`; else pAvEl.textContent = userAv; }
+  const aiAv = contact?.avatar || '🤖';
+  const aAvEl = $i('go-result-ai-av');
+  if (aAvEl) { if (aiAv.startsWith('data:')) aAvEl.innerHTML = `<img src="${aiAv}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`; else aAvEl.textContent = aiAv; }
+  const aiNameEl = $i('go-result-ai-name');
+  if (aiNameEl) aiNameEl.textContent = contact?.name || 'AI';
+
+  const mm = Math.floor(elapsed / 60), ss = elapsed % 60;
+  const reasonTxt = reason === 'double_pass' ? '双方虚手结束' : '游戏结束';
+  const statsEl = $i('go-result-stats');
+  if (statsEl) statsEl.textContent = `${reasonTxt} · 用时 ${mm > 0 ? mm + '分' : ''}${ss}秒\n你：${playerScore.toFixed(1)}目  AI：${aiScore.toFixed(1)}目（含贴目6.5）`;
+
+  // Cat
+  const catEl = $i('go-result-cat');
+  if (catEl) catEl.innerHTML = win ? gomokuWinCatSVG() : gomokuLoseCatSVG();
+
+  // Confetti
+  const confEl = $i('go-confetti');
+  if (confEl) {
+    confEl.innerHTML = '';
+    if (win) {
+      const cols = ['#ff8fab','#a78bfa','#fcd34d','#6ee7b7','#67e8f9','#f472b6'];
+      for (let i = 0; i < 32; i++) {
+        const el = document.createElement('div');
+        el.className = 'gmk-confetti-piece';
+        const sz = 6 + Math.random() * 7;
+        el.style.cssText = `left:${Math.random()*100}%;width:${sz}px;height:${sz}px;background:${cols[i%cols.length]};border-radius:${Math.random()>.5?'50%':'3px'};animation:confetti-fall ${1.2+Math.random()*.8}s ease-in ${Math.random()*.5}s forwards`;
+        confEl.appendChild(el);
+      }
+    }
+  }
+}
+
+function closeGoResult() { closeModal('go-result-overlay'); }
+
+// ── Records ──
+async function saveGoRecord(rec) {
+  let records = (await getSetting('goRecords')) || [];
+  records.unshift({ ...rec, id: uid() });
+  if (records.length > 60) records = records.slice(0, 60);
+  await saveSetting('goRecords', records);
+}
+
+async function openGoRecords() {
+  const records = (await getSetting('goRecords')) || [];
+  const overlay = $i('go-records-modal');
+  if (!overlay) return;
+  overlay.classList.add('show');
+
+  const wins = records.filter(r => r.result === 'player_win').length;
+  const losses = records.filter(r => r.result === 'ai_win').length;
+  const sumEl = $i('go-records-summary');
+  if (sumEl) sumEl.innerHTML = `
+    <div style="flex:1"><div style="font-size:22px;font-weight:900;color:#4ade80">${wins}</div><div style="font-size:11px;color:var(--text3)">胜</div></div>
+    <div style="flex:1"><div style="font-size:22px;font-weight:900;color:#f87171">${losses}</div><div style="font-size:11px;color:var(--text3)">负</div></div>
+    <div style="flex:1"><div style="font-size:22px;font-weight:900;color:var(--accent)">${records.length}</div><div style="font-size:11px;color:var(--text3)">总局</div></div>`;
+
+  const listEl = $i('go-records-list');
+  if (!listEl) return;
+  if (!records.length) { listEl.innerHTML = '<div style="text-align:center;padding:30px;color:var(--text3);font-size:13px">还没有对战记录，快去下一局吧！</div>'; return; }
+  listEl.innerHTML = '';
+  records.forEach(r => {
+    const icon = r.result === 'player_win' ? '🏆' : '💔';
+    const label = r.result === 'player_win' ? '胜利' : '败北';
+    const mm = Math.floor((r.elapsed || 0) / 60), ss = (r.elapsed || 0) % 60;
+    const date = r.date ? new Date(r.date).toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' }) : '';
+    const el = document.createElement('div');
+    el.className = 'gmk-record-item';
+    el.innerHTML = `<div class="gmk-record-result">${icon}</div><div class="gmk-record-info"><div style="font-weight:700;color:var(--text)">${label} · vs ${esc(r.aiName || 'AI')}</div><div class="gmk-record-meta">${date} · ${mm > 0 ? mm + '分' : ''}${ss}秒 · 你${(r.playerScore||0).toFixed(1)}目 AI${(r.aiScore||0).toFixed(1)}目</div></div>`;
+    listEl.appendChild(el);
+  });
+}
+
+async function clearGoRecords() {
+  if (!confirm('确认清空所有围棋战绩？')) return;
+  await saveSetting('goRecords', []);
+  openGoRecords();
+}
+
+
+// ══ Flying Chess (飞行棋) ══════════════════════
+const FLY_PLAYER_COLORS = ['#ff6b6b', '#4d9fff', '#ffd93d', '#6bcb77'];
+const FLY_PLAYER_EMOJIS = ['🔴', '🔵', '🟡', '🟢'];
+const DICE_FACES = ['⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
+
+const FLY_SPACE_LAYOUT = [
+  'start',                                           // 1
+  'normal','back3','normal','event',                 // 2-5
+  'skip','normal','normal','heart','checkpoint',     // 6-10
+  'normal','forward3','event','normal','back3',      // 11-15
+  'normal','heart','again','normal','checkpoint',    // 16-20
+  'event','normal','normal','back3','forward3',      // 21-25
+  'normal','heart','event','normal','checkpoint',    // 26-30
+  'normal','forward5','event','skip','normal',       // 31-35
+  'back3','normal','heart','event','checkpoint',     // 36-40
+  'normal','forward3','event','normal','back3',      // 41-45
+  'skip','heart','normal','event','checkpoint',      // 46-50
+  'normal','forward5','event','normal','heart',      // 51-55
+  'back3','normal','again','event','checkpoint',     // 56-60
+  'normal','forward3','heart','event','normal',      // 61-65
+  'back3','normal','event','skip','checkpoint',      // 66-70
+  'forward5','normal','heart','event','normal',      // 71-75
+  'normal','event','heart','normal','finish'         // 76-80
+];
+
+const FLY_SPACE_ICONS = {
+  start: '🚀', finish: '🏆', normal: '', event: '⭐', heart: '💗',
+  forward3: '↑+3', forward5: '↑+5', back3: '↓-3', skip: '💤',
+  again: '🎲', checkpoint: '⭕',
+};
+
+const FLY_ROMANCE_EVENTS = [
+  '说出你觉得最浪漫的表白方式，然后前进3格🌹',
+  '描述你梦想中完美的约会场景，越详细越好💑',
+  '如果要给暗恋的人发一条消息，你会写什么？💌',
+  '说一句能让旁边的人脸红的情话，前进2格😊',
+  '你相信一见钟情吗？说说你的看法和理由✨',
+  '描述你理想伴侣的三个最重要特质💫',
+  '如果可以和喜欢的人共度一天，你会怎么安排？☀️',
+  '说出你认为最重要的爱情品质，前进2格💝',
+  '你会用什么方式庆祝恋爱100天纪念日？🎂',
+  '说一个你觉得很甜很甜的浪漫故事或情节💕',
+  '如果制作一个"我的理想恋人"简历，第一条写什么？📝',
+  '你觉得异地恋可行吗？你会为爱情付出多少距离？🌍',
+  '描述你心目中最甜蜜最浪漫的接吻场景💋',
+  '如果今晚可以和任何人约会，你会选谁，去哪里？🌙',
+  '用三个词形容你理想中的爱情关系，并解释🌸',
+  '你觉得爱情中最重要的是什么：陪伴、理解还是激情？💞',
+  '说出一件你愿意为爱情做但平时不会做的事💪',
+  '如果用一首歌形容你的爱情观，你会选哪首？🎵',
+  '描述你心目中最完美的求婚场景，越浪漫越好💍',
+  '你有没有因为一个眼神而心动的经历？分享一下👀',
+  '如果可以让对方知道你最深的秘密，你会说什么？🤫',
+  '说出你认为最能打动人心的爱意表达方式💓',
+  '如果你们要一起旅行，你最想去哪里，做什么？✈️',
+  '什么样的小细节会让你对一个人产生好感？🌷',
+  '你相信缘分吗？说说你对缘分最深的理解🌈',
+  '如果用食物比喻爱情，你会比喻成什么？🍰',
+  '描述你最希望在恋爱中体验到的幸福瞬间💖',
+  '你觉得什么行为最能展示一个人真心爱你？❤️',
+  '如果写一封情书给未来的另一半，第一句话是？💌',
+  '说出一个你认为比告白更勇敢的爱情行为🦋',
+  '你觉得接受还是拒绝一段感情，哪个需要更大的勇气？🫧',
+  '描述一个让你觉得"这就是爱情"的电影或故事场景🎬',
+];
+
+const FLY_DEEP_EVENTS = [
+  '你最害怕失去什么？认真思考一下再诚实回答💭',
+  '如果只剩一年的时间，你最想完成哪三件事？⏰',
+  '你觉得真正的幸福是什么样子的？🌟',
+  '你有没有因为在乎别人而改变过自己？分享一下💝',
+  '你最深的遗憾是什么？如果能回头，你会改变吗？',
+  '如果可以给10年前的自己一句话，你会说什么？⏳',
+  '你觉得友情和爱情的界限在哪里？🤔',
+  '最近一次让你感到特别感动的事是什么？💫',
+  '你觉得孤独对人来说是好事还是坏事？🌙',
+  '人生中什么样的体验让你觉得"活着真好"？🌈',
+  '如果你的人生是一部电影，现在是哪个章节？🎬',
+  '你最欣赏自己的一个品质是什么？为什么？🌺',
+  '你觉得真正的朋友应该是什么样的？👫',
+  '你有什么一直想做但还没有勇气做的事？💪',
+  '你认为人生中最重要的三个价值观是什么？🎯',
+  '如果可以和历史上任何一个人共进晚餐，你会选谁？🍽️',
+  '你觉得什么是真正的成长？你什么时候感觉到自己成长了？🌱',
+  '你有没有一个一直藏在心里却没说出口的话？说出来吧🤍',
+  '如果明天是世界末日，你今天会怎么度过？🌅',
+  '你觉得自己人生中做过最勇敢的事是什么？🦁',
+  '你最感激生命中的哪个人？为什么不直接告诉他们？💛',
+  '你觉得什么样的人生才算没有遗憾地活过？🌠',
+  '如果可以改变自己一个性格特点，你会改变什么？🦋',
+  '你什么时候感觉最接近真实的自己？🪞',
+  '你觉得人与人之间最重要的连接是什么？🤝',
+  '如果可以让所有人知道一件事，你会选择什么？📣',
+  '你是否曾经后悔没有更早做某件事？是什么？⌛',
+  '你觉得爱自己和爱别人，哪个更难？为什么？💗',
+  '你最近一次真正开怀大笑是什么时候，因为什么？😂',
+  '你觉得什么是你生命中最不可替代的体验？✨',
+  '如果你的人生只能传递一个信息给下一代，是什么？📚',
+  '你有没有感受过被命运安排的时刻？分享一下🌌',
+];
+
+const FLY_DAILY_EVENTS = [
+  '站起来伸个懒腰，做5个深蹲，完成后前进3格！🏃',
+  '给手机充个电，如果电量低于50%前进2格⚡',
+  '对着镜子或摄像头笑一笑，说"我今天很棒！"前进2格😊',
+  '给家人或好友发一条温馨问候消息，前进4格💌',
+  '整理一下你面前的桌面或手机桌面，前进2格✨',
+  '喝一大杯水，补充水分！前进2格💧',
+  '深呼吸5次，放空杂念，前进3格🌬️',
+  '拍一张你现在所处环境的照片，前进2格📸',
+  '说一件最近让你开心的小事，前进3格😄',
+  '做5个俯卧撑或仰卧起坐，完成前进4格💪',
+  '唱一首你喜欢的歌的第一句，前进2格🎵',
+  '用手机查一下今天的天气，大声说出来，前进2格☀️',
+  '做一个最喜欢的食物图片搜索，看看哪个最诱人，前进2格🍜',
+  '整理一下手机里最久没清理的照片文件夹，前进3格📱',
+  '给最近联系最少的朋友发条消息问候，前进3格👋',
+  '打开最喜欢的播放列表，选一首歌播放，前进2格🎶',
+  '做5分钟冥想或安静坐着，清空杂念，前进3格🧘',
+  '回顾一下今天做过的三件好事，说出来，前进2格🌟',
+  '检查一下今天的待办事项，完成了吗？前进2格📋',
+  '打开窗户透透气，深呼吸新鲜空气，前进2格🌿',
+  '写下今天你最感谢的一件事，前进3格🙏',
+  '做10个开合跳，动动身体！前进3格🕺',
+  '找一首你最近喜欢的歌，放给大家听，前进2格🎧',
+  '整理一下随身包包或钱包，前进2格👜',
+  '喝杯热茶或热水，暖暖胃，前进2格☕',
+  '把最近收到的消息都回复完，前进3格💬',
+  '做几个颈部拉伸运动，放松一下，前进2格🤸',
+  '拍一张今天心情最好的自拍，前进2格🤳',
+  '浏览一下今天的新闻，说一条有趣的，前进2格📰',
+  '给植物或桌面小物件浇浇水或擦擦灰，前进2格🌱',
+  '做5分钟眼部按摩放松，前进2格👁️',
+  '想一个让你心情变好的小仪式，说出来，前进2格🌸',
+];
+
+const FLY_CHALLENGE_EVENTS = [
+  '绕口令挑战：说3遍"南边来了个喇嘛"，不出错前进4格！🗣️',
+  '用5个字描述你现在的心情，前进2格💭',
+  '做一个能让旁边的人笑的表情或动作，前进3格😂',
+  '30秒内说出10种你喜欢的食物，完成前进3格🍜',
+  '背诵一首你会的古诗或歌词，前进5格📚',
+  '倒着说三个词（比如"猫咪"→"咪猫"），前进2格🔄',
+  '用身体语言表演一个动物，让别人猜，前进3格🐾',
+  '和旁边的人猜拳，赢了前进3格，输了退2格✊',
+  '30秒内憋住不说话也不笑，成功前进4格🤐',
+  '用一句话讲完一个完整的故事，前进3格📖',
+  '闭上眼睛，说出桌上三件物品的位置，前进3格👁️',
+  '用左手（非惯用手）写下你的名字，前进2格✍️',
+  '连续说5个带"心"字的成语，前进4格❤️',
+  '模仿一位名人或卡通人物说一句话，前进3格🎭',
+  '用10秒内想出5种粉色的东西，前进3格🌸',
+  '说出5个你最喜欢的地方（城市、景点都行），前进2格🗺️',
+  '不停地转圈5圈再走直线，完成前进3格💫',
+  '说出今年你学到的最有用的一件事，前进2格📖',
+  '用表情包里的台词说一句话，让别人猜出哪个表情包，前进3格🐸',
+  '30秒内说出10个国家的名字，前进4格🌍',
+  '背出乘法表任意一行（7以上），前进3格🔢',
+  '做一个瑜伽或舒展动作保持10秒，前进2格🧘',
+  '连续说出5个同一类别的东西（如5种花、5种鱼），前进3格🌺',
+];
+
+const FLY = {
+  playerCount: 2,
+  players: [],
+  currentPlayer: 0,
+  rolling: false,
+  over: false,
+  lastDice: 0,
+  spaceTypes: [],
+};
+
+// ── Setup ──
+function initFlySetup() {
+  FLY.playerCount = 2;
+  FLY.over = false;
+  FLY.rolling = false;
+  renderFlyPlayerInputs();
+  // reset button highlights
+  document.querySelectorAll('.fly-count-btn').forEach((btn, i) => {
+    btn.classList.toggle('active', i === 0); // 2人 is index 0
+  });
+}
+
+function setFlyPlayerCount(n, el) {
+  FLY.playerCount = n;
+  document.querySelectorAll('.fly-count-btn').forEach(b => b.classList.remove('active'));
+  if (el) el.classList.add('active');
+  renderFlyPlayerInputs();
+}
+
+function renderFlyPlayerInputs() {
+  const container = $i('fly-setup-players');
+  if (!container) return;
+  container.innerHTML = '';
+  for (let i = 0; i < FLY.playerCount; i++) {
+    const row = document.createElement('div');
+    row.className = 'fly-player-input-row';
+    row.innerHTML = `
+      <span class="fly-player-emoji">${FLY_PLAYER_EMOJIS[i]}</span>
+      <span class="fly-player-color-dot" style="background:${FLY_PLAYER_COLORS[i]}"></span>
+      <input class="fly-player-input" id="fly-player-name-${i}" type="text" placeholder="玩家${i + 1}" value="玩家${i + 1}" maxlength="8">
+    `;
+    container.appendChild(row);
+  }
+}
+
+function startFlyGame() {
+  const players = [];
+  for (let i = 0; i < FLY.playerCount; i++) {
+    const nameEl = $i(`fly-player-name-${i}`);
+    players.push({
+      name: nameEl?.value.trim() || `玩家${i + 1}`,
+      emoji: FLY_PLAYER_EMOJIS[i],
+      color: FLY_PLAYER_COLORS[i],
+      pos: 0,  // 0 = not yet on board, 1-80 = space number
+      status: 'active',  // 'active', 'finished', 'skipped'
+      skipped: false,
+      finishRank: 0,
+    });
+  }
+  FLY.players = players;
+  FLY.currentPlayer = 0;
+  FLY.rolling = false;
+  FLY.over = false;
+  FLY.lastDice = 0;
+  FLY.spaceTypes = FLY_SPACE_LAYOUT.slice();
+  FLY._finishCount = 0;
+
+  switchPage('fly-page');
+  renderFlyMap();
+  renderFlyPlayerBar();
+  flyUpdateTurnInfo();
+  flyEnableDice(true);
+}
+
+// ── Map ──
+function renderFlyMap() {
+  const mapEl = $i('fly-map');
+  if (!mapEl) return;
+  mapEl.innerHTML = '';
+
+  // 8 rows of 10 spaces each
+  // Row 1: spaces 1-10 (left to right)
+  // Row 2: spaces 11-20 (right to left, reversed)
+  // ...
+  for (let row = 0; row < 8; row++) {
+    const startSpace = row * 10 + 1;
+    const spaces = [];
+    for (let i = 0; i < 10; i++) {
+      spaces.push(startSpace + i);
+    }
+
+    const rowEl = document.createElement('div');
+    rowEl.className = 'fly-map-row' + (row % 2 === 1 ? ' reverse' : '');
+
+    spaces.forEach(spaceNum => {
+      const type = FLY_SPACE_LAYOUT[spaceNum - 1] || 'normal';
+      const icon = FLY_SPACE_ICONS[type] || '';
+      const cell = document.createElement('div');
+      cell.className = `fly-space ${type}`;
+      cell.id = `fly-space-${spaceNum}`;
+      cell.innerHTML = `<span class="fly-space-num">${spaceNum}</span><span class="fly-space-icon">${icon}</span><div class="fly-tokens-wrap" id="fly-tokens-${spaceNum}"></div>`;
+      rowEl.appendChild(cell);
+    });
+
+    mapEl.appendChild(rowEl);
+
+    // Add connector arrow between rows (except last)
+    if (row < 7) {
+      const connector = document.createElement('div');
+      connector.className = 'fly-map-connector' + (row % 2 === 0 ? '' : ' left');
+      connector.textContent = '↓';
+      mapEl.appendChild(connector);
+    }
+  }
+
+  flyUpdateMapTokens();
+}
+
+function flyUpdateMapTokens() {
+  // Clear all token containers
+  document.querySelectorAll('[id^="fly-tokens-"]').forEach(el => el.innerHTML = '');
+  FLY.players.forEach((p, idx) => {
+    if (p.pos > 0) {
+      const container = $i(`fly-tokens-${p.pos}`);
+      if (container) {
+        const token = document.createElement('div');
+        token.className = 'fly-token';
+        token.style.background = p.color;
+        token.title = p.name;
+        container.appendChild(token);
+      }
+    }
+  });
+}
+
+// ── Player Bar ──
+function renderFlyPlayerBar() {
+  const bar = $i('fly-player-bar');
+  if (!bar) return;
+  bar.innerHTML = '';
+  FLY.players.forEach((p, idx) => {
+    const card = document.createElement('div');
+    const isActive = idx === FLY.currentPlayer && !FLY.over;
+    card.className = 'fly-player-card' + (isActive ? ' active' : '') + (p.status === 'finished' ? ' finished' : '') + (p.skipped ? ' skipped' : '');
+    const posText = p.status === 'finished' ? `🏆第${p.finishRank}名` : p.skipped ? '💤跳过' : p.pos === 0 ? '未出发' : `第${p.pos}格`;
+    card.innerHTML = `<div class="fly-player-card-emoji">${p.emoji}</div><div class="fly-player-card-name">${esc(p.name)}</div><div class="fly-player-card-pos">${posText}</div>`;
+    bar.appendChild(card);
+  });
+}
+
+function flyUpdateTurnInfo() {
+  const el = $i('fly-turn-info');
+  if (!el) return;
+  if (FLY.over) { el.textContent = '游戏结束！'; return; }
+  const p = FLY.players[FLY.currentPlayer];
+  if (!p) return;
+  el.innerHTML = `${p.emoji} <strong>${esc(p.name)}</strong> 的回合`;
+}
+
+function flyEnableDice(enabled) {
+  const btn = $i('fly-dice-btn');
+  if (btn) btn.disabled = !enabled;
+}
+
+// ── Dice Roll ──
+function flyRollDice() {
+  if (FLY.rolling || FLY.over) return;
+  const p = FLY.players[FLY.currentPlayer];
+  if (!p || p.status === 'finished') { flyNextTurn(); return; }
+
+  if (p.skipped) {
+    p.skipped = false;
+    toast(`${p.emoji} ${p.name} 跳过本回合`);
+    renderFlyPlayerBar();
+    setTimeout(flyNextTurn, 1200);
+    return;
+  }
+
+  FLY.rolling = true;
+  flyEnableDice(false);
+
+  const result = Math.floor(Math.random() * 6) + 1;
+  FLY.lastDice = result;
+
+  flyShowDiceAnimation(result, () => {
+    FLY.rolling = false;
+    flyMovePlayer(FLY.currentPlayer, result);
+  });
+}
+
+function flyShowDiceAnimation(result, callback) {
+  const overlay = $i('fly-dice-overlay');
+  const animEl = $i('fly-dice-anim');
+  if (!overlay || !animEl) { callback(); return; }
+
+  overlay.style.display = 'flex';
+  animEl.className = 'fly-dice-anim';
+  animEl.textContent = DICE_FACES[0];
+
+  let elapsed = 0;
+  const interval = setInterval(() => {
+    elapsed += 80;
+    animEl.textContent = DICE_FACES[Math.floor(Math.random() * 6)];
+    if (elapsed >= 800) {
+      clearInterval(interval);
+      animEl.textContent = DICE_FACES[result - 1];
+      animEl.className = 'fly-dice-anim settled';
+      setTimeout(() => {
+        overlay.style.display = 'none';
+        animEl.className = 'fly-dice-anim';
+        callback();
+      }, 400);
+    }
+  }, 80);
+}
+
+// ── Move ──
+async function flyMovePlayer(playerIdx, steps) {
+  const p = FLY.players[playerIdx];
+  if (!p) return;
+
+  const oldPos = p.pos;
+  let newPos = oldPos + steps;
+
+  if (newPos <= 0) newPos = 1;
+  if (newPos >= 80) {
+    newPos = 80;
+  }
+
+  // Animate step by step
+  for (let pos = oldPos + 1; pos <= newPos; pos++) {
+    p.pos = pos;
+    flyUpdateMapTokens();
+    await flyDelay(120);
+    // Highlight current space
+    const spaceEl = $i(`fly-space-${pos}`);
+    if (spaceEl) {
+      spaceEl.classList.add('highlight');
+      await flyDelay(100);
+      spaceEl.classList.remove('highlight');
+    }
+  }
+
+  renderFlyPlayerBar();
+
+  if (newPos >= 80) {
+    flyWin(playerIdx);
+    return;
+  }
+
+  flyTriggerSpace(playerIdx);
+}
+
+function flyDelay(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function flyTriggerSpace(playerIdx) {
+  const p = FLY.players[playerIdx];
+  if (!p) return;
+  const type = FLY_SPACE_LAYOUT[p.pos - 1] || 'normal';
+
+  switch (type) {
+    case 'event': {
+      const allEvents = [...FLY_ROMANCE_EVENTS, ...FLY_DEEP_EVENTS, ...FLY_DAILY_EVENTS, ...FLY_CHALLENGE_EVENTS];
+      const ev = allEvents[Math.floor(Math.random() * allEvents.length)];
+      const evType = FLY_ROMANCE_EVENTS.includes(ev) ? 'romance' : FLY_DEEP_EVENTS.includes(ev) ? 'deep' : FLY_DAILY_EVENTS.includes(ev) ? 'daily' : 'challenge';
+      flyShowEvent(ev, evType, playerIdx);
+      break;
+    }
+    case 'heart': {
+      const ev = FLY_ROMANCE_EVENTS[Math.floor(Math.random() * FLY_ROMANCE_EVENTS.length)];
+      flyShowEvent(ev, 'romance', playerIdx);
+      break;
+    }
+    case 'forward3':
+      toast(`${p.emoji} ${p.name} 前进3格！`);
+      setTimeout(() => flyMovePlayer(playerIdx, 3), 700);
+      break;
+    case 'forward5':
+      toast(`${p.emoji} ${p.name} 前进5格！`);
+      setTimeout(() => flyMovePlayer(playerIdx, 5), 700);
+      break;
+    case 'back3':
+      toast(`${p.emoji} ${p.name} 后退3格！`);
+      setTimeout(() => flyMovePlayer(playerIdx, -3), 700);
+      break;
+    case 'skip':
+      toast(`${p.emoji} ${p.name} 下次跳过一回合！💤`);
+      p.skipped = true;
+      renderFlyPlayerBar();
+      setTimeout(flyNextTurn, 1200);
+      break;
+    case 'again':
+      toast(`${p.emoji} ${p.name} 幸运！再掷一次！🎲`);
+      setTimeout(flyRollDice, 1000);
+      break;
+    case 'checkpoint':
+      toast(`${p.emoji} ${p.name} 踩到安全格！⭕`);
+      setTimeout(flyNextTurn, 800);
+      break;
+    default:
+      setTimeout(flyNextTurn, 400);
+      break;
+  }
+}
+
+function flyShowEvent(eventText, type, playerIdx) {
+  const overlay = $i('fly-event-overlay');
+  const card = $i('fly-event-card');
+  const typeEl = $i('fly-event-type');
+  const playerEl = $i('fly-event-player');
+  const textEl = $i('fly-event-text');
+  if (!overlay || !card) return;
+
+  const typeInfo = {
+    romance: { label: '💗 浪漫事件', class: 'romance' },
+    deep:    { label: '💭 深度问答', class: 'deep' },
+    daily:   { label: '☀️ 日常挑战', class: 'daily' },
+    challenge: { label: '🎯 趣味挑战', class: 'challenge' },
+  };
+  const info = typeInfo[type] || typeInfo.romance;
+
+  card.className = 'fly-event-card ' + info.class;
+  if (typeEl) typeEl.textContent = info.label;
+
+  const p = FLY.players[playerIdx];
+  if (playerEl) playerEl.textContent = `${p?.emoji || ''} ${p?.name || '玩家'} 触发`;
+  if (textEl) textEl.textContent = eventText;
+
+  overlay.style.display = 'flex';
+
+  // Store current player for when done
+  FLY._pendingEventPlayer = playerIdx;
+}
+
+function flyEventDone() {
+  const overlay = $i('fly-event-overlay');
+  if (overlay) overlay.style.display = 'none';
+  setTimeout(flyNextTurn, 300);
+}
+
+function flyNextTurn() {
+  if (FLY.over) return;
+
+  // Find next active player
+  let next = (FLY.currentPlayer + 1) % FLY.playerCount;
+  let attempts = 0;
+  while (FLY.players[next]?.status === 'finished' && attempts < FLY.playerCount) {
+    next = (next + 1) % FLY.playerCount;
+    attempts++;
+  }
+
+  // If all are finished
+  if (attempts >= FLY.playerCount) { FLY.over = true; return; }
+
+  FLY.currentPlayer = next;
+  renderFlyPlayerBar();
+  flyUpdateTurnInfo();
+  flyEnableDice(true);
+}
+
+function flyWin(playerIdx) {
+  const p = FLY.players[playerIdx];
+  if (!p) return;
+  FLY._finishCount = (FLY._finishCount || 0) + 1;
+  p.status = 'finished';
+  p.finishRank = FLY._finishCount;
+  renderFlyPlayerBar();
+
+  const activePlayers = FLY.players.filter(pl => pl.status === 'active');
+  if (activePlayers.length === 0 || FLY.playerCount <= 2) {
+    // Game over - show result
+    FLY.over = true;
+    // Assign remaining ranks
+    let rank = FLY._finishCount + 1;
+    FLY.players.forEach(pl => { if (pl.status === 'active') { pl.finishRank = rank++; pl.status = 'finished'; } });
+    setTimeout(flyShowResult, 800);
+  } else {
+    toast(`🎉 ${p.emoji} ${p.name} 到达终点！第${p.finishRank}名！`);
+    setTimeout(flyNextTurn, 1500);
+  }
+}
+
+function flyShowResult() {
+  const overlay = $i('fly-result-overlay');
+  if (!overlay) return;
+  overlay.style.display = 'flex';
+
+  const sorted = [...FLY.players].sort((a, b) => a.finishRank - b.finishRank);
+  const winner = sorted[0];
+
+  const titleEl = $i('fly-result-title');
+  if (titleEl) titleEl.textContent = '🎉 游戏结束！';
+  const winnerEl = $i('fly-result-winner');
+  if (winnerEl) winnerEl.innerHTML = `${winner.emoji} <strong>${esc(winner.name)}</strong> 获得第一名！`;
+
+  // Podium
+  const podiumEl = $i('fly-result-podium');
+  if (podiumEl) {
+    podiumEl.innerHTML = '';
+    const podiumOrder = [1, 0, 2, 3]; // 2nd, 1st, 3rd, 4th in display
+    podiumOrder.forEach((rankIdx, displayPos) => {
+      if (rankIdx >= sorted.length) return;
+      const pl = sorted[rankIdx];
+      const barClasses = ['p2', 'p1', 'p3', 'p4'];
+      const item = document.createElement('div');
+      item.className = 'fly-podium-item';
+      item.innerHTML = `<div class="fly-podium-emoji">${pl.emoji}</div><div class="fly-podium-name">${esc(pl.name)}</div><div class="fly-podium-bar ${barClasses[displayPos]}">${rankIdx + 1}</div>`;
+      podiumEl.appendChild(item);
+    });
+  }
+
+  // Confetti
+  const confEl = $i('fly-confetti');
+  if (confEl) {
+    confEl.innerHTML = '';
+    const cols = ['#ff8fab','#a78bfa','#fcd34d','#6ee7b7','#f472b6','#fb923c'];
+    for (let i = 0; i < 40; i++) {
+      const el = document.createElement('div');
+      el.className = 'gmk-confetti-piece';
+      const sz = 6 + Math.random() * 8;
+      el.style.cssText = `left:${Math.random()*100}%;width:${sz}px;height:${sz}px;background:${cols[i%cols.length]};border-radius:${Math.random()>.5?'50%':'3px'};animation:confetti-fall ${1.2+Math.random()*.8}s ease-in ${Math.random()*.6}s forwards`;
+      confEl.appendChild(el);
+    }
+  }
+}
+
+function confirmFlyQuit() {
+  if (FLY.over) { switchPage('chess-page'); return; }
+  if (confirm('确定要放弃游戏吗？')) switchPage('chess-page');
+}
+

@@ -2015,7 +2015,7 @@ button, a, .nav-tab, .nav-logo, .chat-item, .ibtn, .hbtn, .act-btn,
 .fly-rules-text { font-size: 12.5px; color: var(--text2); line-height: 2; }
 
 /* ── Game Page ── */
-#fly-page { background: var(--bg2); display: flex; flex-direction: column; }
+#fly-page { background: var(--bg2); flex-direction: column; }
 
 .fly-player-bar {
   display: flex;

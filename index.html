@@ -914,6 +914,12 @@
         <div class="fly-setup-title">✏️ 玩家名称</div>
         <div id="fly-setup-players"></div>
       </div>
+      <div class="fly-setup-section">
+        <div class="fly-setup-title">🤖 选择AI助手</div>
+        <div class="fly-ai-selector-section">
+          <div class="fly-ai-selector-grid" id="fly-ai-selector"></div>
+        </div>
+      </div>
       <div class="fly-setup-section fly-rules-box">
         <div class="fly-setup-title">📋 游戏规则</div>
         <div class="fly-rules-text">
@@ -1040,12 +1046,21 @@
 </div>
 
 <!-- ── FLY EVENT OVERLAY ── -->
-<div id="fly-event-overlay" style="display:none" onclick="">
-  <div class="fly-event-card" id="fly-event-card">
+<div id="fly-event-overlay" style="display:none">
+  <div class="fly-event-card" id="fly-event-card" style="max-height:90vh;overflow-y:auto">
     <div class="fly-event-type" id="fly-event-type">💗 浪漫事件</div>
     <div class="fly-event-player" id="fly-event-player">玩家触发</div>
     <div class="fly-event-text" id="fly-event-text"></div>
-    <button class="btn-p" style="width:100%;margin-top:12px" onclick="flyEventDone()">✓ 完成！前进</button>
+    <div class="fly-event-answer-section" id="fly-answer-section">
+      <div class="fly-event-answer-label" id="fly-answer-label">✍️ 请回答：</div>
+      <textarea class="fly-event-answer-input" id="fly-answer-input" placeholder="在这里输入你的回答…" rows="3"></textarea>
+      <button class="fly-event-submit-btn" id="fly-submit-btn" onclick="flySubmitAnswer()">📤 提交给AI</button>
+    </div>
+    <div class="fly-ai-response" id="fly-ai-response">
+      <div class="fly-ai-response-label" id="fly-ai-response-label">🤖 AI回应：</div>
+      <div id="fly-ai-response-text"></div>
+    </div>
+    <button class="fly-event-continue-btn" id="fly-continue-btn" style="margin-top:10px;display:none" onclick="flyEventDone()">✓ 继续游戏</button>
   </div>
 </div>
 

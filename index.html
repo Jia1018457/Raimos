@@ -682,7 +682,7 @@
 <!-- ── GOMOKU PAGE ── -->
 <div class="page" id="gomoku-page">
   <div class="page-header" style="flex-wrap:wrap;gap:6px">
-    <button class="page-back-btn" onclick="switchPage('chess-page')">‹ 返回</button>
+    <button class="page-back-btn" onclick="if(confirm('确定退出游戏？'))switchPage('chess-page')">✕ 退出</button>
     <h2>⚫ 五子棋</h2>
     <div style="display:flex;gap:5px;margin-left:auto;flex-shrink:0">
       <button class="btn-s" style="font-size:11px;padding:4px 9px" onclick="openGomokuRecords()" title="对战记录">📊 战绩</button>
@@ -762,6 +762,9 @@
         <option value="high">高（每步）</option>
       </select>
     </div>
+    <div class="gmk-settings-section" style="padding-bottom:4px">
+      <button class="settings-save-btn" onclick="saveGomokuPrefs();toggleGomokuSettings()">💾 保存设置</button>
+    </div>
   </div>
   <div class="gomoku-wrap">
     <div class="gomoku-info-bar">
@@ -785,7 +788,7 @@
 <!-- ── GO PAGE ── -->
 <div class="page" id="go-page">
   <div class="page-header" style="flex-wrap:wrap;gap:6px">
-    <button class="page-back-btn" onclick="switchPage('chess-page')">‹ 返回</button>
+    <button class="page-back-btn" onclick="if(confirm('确定退出游戏？'))switchPage('chess-page')">✕ 退出</button>
     <h2>⚫ 围棋 13×13</h2>
     <div style="display:flex;gap:5px;margin-left:auto;flex-shrink:0">
       <button class="btn-s" style="font-size:11px;padding:4px 9px" onclick="openGoRecords()" title="对战记录">📊 战绩</button>
@@ -864,6 +867,9 @@
         <option value="normal" selected>适中（每3步）</option>
         <option value="high">高（每步）</option>
       </select>
+    </div>
+    <div class="gmk-settings-section" style="padding-bottom:4px">
+      <button class="settings-save-btn" onclick="saveGoPrefs();toggleGoSettings()">💾 保存设置</button>
     </div>
   </div>
   <div class="gomoku-wrap">
@@ -1141,7 +1147,7 @@
 <!-- ── XIANGQI PAGE ── -->
 <div class="page" id="xiangqi-page">
   <div class="page-header" style="flex-wrap:wrap;gap:6px">
-    <button class="page-back-btn" onclick="switchPage('chess-page')">‹ 返回</button>
+    <button class="page-back-btn" onclick="if(confirm('确定退出游戏？'))switchPage('chess-page')">✕ 退出</button>
     <h2>♜ 中国象棋</h2>
     <div style="display:flex;gap:5px;margin-left:auto;flex-shrink:0">
       <button class="btn-s" style="font-size:11px;padding:4px 9px" onclick="openXiangqiRecords()">📊 战绩</button>
@@ -1155,6 +1161,16 @@
       <div class="gmk-ai-selector" id="xq-ai-selector"></div>
     </div>
     <div class="gmk-settings-section">
+      <div class="gmk-settings-label">棋盘颜色</div>
+      <div class="gmk-color-row" id="xq-color-row">
+        <div class="gmk-color-swatch active" data-color="classic" style="background:#f0d9a0" title="经典" onclick="setXiangqiBoard('classic',this)"></div>
+        <div class="gmk-color-swatch" data-color="pink" style="background:#f5b8cc" title="樱粉" onclick="setXiangqiBoard('pink',this)"></div>
+        <div class="gmk-color-swatch" data-color="purple" style="background:#c8b8f5" title="薰衣草" onclick="setXiangqiBoard('purple',this)"></div>
+        <div class="gmk-color-swatch" data-color="green" style="background:#b8f0d0" title="抹茶" onclick="setXiangqiBoard('green',this)"></div>
+        <div class="gmk-color-swatch" data-color="dark" style="background:#4a3728" title="深棕" onclick="setXiangqiBoard('dark',this)"></div>
+      </div>
+    </div>
+    <div class="gmk-settings-section">
       <div class="gmk-settings-label">AI难度</div>
       <div class="gmk-diff-row">
         <button class="gmk-diff-btn active" data-diff="beginner" onclick="setXiangqiDiff('beginner',this)">😊 新手</button>
@@ -1162,12 +1178,17 @@
         <button class="gmk-diff-btn" data-diff="hard" onclick="setXiangqiDiff('hard',this)">🔥 专业</button>
       </div>
     </div>
-    <div class="gmk-settings-section" style="flex-direction:row;align-items:center;justify-content:space-between">
-      <div class="gmk-settings-label" style="margin-bottom:0">AI评论</div>
-      <label class="toggle" style="flex-shrink:0">
-        <input type="checkbox" id="xq-commentary-toggle" checked onchange="XIANGQI.prefs.commentary=this.checked"/>
-        <span class="tslider"></span>
-      </label>
+    <div class="gmk-settings-section">
+      <div class="gmk-settings-label">AI评论频率</div>
+      <select id="xq-comment-freq" onchange="setXiangqiCommentFreq(this.value)" style="padding:4px 8px;border-radius:8px;border:1.5px solid var(--border)">
+        <option value="off">关闭</option>
+        <option value="low">低（每5步）</option>
+        <option value="normal" selected>适中（每3步）</option>
+        <option value="high">高（每步）</option>
+      </select>
+    </div>
+    <div class="gmk-settings-section" style="padding-bottom:4px">
+      <button class="settings-save-btn" onclick="saveXiangqiPrefs();toggleXiangqiSettings()">💾 保存设置</button>
     </div>
   </div>
   <div class="gomoku-wrap" style="overflow:auto">
@@ -1186,7 +1207,7 @@
 <!-- ── INTCHESS PAGE ── -->
 <div class="page" id="intchess-page">
   <div class="page-header" style="flex-wrap:wrap;gap:6px">
-    <button class="page-back-btn" onclick="switchPage('chess-page')">‹ 返回</button>
+    <button class="page-back-btn" onclick="if(confirm('确定退出游戏？'))switchPage('chess-page')">✕ 退出</button>
     <h2>♛ 国际象棋</h2>
     <div style="display:flex;gap:5px;margin-left:auto;flex-shrink:0">
       <button class="btn-s" style="font-size:11px;padding:4px 9px" onclick="openIntChessRecords()">📊 战绩</button>
@@ -1217,12 +1238,17 @@
         <div class="ic-color-swatch" data-color="purple" style="background:#c4b5fd" title="紫色" onclick="setIntChessColor('purple',this)"></div>
       </div>
     </div>
-    <div class="gmk-settings-section" style="flex-direction:row;align-items:center;justify-content:space-between">
-      <div class="gmk-settings-label" style="margin-bottom:0">AI评论</div>
-      <label class="toggle" style="flex-shrink:0">
-        <input type="checkbox" id="ic-commentary-toggle" checked onchange="INTCHESS.prefs.commentary=this.checked"/>
-        <span class="tslider"></span>
-      </label>
+    <div class="gmk-settings-section">
+      <div class="gmk-settings-label">AI评论频率</div>
+      <select id="ic-comment-freq" onchange="setIntChessCommentFreq(this.value)" style="padding:4px 8px;border-radius:8px;border:1.5px solid var(--border)">
+        <option value="off">关闭</option>
+        <option value="low">低（每5步）</option>
+        <option value="normal" selected>适中（每3步）</option>
+        <option value="high">高（每步）</option>
+      </select>
+    </div>
+    <div class="gmk-settings-section" style="padding-bottom:4px">
+      <button class="settings-save-btn" onclick="saveIntChessPrefs();toggleIntChessSettings()">💾 保存设置</button>
     </div>
   </div>
   <div class="gomoku-wrap" style="overflow:auto">

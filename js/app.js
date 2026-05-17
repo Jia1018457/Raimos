@@ -2179,6 +2179,7 @@ async function uploadToCloudinary(fileOrDataUrl, folder='raimos') {
 //  FILES
 // ══════════════════════════════
 function triggerFile(){haptic(8);$i('file-upload').click();}
+function triggerChatPhoto(){haptic(8);$i('chat-photo-upload').click();}
 function triggerFileOrStopRec() {
   if (S.isRecording) { stopRecToInput(); }
   else { triggerFile(); }

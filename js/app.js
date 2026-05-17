@@ -2287,7 +2287,20 @@ function toggleEmoji(e){
 }
 
 function insertEmoji(e){const i=$i('msg-input');if(!i)return;const s=i.selectionStart||0,end=i.selectionEnd||0;i.value=i.value.slice(0,s)+e+i.value.slice(end);i.selectionStart=i.selectionEnd=s+[...e].reduce((n,c)=>n+c.length,0);}
-async function sendSticker(sk){const chat=S._chats[S.currentChat];if(!chat)return;await addMsg(S.currentChat,{role:'user',type:'sticker',content:sk.content||sk.label||'',url:sk.url,isImg:sk.isImg});await renderMsgs();scrollTo_(false);$i('emoji-picker').classList.remove('show');}
+async function sendSticker(sk){
+  const chat=S._chats[S.currentChat];if(!chat)return;
+  $i('emoji-picker').classList.remove('show');
+  const stickerModal=$i('sticker-modal');if(stickerModal)stickerModal.classList.remove('show');
+  if(sk.isImg){
+    // Real image → send as type:'image' so AI can see it
+    await addMsg(S.currentChat,{role:'user',type:'image',imageData:sk.url,url:sk.url,content:'[图片]'});
+    await renderMsgs();scrollTo_(false);
+    await callAI(S.currentChat);
+  } else {
+    await addMsg(S.currentChat,{role:'user',type:'sticker',content:sk.content||sk.label||'',url:sk.url,isImg:false});
+    await renderMsgs();scrollTo_(false);
+  }
+}
 // ══════════════════════════════════════════════════════
 //  相册（照片 + 表情包合并管理）
 // ══════════════════════════════════════════════════════

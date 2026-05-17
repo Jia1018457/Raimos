@@ -4,6 +4,7 @@
 'use strict';
 
 const $i = id => document.getElementById(id);
+const _msgTextCache = new Map();
 
 // ── GLOBAL STATE (runtime only, persisted via IndexedDB) ──
 let S = {
@@ -930,6 +931,7 @@ function makeBubble(msg) {
   const showingAlt = msg.altVersions?.length && msg.altIdx != null;
   const displayContent = showingAlt ? (msg.altVersions[msg.altIdx]?.content ?? msg.content) : msg.content;
   const displayThinking = showingAlt ? (msg.altVersions[msg.altIdx]?.thinking ?? null) : msg.thinking;
+  if (msg.id) _msgTextCache.set(msg.id, displayContent || msg.content || '');
   if (msg.type === 'voice') {
     b.innerHTML = makeVoiceHTML(msg);
     if (msg.transcript && S.settings.voiceReplyMode !== 'voice') {
@@ -2602,7 +2604,22 @@ async function addTextSticker(){const t=window.prompt('输入文字/emoji表情�
 // ══════════════════════════════
 //  MSG ACTIONS
 // ══════════════════════════════
-async function copyMsg(id){const msgs=await dbGetAll('messages','chatId',S.currentChat);const msg=msgs.find(m=>m.id===id);if(!msg)return;const txt=(msg.altVersions?.length&&msg.altIdx!=null)?msg.altVersions[msg.altIdx]?.content:msg.content;if(!txt)return;try{await navigator.clipboard.writeText(txt);haptic([5,3,5]);toast('✓ 已复制');}catch(e){const ta=document.createElement('textarea');ta.value=txt;ta.setAttribute('readonly','');ta.style.cssText='position:fixed;top:0;left:0;width:1px;height:1px;opacity:0;pointer-events:none';document.body.appendChild(ta);ta.focus({preventScroll:true});ta.setSelectionRange(0,txt.length);try{const ok=document.execCommand('copy');haptic([5,3,5]);toast(ok?'✓ 已复制':'❌ 复制失败，请长按手动复制');}catch(e2){toast('❌ 复制失败，请长按手动复制');}finally{document.body.removeChild(ta);}}}
+function copyMsg(id) {
+  const txt = _msgTextCache.get(id);
+  if (!txt) { toast('复制失败，请长按手动复制'); return; }
+  // Must be fully synchronous to preserve user-gesture context on iOS
+  const ta = document.createElement('textarea');
+  ta.value = txt;
+  ta.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0.01;font-size:16px';
+  document.body.appendChild(ta);
+  ta.focus(); ta.select(); ta.setSelectionRange(0, txt.length);
+  let ok = false;
+  try { ok = document.execCommand('copy'); } catch(_) {}
+  document.body.removeChild(ta);
+  if (ok) { haptic([5,3,5]); toast('✓ 已复制'); return; }
+  // Modern async clipboard as last resort (may fail on iOS if gesture context is stale)
+  navigator.clipboard?.writeText(txt).then(() => { haptic([5,3,5]); toast('✓ 已复制'); }).catch(() => toast('复制失败，请长按手动复制'));
+}
 async function deleteMsg(id){if(!confirm('删除这条消息？（不影响上下文其他内容）'))return;await dbDel('messages',id);fbDel('messages',id);haptic(15);await renderMsgs();}
 async function replyMsg(id){const msgs=await dbGetAll('messages','chatId',S.currentChat);const msg=msgs.find(m=>m.id===id);if(!msg)return;S.replyTo=msg;$i('reply-bar-txt').textContent=(msg.content||'[媒体]').slice(0,50);$i('reply-bar').classList.add('show');$i('msg-input').focus();}
 function cancelReply(){S.replyTo=null;$i('reply-bar').classList.remove('show');}
@@ -3729,6 +3746,7 @@ function onInputTyping() {
 }
 function toast(msg,dur=2000){const t=$i('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),dur);}
 function closeModal(id){$i(id).classList.remove('show');}
+function openModal(id){$i(id).classList.add('show');}
 
 // ★ 修复表情按钮：outsideClick 不干扰 btn-emoji 本身的点击
 function outsideClick(e) {
@@ -5303,4 +5321,1386 @@ function _miniUpdateTimer() {
       } else { taskEl.style.display = 'none'; }
     } else { taskEl.style.display = 'none'; }
   }
+}
+// ══ Gomoku (五子棋) ══════════════════════
+const PIECE_STYLES = {
+  classic: { p: null,   ai: null },
+  bear:    { p: '🐻',  ai: '🐼' },
+  cat:     { p: '🐱',  ai: '😺' },
+  fox:     { p: '🦊',  ai: '🦝' },
+  rabbit:  { p: '🐰',  ai: '🐇' },
+  dog:     { p: '🐶',  ai: '🐕' },
+  wolf:    { p: '🐺',  ai: '🦴' },
+};
+const BOARD_COLORS = {
+  wood:'gmk-board-wood', pink:'gmk-board-pink', purple:'gmk-board-purple',
+  blue:'gmk-board-blue', green:'gmk-board-green', dark:'gmk-board-dark',
+};
+
+const GOMOKU = {
+  board: null,
+  turn: 'player',
+  over: false,
+  lastMove: null,
+  thinking: false,
+  moveCount: 0,
+  startTime: 0,
+  contactId: null,   // currently selected AI contact id
+  prefs: { boardColor:'wood', pieceStyle:'classic', commentary:true },
+};
+
+// ── Prefs load/save ──
+async function loadGomokuPrefs() {
+  const saved = await getSetting('gomokuPrefs');
+  if (saved) Object.assign(GOMOKU.prefs, saved);
+  // Apply UI state
+  const ct = $i('gmk-commentary-toggle');
+  if (ct) ct.checked = GOMOKU.prefs.commentary;
+  // board color swatch
+  document.querySelectorAll('.gmk-color-swatch').forEach(el => {
+    el.classList.toggle('active', el.dataset.color === GOMOKU.prefs.boardColor);
+  });
+  // piece btn
+  document.querySelectorAll('.gmk-piece-btn').forEach(el => {
+    el.classList.toggle('active', el.dataset.style === GOMOKU.prefs.pieceStyle);
+  });
+}
+async function saveGomokuPrefs() { await saveSetting('gomokuPrefs', GOMOKU.prefs); }
+
+function setGomokuBoard(color, el) {
+  GOMOKU.prefs.boardColor = color;
+  document.querySelectorAll('.gmk-color-swatch').forEach(s => s.classList.remove('active'));
+  el.classList.add('active');
+  const board = $i('gomoku-board');
+  if (board) { board.className = 'gomoku-board ' + (BOARD_COLORS[color] || 'gmk-board-wood'); }
+  saveGomokuPrefs();
+}
+function setGomokuPiece(style, el) {
+  GOMOKU.prefs.pieceStyle = style;
+  document.querySelectorAll('.gmk-piece-btn').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+  // Update indicator circles in info bar
+  gmkUpdatePlayerIndicators();
+  saveGomokuPrefs();
+}
+function toggleGomokuCommentary(val) {
+  GOMOKU.prefs.commentary = val;
+  saveGomokuPrefs();
+}
+
+function gmkUpdatePlayerIndicators() {
+  const ps = GOMOKU.prefs.pieceStyle;
+  const pInfo = PIECE_STYLES[ps] || PIECE_STYLES.classic;
+  const pEl = $i('gmk-player-piece'), aEl = $i('gmk-ai-piece');
+  if (pInfo.p) {
+    if (pEl) { pEl.className='gmk-stone-indicator'; pEl.textContent=pInfo.p; pEl.style.fontSize='18px'; pEl.style.background='none'; pEl.style.boxShadow='none'; }
+    if (aEl) { aEl.className='gmk-stone-indicator'; aEl.textContent=pInfo.ai; aEl.style.fontSize='18px'; aEl.style.background='none'; aEl.style.boxShadow='none'; }
+  } else {
+    if (pEl) { pEl.className='gmk-stone-indicator black'; pEl.textContent=''; pEl.style=''; }
+    if (aEl) { aEl.className='gmk-stone-indicator white'; aEl.textContent=''; aEl.style=''; }
+  }
+}
+
+// ── AI Selector ──
+function renderGomokuAiSelector() {
+  const el = $i('gmk-ai-selector');
+  if (!el) return;
+  el.innerHTML = '';
+  const contacts = Object.values(S._contacts);
+  if (!contacts.length) { el.innerHTML = '<span style="font-size:12px;color:var(--text3)">还没有AI助手，先去添加～</span>'; return; }
+  contacts.forEach(c => {
+    const btn = document.createElement('button');
+    btn.className = 'gmk-ai-btn' + (GOMOKU.contactId === c.id ? ' active' : '');
+    const av = c.avatar?.startsWith('data:') ? `<img src="${c.avatar}" style="width:18px;height:18px;border-radius:50%;object-fit:cover">` : `<span>${c.avatar || '🤖'}</span>`;
+    btn.innerHTML = `${av}<span>${esc(c.name)}</span>`;
+    btn.onclick = () => { GOMOKU.contactId = c.id; renderGomokuAiSelector(); updateGomokuAiDisplay(); };
+    el.appendChild(btn);
+  });
+}
+
+function updateGomokuAiDisplay() {
+  const contact = GOMOKU.contactId ? S._contacts[GOMOKU.contactId] : (S.currentContact ? S._contacts[S.currentContact] : Object.values(S._contacts)[0]);
+  const aiName = contact?.name || 'AI';
+  const el = $i('gomoku-ai-name');
+  if (el) el.textContent = `${aiName}（白子）`;
+}
+
+function toggleGomokuSettings() {
+  const panel = $i('gomoku-settings');
+  if (!panel) return;
+  const show = panel.style.display === 'none';
+  panel.style.display = show ? '' : 'none';
+  if (show) {
+    renderGomokuAiSelector();
+    loadGomokuPrefs();
+  }
+}
+
+function initGomoku() {
+  GOMOKU.board = Array.from({ length: 15 }, () => Array(15).fill(0));
+  GOMOKU.turn = 'player';
+  GOMOKU.over = false;
+  GOMOKU.lastMove = null;
+  GOMOKU.thinking = false;
+  GOMOKU.moveCount = 0;
+  GOMOKU.startTime = Date.now();
+  // pick contact
+  if (!GOMOKU.contactId) {
+    GOMOKU.contactId = S.currentContact || Object.keys(S._contacts)[0] || null;
+  }
+  loadGomokuPrefs().then(() => {
+    gmkUpdatePlayerIndicators();
+    // apply board color
+    const board = $i('gomoku-board');
+    if (board) board.className = 'gomoku-board ' + (BOARD_COLORS[GOMOKU.prefs.boardColor] || 'gmk-board-wood');
+  });
+  updateGomokuAiDisplay();
+  renderGomokuBoard();
+  gomokuSetStatus('你先行棋，落下黑子！');
+  const contact = GOMOKU.contactId ? S._contacts[GOMOKU.contactId] : null;
+  const aiName = contact?.name || 'AI';
+  const greeting = contact
+    ? `你好呀！我是${aiName}，我们来下五子棋吧，看谁先赢～`
+    : '游戏开始！请在设置里选一个AI助手一起玩哦～';
+  gomokuSay(greeting);
+  // close settings if open
+  const panel = $i('gomoku-settings');
+  if (panel) panel.style.display = 'none';
+}
+
+function renderGomokuBoard() {
+  const el = $i('gomoku-board');
+  if (!el) return;
+  el.innerHTML = '';
+  const ps = GOMOKU.prefs.pieceStyle;
+  const pInfo = PIECE_STYLES[ps] || PIECE_STYLES.classic;
+  for (let r = 0; r < 15; r++) {
+    for (let c = 0; c < 15; c++) {
+      const cell = document.createElement('div');
+      cell.className = 'gmk-cell';
+      if (GOMOKU.lastMove && GOMOKU.lastMove[0] === r && GOMOKU.lastMove[1] === c) {
+        cell.classList.add('last-move');
+      }
+      const v = GOMOKU.board[r][c];
+      if (v !== 0) {
+        if (pInfo.p) {
+          // Emoji piece
+          cell.classList.add('emoji-piece');
+          cell.textContent = v === 1 ? pInfo.p : pInfo.ai;
+        } else {
+          const stone = document.createElement('div');
+          stone.className = `gmk-stone-piece ${v === 1 ? 'black' : 'white'}`;
+          cell.appendChild(stone);
+        }
+      } else if (!GOMOKU.over && GOMOKU.turn === 'player' && !GOMOKU.thinking) {
+        cell.classList.add('clickable');
+        cell.addEventListener('click', () => gomokuPlayerMove(r, c));
+      }
+      el.appendChild(cell);
+    }
+  }
+}
+
+function gomokuSetStatus(msg) {
+  const el = $i('gomoku-status');
+  if (el) el.textContent = msg;
+}
+
+function gomokuSay(text) {
+  const el = $i('gomoku-comment');
+  if (!el || !text) return;
+  el.textContent = text;
+  el.style.opacity = '1';
+  clearTimeout(el._t);
+  el._t = setTimeout(() => { if (el) el.style.opacity = '0'; }, 5500);
+}
+
+async function gomokuPlayerMove(r, c) {
+  if (GOMOKU.over || GOMOKU.turn !== 'player' || GOMOKU.thinking) return;
+  if (GOMOKU.board[r][c] !== 0) return;
+  GOMOKU.board[r][c] = 1;
+  GOMOKU.lastMove = [r, c];
+  GOMOKU.turn = 'ai';
+  GOMOKU.moveCount++;
+  renderGomokuBoard();
+  if (gomokuCheckWin(r, c, 1)) {
+    GOMOKU.over = true;
+    gomokuSetStatus('🎉 你赢了！');
+    await gomokuFinish('player_win');
+    return;
+  }
+  if (gomokuBoardFull()) {
+    GOMOKU.over = true;
+    gomokuSetStatus('平局！势均力敌～');
+    await gomokuFinish('draw');
+    return;
+  }
+  gomokuSetStatus('AI思考中…');
+  GOMOKU.thinking = true;
+  renderGomokuBoard();
+  await gomokuAiMove();
+}
+
+function gomokuCheckWin(r, c, player) {
+  const dirs = [[0,1],[1,0],[1,1],[1,-1]];
+  for (const [dr, dc] of dirs) {
+    let cnt = 1;
+    for (let i = 1; i < 5; i++) {
+      const nr = r + dr*i, nc = c + dc*i;
+      if (nr < 0 || nr >= 15 || nc < 0 || nc >= 15 || GOMOKU.board[nr][nc] !== player) break;
+      cnt++;
+    }
+    for (let i = 1; i < 5; i++) {
+      const nr = r - dr*i, nc = c - dc*i;
+      if (nr < 0 || nr >= 15 || nc < 0 || nc >= 15 || GOMOKU.board[nr][nc] !== player) break;
+      cnt++;
+    }
+    if (cnt >= 5) return true;
+  }
+  return false;
+}
+
+function gomokuBoardFull() {
+  return GOMOKU.board.every(row => row.every(v => v !== 0));
+}
+
+// ── Threat detection: how many in a row for player after placing at (r,c) ──
+function gomokuMaxLine(r, c, player) {
+  let max = 0;
+  const dirs = [[0,1],[1,0],[1,1],[1,-1]];
+  for (const [dr,dc] of dirs) {
+    let cnt = 1;
+    for (let i=1;i<5;i++){const nr=r+dr*i,nc=c+dc*i;if(nr<0||nr>=15||nc<0||nc>=15||GOMOKU.board[nr][nc]!==player)break;cnt++;}
+    for (let i=1;i<5;i++){const nr=r-dr*i,nc=c-dc*i;if(nr<0||nr>=15||nc<0||nc>=15||GOMOKU.board[nr][nc]!==player)break;cnt++;}
+    max = Math.max(max, cnt);
+  }
+  return max;
+}
+
+function gomokuGetContact() {
+  return (GOMOKU.contactId ? S._contacts[GOMOKU.contactId] : null)
+    || (S.currentContact ? S._contacts[S.currentContact] : null)
+    || Object.values(S._contacts)[0] || null;
+}
+
+async function gomokuAiMove() {
+  const contact = gomokuGetContact();
+  const useKey = contact?.apiKey || S.settings.apiKey;
+  const useUrl = contact?.apiUrl || 'https://openrouter.ai/api/v1/chat/completions';
+  let row, col, comment;
+  GOMOKU.moveCount++;
+
+  // Determine game phase
+  const phase = GOMOKU.moveCount <= 6 ? 'early' : GOMOKU.moveCount <= 20 ? 'mid' : 'late';
+  const phaseHint = phase==='early'?'开局阶段，可以随意发挥':phase==='mid'?'中局关键期，要认真思考':'终局阶段，胜负即将揭晓';
+
+  // Check if player has a threatening line (for commentary)
+  const playerLastR = GOMOKU.lastMove?.[0], playerLastC = GOMOKU.lastMove?.[1];
+  const playerThreat = (playerLastR!=null) ? gomokuMaxLine(playerLastR, playerLastC, 1) : 0;
+
+  if (useKey) {
+    const blacks = [], whites = [];
+    for (let r=0;r<15;r++) for (let c=0;c<15;c++) {
+      if (GOMOKU.board[r][c]===1) blacks.push(`(${r},${c})`);
+      else if (GOMOKU.board[r][c]===2) whites.push(`(${r},${c})`);
+    }
+    const boardTxt = `黑子(对手)：${blacks.join('')||'无'}  白子(你)：${whites.join('')||'无'}`;
+    const aiName = contact?.name || 'AI';
+    const personality = (contact?.system || '你是可爱温柔的AI助手').slice(0, 130);
+    const model = contact?.model || 'openai/gpt-4o-mini';
+    // Commentary hint: if player is threatening, AI may warn/tease; if early game, be casual
+    const commentHint = playerThreat >= 4
+      ? '对手刚连了4子，你需要反应！评论可以紧张/惊讶/挑衅'
+      : playerThreat >= 3
+      ? '对手有威胁，评论可以提示/安慰/警告'
+      : GOMOKU.prefs.commentary && GOMOKU.moveCount%4===0
+      ? '过程评论，可以说游戏感受/小技巧/鼓励/调侃'
+      : '';
+    const prompt = `你是${aiName}，和用户下五子棋。你执白子，用户执黑子，棋盘15×15（行列0-14）。\n${boardTxt}\n性格：${personality}\n阶段：第${GOMOKU.moveCount}步，${phaseHint}。\n策略要求：根据性格和阶段灵活决策。温柔性格不代表一直让，可能开始认真、局势好时才礼让一步；强势性格会全力争胜；总之要有真实的游戏节奏感，避免机械。${commentHint ? '\n评论方向：'+commentHint : ''}\n在空位落子并用1句符合性格的话回应（${commentHint?'按方向':'可以是棋局感受'}）。\n只返回JSON：{"row":数字,"col":数字,"comment":"一句话"}`;
+    try {
+      const res = await fetch(useUrl, {
+        method:'POST',
+        headers:{'Authorization':`Bearer ${useKey}`,'Content-Type':'application/json','HTTP-Referer':'https://raimos.app','X-Title':'Raimos'},
+        body:JSON.stringify({model,max_tokens:90,stream:false,temperature:0.8,messages:[{role:'user',content:prompt}]}),
+      });
+      const data = await res.json();
+      const txt = data.choices?.[0]?.message?.content || '';
+      const m = txt.match(/\{[\s\S]*?\}/);
+      if (m) { const p = JSON.parse(m[0]); row=p.row; col=p.col; comment=p.comment; }
+    } catch(e) {}
+  }
+
+  // Validate / heuristic fallback
+  if (typeof row!=='number'||typeof col!=='number'||row<0||row>=15||col<0||col>=15||GOMOKU.board[row][col]!==0) {
+    const h = gomokuHeuristic();
+    row=h.r; col=h.c;
+    if (!comment) comment = playerThreat>=4 ? '好险，我得拦住你！' : '嗯，就这里！';
+  }
+
+  GOMOKU.board[row][col] = 2;
+  GOMOKU.lastMove = [row, col];
+  GOMOKU.turn = 'player';
+  GOMOKU.thinking = false;
+  renderGomokuBoard();
+  if (comment && GOMOKU.prefs.commentary) gomokuSay(comment);
+
+  if (gomokuCheckWin(row, col, 2)) {
+    GOMOKU.over = true;
+    gomokuSetStatus('AI赢了！再来一局？');
+    await gomokuFinish('ai_win');
+    return;
+  }
+  if (gomokuBoardFull()) {
+    GOMOKU.over = true;
+    gomokuSetStatus('平局！势均力敌～');
+    await gomokuFinish('draw');
+    return;
+  }
+  gomokuSetStatus('轮到你了！');
+}
+
+// Heuristic: win > block > weighted proximity + center bias
+function gomokuHeuristic() {
+  for (let r=0;r<15;r++) for (let c=0;c<15;c++) {
+    if (GOMOKU.board[r][c]!==0) continue;
+    GOMOKU.board[r][c]=2; const w=gomokuCheckWin(r,c,2); GOMOKU.board[r][c]=0;
+    if (w) return {r,c};
+  }
+  for (let r=0;r<15;r++) for (let c=0;c<15;c++) {
+    if (GOMOKU.board[r][c]!==0) continue;
+    GOMOKU.board[r][c]=1; const w=gomokuCheckWin(r,c,1); GOMOKU.board[r][c]=0;
+    if (w) return {r,c};
+  }
+  let best=null, bestScore=-1;
+  for (let r=0;r<15;r++) for (let c=0;c<15;c++) {
+    if (GOMOKU.board[r][c]!==0) continue;
+    let score=0;
+    for (let dr=-2;dr<=2;dr++) for (let dc=-2;dc<=2;dc++) {
+      const nr=r+dr,nc=c+dc;
+      if (nr>=0&&nr<15&&nc>=0&&nc<15&&GOMOKU.board[nr][nc]!==0) score+=2;
+    }
+    score += 8/(1+Math.abs(r-7)+Math.abs(c-7));
+    if (score>bestScore){bestScore=score;best={r,c};}
+  }
+  return best||{r:7,c:7};
+}
+
+// ── Game End ──
+async function gomokuFinish(result) {
+  const contact = gomokuGetContact();
+  const elapsed = Math.round((Date.now() - GOMOKU.startTime) / 1000);
+  // save record
+  await saveGomokuRecord({ result, moves: GOMOKU.moveCount, elapsed, aiName: contact?.name||'AI', aiContactId: GOMOKU.contactId, date: Date.now() });
+  // get AI comment
+  let aiComment = '';
+  const useKey = contact?.apiKey || S.settings.apiKey;
+  if (useKey) {
+    try {
+      const aiName = contact?.name||'AI', personality=(contact?.system||'').slice(0,100);
+      const resultDesc = result==='player_win'?'你输了':result==='ai_win'?'你赢了':'平局';
+      const prompt = `你是${aiName}，性格：${personality||'可爱温柔'}。五子棋结束，${resultDesc}。用1句符合性格的话回应。只返回JSON：{"comment":"话"}`;
+      const res = await fetch(contact?.apiUrl||'https://openrouter.ai/api/v1/chat/completions',{method:'POST',headers:{'Authorization':`Bearer ${useKey}`,'Content-Type':'application/json','HTTP-Referer':'https://raimos.app','X-Title':'Raimos'},body:JSON.stringify({model:contact?.model||'openai/gpt-4o-mini',max_tokens:60,stream:false,messages:[{role:'user',content:prompt}]})});
+      const data=await res.json();const txt=data.choices?.[0]?.message?.content||'';const m=txt.match(/\{[\s\S]*?\}/);
+      if (m) aiComment=JSON.parse(m[0]).comment||'';
+    } catch(e){}
+  }
+  if (!aiComment) aiComment = result==='player_win'?'你赢了！再来一局吧～':result==='ai_win'?'哈哈，我赢了！再来？':'平局！旗鼓相当呢～';
+  gomokuSay(aiComment);
+  // Show result modal after brief delay
+  setTimeout(() => showGomokuResult(result, elapsed, aiComment, contact), 800);
+}
+
+function showGomokuResult(result, elapsed, aiComment, contact) {
+  const overlay = $i('gomoku-result-overlay');
+  if (!overlay) return;
+  overlay.classList.add('show');
+
+  // Title
+  const titleEl = $i('gmk-result-title');
+  if (titleEl) {
+    const titles = { player_win:'🎉 你赢了！', ai_win:'💫 AI赢了！', draw:'🤝 平局！' };
+    titleEl.textContent = titles[result] || '游戏结束';
+    titleEl.className = `gmk-result-title ${result==='player_win'?'win':result==='draw'?'draw':''}`;
+  }
+
+  // Badges
+  const badges = { player_win:['🏆','💔'], ai_win:['💔','🏆'], draw:['🤝','🤝'] };
+  const [pb, ab] = badges[result] || ['',''];
+  const pbEl=$i('gmk-result-player-badge'), abEl=$i('gmk-result-ai-badge');
+  if (pbEl) pbEl.textContent=pb;
+  if (abEl) abEl.textContent=ab;
+
+  // Avatars
+  const userAv = S.settings.userAvatar || S.settings.avatar || '😊';
+  const pAvEl = $i('gmk-result-player-av');
+  if (pAvEl) { if (userAv.startsWith('data:')) pAvEl.innerHTML=`<img src="${userAv}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`; else pAvEl.textContent=userAv; }
+  const aiAv = contact?.avatar || '🤖';
+  const aAvEl = $i('gmk-result-ai-av');
+  if (aAvEl) { if (aiAv.startsWith('data:')) aAvEl.innerHTML=`<img src="${aiAv}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`; else aAvEl.textContent=aiAv; }
+  const aiNameEl=$i('gmk-result-ai-name'); if (aiNameEl) aiNameEl.textContent=contact?.name||'AI';
+
+  // Stats
+  const mm=Math.floor(elapsed/60), ss=elapsed%60;
+  const statsEl=$i('gmk-result-stats');
+  if (statsEl) statsEl.textContent=`本局用时 ${mm>0?mm+'分':''} ${ss}秒  ·  共落子 ${GOMOKU.moveCount} 步\n"${aiComment}"`;
+
+  // Cat SVG animation
+  const catEl = $i('gmk-result-cat');
+  if (catEl) {
+    if (result === 'player_win') {
+      catEl.innerHTML = gomokuWinCatSVG();
+    } else if (result === 'ai_win') {
+      catEl.innerHTML = gomokuLoseCatSVG();
+    } else {
+      catEl.innerHTML = '<div style="font-size:60px;animation:cat-bounce .8s ease-in-out infinite">🐱</div>';
+    }
+  }
+
+  // Confetti on win
+  const confEl = $i('gmk-confetti');
+  if (confEl) {
+    confEl.innerHTML = '';
+    if (result === 'player_win') {
+      const cols = ['#ff8fab','#a78bfa','#fcd34d','#6ee7b7','#67e8f9','#f472b6','#fb923c'];
+      for (let i=0;i<36;i++) {
+        const el=document.createElement('div');
+        el.className='gmk-confetti-piece';
+        const sz=6+Math.random()*7;
+        el.style.cssText=`left:${Math.random()*100}%;width:${sz}px;height:${sz}px;background:${cols[i%cols.length]};border-radius:${Math.random()>.5?'50%':'3px'};animation:confetti-fall ${1.2+Math.random()*0.8}s ease-in ${Math.random()*0.5}s forwards`;
+        confEl.appendChild(el);
+      }
+    }
+  }
+}
+
+function gomokuWinCatSVG() {
+  return `<svg class="gmk-cat-win" viewBox="0 0 100 110" xmlns="http://www.w3.org/2000/svg">
+    <path d="M26,18 L38,32 L60,10" stroke="#a78bfa" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+    <path d="M22,50 L15,30 L34,46" fill="#fce4f3" stroke="#d48cb8" stroke-width="2" stroke-linejoin="round"/>
+    <path d="M78,50 L85,30 L66,46" fill="#fce4f3" stroke="#d48cb8" stroke-width="2" stroke-linejoin="round"/>
+    <circle cx="50" cy="62" r="24" fill="#fff5f8" stroke="#d48cb8" stroke-width="2.5"/>
+    <path d="M38,57 Q41,53 44,57" fill="none" stroke="#333" stroke-width="2.5" stroke-linecap="round"/>
+    <path d="M56,57 Q59,53 62,57" fill="none" stroke="#333" stroke-width="2.5" stroke-linecap="round"/>
+    <ellipse cx="50" cy="64" rx="2.5" ry="1.8" fill="#ffb3c1"/>
+    <path d="M45,69 Q50,75 55,69" fill="none" stroke="#d48cb8" stroke-width="2" stroke-linecap="round"/>
+    <ellipse cx="36" cy="65" rx="5" ry="3" fill="#ffb3c1" opacity="0.45"/>
+    <ellipse cx="64" cy="65" rx="5" ry="3" fill="#ffb3c1" opacity="0.45"/>
+    <rect x="34" y="84" width="32" height="22" rx="11" fill="#fff5f8" stroke="#d48cb8" stroke-width="2.5"/>
+    <path d="M34,92 L16,72" stroke="#d48cb8" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="14" cy="70" r="5" fill="#fff5f8" stroke="#d48cb8" stroke-width="2"/>
+    <path d="M66,92 L84,72" stroke="#d48cb8" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="86" cy="70" r="5" fill="#fff5f8" stroke="#d48cb8" stroke-width="2"/>
+  </svg>`;
+}
+
+function gomokuLoseCatSVG() {
+  return `<svg class="gmk-cat-lose" viewBox="0 0 130 80" xmlns="http://www.w3.org/2000/svg">
+    <ellipse cx="82" cy="56" rx="36" ry="17" fill="#fff5f8" stroke="#d48cb8" stroke-width="2.5"/>
+    <circle cx="30" cy="44" r="21" fill="#fff5f8" stroke="#d48cb8" stroke-width="2.5"/>
+    <path d="M14,27 L8,12 L24,24" fill="#fce4f3" stroke="#d48cb8" stroke-width="2" stroke-linejoin="round"/>
+    <path d="M42,25 L48,11 L44,24" fill="#fce4f3" stroke="#d48cb8" stroke-width="2" stroke-linejoin="round"/>
+    <path d="M19,40 Q22,44 25,40" fill="none" stroke="#888" stroke-width="2" stroke-linecap="round"/>
+    <path d="M29,40 Q32,44 35,40" fill="none" stroke="#888" stroke-width="2" stroke-linecap="round"/>
+    <ellipse cx="19" cy="47" rx="2" ry="3.5" fill="#90cdf4" opacity="0.75"/>
+    <ellipse cx="36" cy="50" rx="2.5" ry="1.8" fill="#ffb3c1"/>
+    <path d="M28,56 Q32,51 36,56" fill="none" stroke="#d48cb8" stroke-width="2" stroke-linecap="round"/>
+    <ellipse cx="17" cy="50" rx="4" ry="2.5" fill="#ffb3c1" opacity="0.4"/>
+    <path d="M51,63 L66,71" stroke="#d48cb8" stroke-width="3" stroke-linecap="round"/>
+    <path d="M92,70 L107,64" stroke="#d48cb8" stroke-width="3" stroke-linecap="round"/>
+    <path d="M118,54 C127,43 129,30 119,22" stroke="#d48cb8" stroke-width="2.5" stroke-linecap="round" fill="none"/>
+  </svg>`;
+}
+
+function closeGomokuResult() {
+  closeModal('gomoku-result-overlay');
+}
+
+// ── Records ──
+async function saveGomokuRecord(rec) {
+  let records = (await getSetting('gomokuRecords')) || [];
+  records.unshift({ ...rec, id: uid() });
+  if (records.length > 60) records = records.slice(0, 60);
+  await saveSetting('gomokuRecords', records);
+}
+
+async function openGomokuRecords() {
+  const records = (await getSetting('gomokuRecords')) || [];
+  const overlay = $i('gomoku-records-modal');
+  if (!overlay) return;
+  overlay.classList.add('show');
+
+  // Summary
+  const wins = records.filter(r=>r.result==='player_win').length;
+  const losses = records.filter(r=>r.result==='ai_win').length;
+  const draws = records.filter(r=>r.result==='draw').length;
+  const sumEl = $i('gmk-records-summary');
+  if (sumEl) sumEl.innerHTML = `
+    <div style="flex:1"><div style="font-size:22px;font-weight:900;color:#4ade80">${wins}</div><div style="font-size:11px;color:var(--text3)">胜</div></div>
+    <div style="flex:1"><div style="font-size:22px;font-weight:900;color:#f87171">${losses}</div><div style="font-size:11px;color:var(--text3)">负</div></div>
+    <div style="flex:1"><div style="font-size:22px;font-weight:900;color:var(--text2)">${draws}</div><div style="font-size:11px;color:var(--text3)">平</div></div>
+    <div style="flex:1"><div style="font-size:22px;font-weight:900;color:var(--accent)">${records.length}</div><div style="font-size:11px;color:var(--text3)">总局</div></div>`;
+
+  // List
+  const listEl = $i('gmk-records-list');
+  if (!listEl) return;
+  if (!records.length) { listEl.innerHTML = '<div style="text-align:center;padding:30px;color:var(--text3);font-size:13px">还没有对战记录，快去下一局吧！</div>'; return; }
+  listEl.innerHTML = '';
+  records.forEach(r => {
+    const icons = { player_win:'🏆', ai_win:'💔', draw:'🤝' };
+    const labels = { player_win:'胜利', ai_win:'败北', draw:'平局' };
+    const mm=Math.floor((r.elapsed||0)/60), ss=(r.elapsed||0)%60;
+    const date=r.date?new Date(r.date).toLocaleDateString('zh-CN',{month:'numeric',day:'numeric'}):'';
+    const el=document.createElement('div');
+    el.className='gmk-record-item';
+    el.innerHTML=`<div class="gmk-record-result">${icons[r.result]||'🎮'}</div><div class="gmk-record-info"><div style="font-weight:700;color:var(--text)">${labels[r.result]||'未知'} · vs ${esc(r.aiName||'AI')}</div><div class="gmk-record-meta">${date} · ${mm>0?mm+'分':''} ${ss}秒 · ${r.moves||0}步</div></div>`;
+    listEl.appendChild(el);
+  });
+}
+
+async function clearGomokuRecords() {
+  if (!confirm('确认清空所有五子棋战绩？')) return;
+  await saveSetting('gomokuRecords', []);
+  openGomokuRecords();
+}
+
+// ── Share to Moments ──
+async function gomokuShareToMoments() {
+  const records = (await getSetting('gomokuRecords')) || [];
+  const last = records[0];
+  const contact = gomokuGetContact();
+  const aiName = contact?.name || 'AI';
+  const labels = { player_win:'赢了🏆', ai_win:'输了💔', draw:'平局🤝' };
+  const mm=Math.floor((last?.elapsed||0)/60), ss=(last?.elapsed||0)%60;
+  const text = last
+    ? `刚刚和 ${aiName} 下了一局五子棋，${labels[last.result]||'结束'}！共走了 ${last.moves} 步，用时 ${mm>0?mm+'分':''}${ss}秒～ #五子棋 #和AI下棋`
+    : `和 ${aiName} 下了一局五子棋，好好玩！ #五子棋 #和AI下棋`;
+  closeGomokuResult();
+  // Navigate to moments and pre-fill the compose text area
+  switchPage('moments-page');
+  await new Promise(r => setTimeout(r, 200));
+  const ta = $i('compose-text');
+  if (ta) { ta.value = text; ta.dispatchEvent(new Event('input')); }
+  // Open modal on mobile
+  const modal = $i('compose-moment-modal');
+  if (modal && window.innerWidth <= 768) {
+    const taM = modal.querySelector('textarea');
+    if (taM) taM.value = text;
+    openModal('compose-moment-modal');
+  }
+  toast('已跳转到朋友圈，发送即可～');
+}
+
+// ══ Xiangqi (中国象棋) ══════════════════════
+
+const XIANGQI = {
+  board: null,    // 10 rows x 9 cols, null = empty, {type, side} = piece
+  turn: 'red',   // 'red' = player, 'black' = AI
+  over: false,
+  selected: null, // {r, c} currently selected piece
+  moves: [],      // valid moves for selected piece
+  moveCount: 0,
+  startTime: 0,
+  contactId: null,
+  prefs: { boardColor:'classic', commentary:true },
+};
+
+const XQ_BOARD_COLORS = { classic:'xq-board-classic', pink:'xq-board-pink', purple:'xq-board-purple', green:'xq-board-green', dark:'xq-board-dark' };
+
+// Chinese chess piece names (red/black)
+const XQ_NAMES = {
+  king:   { red:'帅', black:'將' },
+  advisor:{ red:'仕', black:'士' },
+  elephant:{ red:'相', black:'象' },
+  horse:  { red:'馬', black:'馬' },
+  rook:   { red:'車', black:'車' },
+  cannon: { red:'炮', black:'砲' },
+  pawn:   { red:'兵', black:'卒' },
+};
+
+function xqInitBoard() {
+  const b = Array.from({length:10}, () => Array(9).fill(null));
+  // Black pieces (top, rows 0-4)
+  const backRow = ['rook','horse','elephant','advisor','king','advisor','elephant','horse','rook'];
+  backRow.forEach((t,c) => b[0][c] = {type:t, side:'black'});
+  b[2][1] = {type:'cannon', side:'black'}; b[2][7] = {type:'cannon', side:'black'};
+  [0,2,4,6,8].forEach(c => b[3][c] = {type:'pawn', side:'black'});
+  // Red pieces (bottom, rows 5-9)
+  [0,2,4,6,8].forEach(c => b[6][c] = {type:'pawn', side:'red'});
+  b[7][1] = {type:'cannon', side:'red'}; b[7][7] = {type:'cannon', side:'red'};
+  const redBack = ['rook','horse','elephant','advisor','king','advisor','elephant','horse','rook'];
+  redBack.forEach((t,c) => b[9][c] = {type:t, side:'red'});
+  return b;
+}
+
+function xqGetMoves(board, r, c) {
+  const piece = board[r][c];
+  if (!piece) return [];
+  const moves = [];
+  const {type, side} = piece;
+  const enemy = side === 'red' ? 'black' : 'red';
+
+  function inBounds(r,c) { return r>=0&&r<10&&c>=0&&c<9; }
+  function canTo(r,c) { return inBounds(r,c) && board[r][c]?.side !== side; }
+  function add(r,c) { if (canTo(r,c)) moves.push([r,c]); }
+
+  if (type === 'rook') {
+    for (const [dr,dc] of [[-1,0],[1,0],[0,-1],[0,1]]) {
+      for (let i=1;i<10;i++) {
+        const nr=r+dr*i, nc=c+dc*i;
+        if (!inBounds(nr,nc)) break;
+        if (board[nr][nc]) { if (board[nr][nc].side !== side) moves.push([nr,nc]); break; }
+        else moves.push([nr,nc]);
+      }
+    }
+  } else if (type === 'cannon') {
+    for (const [dr,dc] of [[-1,0],[1,0],[0,-1],[0,1]]) {
+      let jumped = false;
+      for (let i=1;i<10;i++) {
+        const nr=r+dr*i, nc=c+dc*i;
+        if (!inBounds(nr,nc)) break;
+        if (!jumped) {
+          if (board[nr][nc]) jumped = true;
+          else moves.push([nr,nc]);
+        } else {
+          if (board[nr][nc]) { if (board[nr][nc].side !== side) moves.push([nr,nc]); break; }
+        }
+      }
+    }
+  } else if (type === 'horse') {
+    const hMoves = [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]];
+    const blocks = [[-1,0],[-1,0],[0,-1],[0,-1],[0,-1],[0,-1],[1,0],[1,0]];
+    hMoves.forEach(([dr,dc],i) => {
+      const br=r+blocks[i][0], bc=c+blocks[i][1];
+      if (inBounds(br,bc) && !board[br][bc]) add(r+dr, c+dc);
+    });
+  } else if (type === 'elephant') {
+    const eMoves = [[-2,-2],[-2,2],[2,-2],[2,2]];
+    const eBlocks = [[-1,-1],[-1,1],[1,-1],[1,1]];
+    eMoves.forEach(([dr,dc],i) => {
+      const nr=r+dr, nc=c+dc;
+      const br=r+eBlocks[i][0], bc=c+eBlocks[i][1];
+      if (inBounds(nr,nc) && !board[br][bc] && board[nr][nc]?.side!==side) {
+        const redSide = nr >= 5; // Elephant can't cross river
+        if ((side==='red'&&redSide)||(side==='black'&&!redSide)) moves.push([nr,nc]);
+      }
+    });
+  } else if (type === 'advisor') {
+    const aZone = side==='red' ? {rMin:7,rMax:9,cMin:3,cMax:5} : {rMin:0,rMax:2,cMin:3,cMax:5};
+    [[-1,-1],[-1,1],[1,-1],[1,1]].forEach(([dr,dc]) => {
+      const nr=r+dr, nc=c+dc;
+      if (nr>=aZone.rMin&&nr<=aZone.rMax&&nc>=aZone.cMin&&nc<=aZone.cMax&&board[nr][nc]?.side!==side) moves.push([nr,nc]);
+    });
+  } else if (type === 'king') {
+    const kZone = side==='red' ? {rMin:7,rMax:9,cMin:3,cMax:5} : {rMin:0,rMax:2,cMin:3,cMax:5};
+    [[-1,0],[1,0],[0,-1],[0,1]].forEach(([dr,dc]) => {
+      const nr=r+dr, nc=c+dc;
+      if (nr>=kZone.rMin&&nr<=kZone.rMax&&nc>=kZone.cMin&&nc<=kZone.cMax&&board[nr][nc]?.side!==side) moves.push([nr,nc]);
+    });
+  } else if (type === 'pawn') {
+    if (side === 'red') {
+      add(r-1, c); // always forward
+      if (r <= 4) { add(r, c-1); add(r, c+1); } // past river can go sideways
+    } else {
+      add(r+1, c);
+      if (r >= 5) { add(r, c-1); add(r, c+1); }
+    }
+  }
+  return moves;
+}
+
+function xqIsInCheck(board, side) {
+  // Find king
+  let kr=-1, kc=-1;
+  for (let r=0;r<10;r++) for (let c=0;c<9;c++) { if (board[r][c]?.type==='king'&&board[r][c]?.side===side){kr=r;kc=c;} }
+  if (kr===-1) return true;
+  const enemy = side==='red'?'black':'red';
+  for (let r=0;r<10;r++) for (let c=0;c<9;c++) {
+    if (board[r][c]?.side===enemy) {
+      const ms = xqGetMoves(board, r, c);
+      if (ms.some(([mr,mc])=>mr===kr&&mc===kc)) return true;
+    }
+  }
+  return false;
+}
+
+function xqLegalMoves(board, r, c) {
+  const piece = board[r][c];
+  if (!piece) return [];
+  const pseudo = xqGetMoves(board, r, c);
+  return pseudo.filter(([nr,nc]) => {
+    const copy = board.map(row => [...row]);
+    copy[nr][nc] = copy[r][c]; copy[r][c] = null;
+    return !xqIsInCheck(copy, piece.side);
+  });
+}
+
+function xqAllLegalMoves(board, side) {
+  const all = [];
+  for (let r=0;r<10;r++) for (let c=0;c<9;c++) {
+    if (board[r][c]?.side===side) {
+      xqLegalMoves(board,r,c).forEach(([nr,nc]) => all.push({fromR:r,fromC:c,toR:nr,toC:nc}));
+    }
+  }
+  return all;
+}
+
+function xqPieceValue(type) {
+  return {king:10000,rook:900,cannon:450,horse:400,elephant:200,advisor:200,pawn:100}[type]||0;
+}
+
+function xqEval(board) {
+  // Positive = good for black (AI), negative = good for red (player)
+  let score = 0;
+  for (let r=0;r<10;r++) for (let c=0;c<9;c++) {
+    const p = board[r][c];
+    if (p) score += (p.side==='black'?1:-1) * xqPieceValue(p.type);
+  }
+  return score;
+}
+
+function xqHeuristic(board, side) {
+  // Simple: pick move that captures highest value or gives check
+  const enemy = side==='red'?'black':'red';
+  const moves = xqAllLegalMoves(board, side);
+  if (!moves.length) return null;
+  let best = null, bestScore = -Infinity;
+  for (const m of moves) {
+    const copy = board.map(r=>[...r]);
+    const cap = copy[m.toR][m.toC];
+    copy[m.toR][m.toC] = copy[m.fromR][m.fromC]; copy[m.fromR][m.fromC] = null;
+    let score = cap ? xqPieceValue(cap.type) : 0;
+    if (xqIsInCheck(copy, enemy)) score += 50;
+    score += Math.random() * 20; // variety
+    if (score > bestScore) { bestScore = score; best = m; }
+  }
+  return best || moves[Math.floor(Math.random()*moves.length)];
+}
+
+async function loadXiangqiPrefs() {
+  const saved = await getSetting('xiangqiPrefs');
+  if (saved) Object.assign(XIANGQI.prefs, saved);
+  const ct = $i('xq-commentary-toggle');
+  if (ct) ct.checked = XIANGQI.prefs.commentary;
+  document.querySelectorAll('#xq-color-row .gmk-color-swatch').forEach(el => {
+    el.classList.toggle('active', el.dataset.color === XIANGQI.prefs.boardColor);
+  });
+}
+async function saveXiangqiPrefs() { await saveSetting('xiangqiPrefs', XIANGQI.prefs); }
+
+function setXiangqiBoard(color, el) {
+  XIANGQI.prefs.boardColor = color;
+  document.querySelectorAll('#xq-color-row .gmk-color-swatch').forEach(s=>s.classList.remove('active'));
+  el.classList.add('active');
+  const board = $i('xiangqi-board');
+  if (board) board.className = 'xq-board ' + (XQ_BOARD_COLORS[color]||'xq-board-classic');
+  saveXiangqiPrefs();
+}
+
+function toggleXiangqiCommentary(val) { XIANGQI.prefs.commentary = val; saveXiangqiPrefs(); }
+
+function toggleXiangqiSettings() {
+  const panel = $i('xiangqi-settings');
+  if (!panel) return;
+  const show = panel.style.display === 'none';
+  panel.style.display = show ? '' : 'none';
+  if (show) { renderXiangqiAiSelector(); loadXiangqiPrefs(); }
+}
+
+function renderXiangqiAiSelector() {
+  const el = $i('xq-ai-selector');
+  if (!el) return;
+  el.innerHTML = '';
+  const contacts = Object.values(S._contacts);
+  if (!contacts.length) { el.innerHTML = '<span style="font-size:12px;color:var(--text3)">还没有AI助手，先去添加～</span>'; return; }
+  contacts.forEach(c => {
+    const btn = document.createElement('button');
+    btn.className = 'gmk-ai-btn' + (XIANGQI.contactId === c.id ? ' active' : '');
+    const av = c.avatar?.startsWith('data:') ? `<img src="${c.avatar}" style="width:18px;height:18px;border-radius:50%;object-fit:cover">` : `<span>${c.avatar||'🤖'}</span>`;
+    btn.innerHTML = `${av}<span>${esc(c.name)}</span>`;
+    btn.onclick = () => { XIANGQI.contactId = c.id; renderXiangqiAiSelector(); updateXiangqiAiDisplay(); };
+    el.appendChild(btn);
+  });
+}
+
+function xqGetContact() {
+  return (XIANGQI.contactId ? S._contacts[XIANGQI.contactId] : null)
+    || (S.currentContact ? S._contacts[S.currentContact] : null)
+    || Object.values(S._contacts)[0] || null;
+}
+
+function updateXiangqiAiDisplay() {
+  const contact = xqGetContact();
+  const aiName = contact?.name || 'AI';
+  const el = $i('xiangqi-ai-name');
+  if (el) el.textContent = `${aiName}（黑方）`;
+}
+
+function initXiangqi() {
+  XIANGQI.board = xqInitBoard();
+  XIANGQI.turn = 'red';
+  XIANGQI.over = false;
+  XIANGQI.selected = null;
+  XIANGQI.moves = [];
+  XIANGQI.moveCount = 0;
+  XIANGQI.startTime = Date.now();
+  if (!XIANGQI.contactId) XIANGQI.contactId = S.currentContact || Object.keys(S._contacts)[0] || null;
+  loadXiangqiPrefs().then(() => {
+    const board = $i('xiangqi-board');
+    if (board) board.className = 'xq-board ' + (XQ_BOARD_COLORS[XIANGQI.prefs.boardColor]||'xq-board-classic');
+  });
+  updateXiangqiAiDisplay();
+  renderXiangqiBoard();
+  xqSetStatus('你先行棋（红方）！');
+  const contact = xqGetContact();
+  const aiName = contact?.name || 'AI';
+  xqSay(contact ? `你好！我是${aiName}，我们来下象棋吧！` : '游戏开始！先去设置选个AI助手一起玩～');
+  const panel = $i('xiangqi-settings');
+  if (panel) panel.style.display = 'none';
+}
+
+function renderXiangqiBoard() {
+  const el = $i('xiangqi-board');
+  if (!el) return;
+  el.innerHTML = '';
+  el.className = 'xq-board ' + (XQ_BOARD_COLORS[XIANGQI.prefs.boardColor]||'xq-board-classic');
+  const movableSet = new Set(XIANGQI.moves.map(([r,c])=>r+','+c));
+  for (let r=0;r<10;r++) {
+    for (let c=0;c<9;c++) {
+      const cell = document.createElement('div');
+      cell.className = 'xq-cell';
+      const piece = XIANGQI.board[r][c];
+      const isSelected = XIANGQI.selected && XIANGQI.selected.r===r && XIANGQI.selected.c===c;
+      const isMovable = movableSet.has(r+','+c);
+      if (isSelected) cell.classList.add('selected');
+      if (isMovable) cell.classList.add('movable');
+      if (piece) {
+        cell.classList.add('has-piece');
+        const pd = document.createElement('div');
+        pd.className = `xq-piece ${piece.side}`;
+        pd.textContent = XQ_NAMES[piece.type]?.[piece.side] || '?';
+        cell.appendChild(pd);
+      }
+      cell.addEventListener('click', () => xqCellClick(r, c));
+      el.appendChild(cell);
+    }
+  }
+}
+
+function xqCellClick(r, c) {
+  if (XIANGQI.over || XIANGQI.turn !== 'red') return;
+  const piece = XIANGQI.board[r][c];
+  // If a piece is already selected and this is a valid move target
+  if (XIANGQI.selected && XIANGQI.moves.some(([mr,mc])=>mr===r&&mc===c)) {
+    xqPlayerMove(XIANGQI.selected.r, XIANGQI.selected.c, r, c);
+    return;
+  }
+  // Select a red piece
+  if (piece && piece.side === 'red') {
+    XIANGQI.selected = {r, c};
+    XIANGQI.moves = xqLegalMoves(XIANGQI.board, r, c);
+    renderXiangqiBoard();
+    const infoEl = $i('xq-selected-info');
+    if (infoEl) infoEl.textContent = `已选: ${XQ_NAMES[piece.type]?.red||'?'} (${XIANGQI.moves.length}个可落位)`;
+    return;
+  }
+  // Deselect
+  XIANGQI.selected = null; XIANGQI.moves = [];
+  renderXiangqiBoard();
+  const infoEl = $i('xq-selected-info'); if (infoEl) infoEl.textContent = '';
+}
+
+async function xqPlayerMove(fr, fc, tr, tc) {
+  XIANGQI.board[tr][tc] = XIANGQI.board[fr][fc];
+  XIANGQI.board[fr][fc] = null;
+  XIANGQI.selected = null; XIANGQI.moves = [];
+  XIANGQI.moveCount++;
+  XIANGQI.turn = 'black';
+  const infoEl = $i('xq-selected-info'); if (infoEl) infoEl.textContent = '';
+  renderXiangqiBoard();
+
+  // Check if black king is captured or in checkmate
+  const blackKing = XIANGQI.board.flat().some(p=>p?.type==='king'&&p?.side==='black');
+  if (!blackKing || !xqAllLegalMoves(XIANGQI.board,'black').length) {
+    XIANGQI.over = true;
+    xqSetStatus('🎉 你赢了！');
+    await xqFinish('player_win');
+    return;
+  }
+  if (xqIsInCheck(XIANGQI.board, 'black')) xqSay('将！');
+  xqSetStatus('AI思考中…');
+  await new Promise(r=>setTimeout(r, 400));
+  await xqAiMove();
+}
+
+async function xqAiMove() {
+  const contact = xqGetContact();
+  const useKey = contact?.apiKey || S.settings.apiKey;
+  const phase = XIANGQI.moveCount <= 10 ? 'early' : XIANGQI.moveCount <= 30 ? 'mid' : 'late';
+  let move = null, comment = '';
+
+  if (useKey) {
+    try {
+      const piecesStr = [];
+      for (let r=0;r<10;r++) for (let c=0;c<9;c++) {
+        const p = XIANGQI.board[r][c];
+        if (p) piecesStr.push(`${p.side==='red'?'红':'黑'}${XQ_NAMES[p.type][p.side]}(${r},${c})`);
+      }
+      const aiName = contact?.name||'AI', personality=(contact?.system||'').slice(0,120);
+      const model = contact?.model||'openai/gpt-4o-mini';
+      const legalMoves = xqAllLegalMoves(XIANGQI.board,'black');
+      const movesStr = legalMoves.slice(0,20).map(m=>`(${m.fromR},${m.fromC})→(${m.toR},${m.toC})`).join(' ');
+      const prompt = `你是${aiName}，和用户下中国象棋。你执黑方，用户执红方。棋盘10行9列，行0-9，列0-8，黑方从第0行开始。\n当前棋子：${piecesStr.join(' ')}\n合法移动（前20个）：${movesStr}\n性格：${personality||'聪明好胜'}\n阶段：第${XIANGQI.moveCount}手，${phase}局。\n根据性格灵活决策：温柔型可能偶尔让步，强势型全力争胜。\n从合法移动中选一步，用1句话回应。只返回JSON：{"fromR":数字,"fromC":数字,"toR":数字,"toC":数字,"comment":"话"}`;
+      const res = await fetch(contact?.apiUrl||'https://openrouter.ai/api/v1/chat/completions',{method:'POST',headers:{'Authorization':`Bearer ${useKey}`,'Content-Type':'application/json','HTTP-Referer':'https://raimos.app','X-Title':'Raimos'},body:JSON.stringify({model,max_tokens:100,stream:false,temperature:0.7,messages:[{role:'user',content:prompt}]})});
+      const data=await res.json();const txt=data.choices?.[0]?.message?.content||'';const m=txt.match(/\{[\s\S]*?\}/);
+      if (m) { const p=JSON.parse(m[0]); const lm=xqAllLegalMoves(XIANGQI.board,'black'); if(lm.some(mv=>mv.fromR===p.fromR&&mv.fromC===p.fromC&&mv.toR===p.toR&&mv.toC===p.toC)){move=p;comment=p.comment;} }
+    } catch(e){}
+  }
+
+  if (!move) {
+    move = xqHeuristic(XIANGQI.board, 'black');
+    if (!comment) comment = xqIsInCheck(XIANGQI.board,'red') ? '将！你的王被威胁了～' : '让我想想…就这里！';
+  }
+  if (!move) { XIANGQI.over=true; xqSetStatus('你赢了！AI无路可走～'); await xqFinish('player_win'); return; }
+
+  XIANGQI.board[move.toR][move.toC] = XIANGQI.board[move.fromR][move.fromC];
+  XIANGQI.board[move.fromR][move.fromC] = null;
+  XIANGQI.moveCount++;
+  XIANGQI.turn = 'red';
+  renderXiangqiBoard();
+  if (comment && XIANGQI.prefs.commentary) xqSay(comment);
+
+  const redKing = XIANGQI.board.flat().some(p=>p?.type==='king'&&p?.side==='red');
+  if (!redKing || !xqAllLegalMoves(XIANGQI.board,'red').length) {
+    XIANGQI.over=true; xqSetStatus('AI赢了！再来一局？'); await xqFinish('ai_win'); return;
+  }
+  if (xqIsInCheck(XIANGQI.board,'red')) { xqSetStatus('⚠️ 你被将军了！'); } else { xqSetStatus('轮到你了！'); }
+}
+
+function xqSetStatus(msg) { const el=$i('xiangqi-status'); if(el)el.textContent=msg; }
+function xqSay(text) {
+  const el=$i('xiangqi-comment'); if(!el||!text)return;
+  el.textContent=text; el.style.opacity='1'; clearTimeout(el._t);
+  el._t=setTimeout(()=>{if(el)el.style.opacity='0';},5500);
+}
+
+async function xqFinish(result) {
+  const contact = xqGetContact();
+  const elapsed = Math.round((Date.now()-XIANGQI.startTime)/1000);
+  await saveXiangqiRecord({result, moves:XIANGQI.moveCount, elapsed, aiName:contact?.name||'AI', aiContactId:XIANGQI.contactId, date:Date.now()});
+  let aiComment='';
+  const useKey=contact?.apiKey||S.settings.apiKey;
+  if (useKey) {
+    try {
+      const aiName=contact?.name||'AI', personality=(contact?.system||'').slice(0,100);
+      const resultDesc=result==='player_win'?'你输了':result==='ai_win'?'你赢了':'平局';
+      const prompt=`你是${aiName}，性格：${personality||'聪明好胜'}。象棋结束，${resultDesc}。用1句符合性格的话回应。只返回JSON：{"comment":"话"}`;
+      const res=await fetch(contact?.apiUrl||'https://openrouter.ai/api/v1/chat/completions',{method:'POST',headers:{'Authorization':`Bearer ${useKey}`,'Content-Type':'application/json','HTTP-Referer':'https://raimos.app','X-Title':'Raimos'},body:JSON.stringify({model:contact?.model||'openai/gpt-4o-mini',max_tokens:60,stream:false,messages:[{role:'user',content:prompt}]})});
+      const data=await res.json();const txt=data.choices?.[0]?.message?.content||'';const m=txt.match(/\{[\s\S]*?\}/);
+      if(m)aiComment=JSON.parse(m[0]).comment||'';
+    } catch(e){}
+  }
+  if(!aiComment)aiComment=result==='player_win'?'你真厉害！再来一局吧～':result==='ai_win'?'哈哈我赢了！再来？':'旗鼓相当～';
+  xqSay(aiComment);
+  setTimeout(()=>showXiangqiResult(result,elapsed,aiComment,contact),800);
+}
+
+function showXiangqiResult(result, elapsed, aiComment, contact) {
+  const overlay=$i('xiangqi-result-overlay'); if(!overlay)return;
+  overlay.classList.add('show');
+  const titles={player_win:'🎉 你赢了！',ai_win:'💫 AI赢了！',draw:'🤝 平局！'};
+  const titleEl=$i('xq-result-title'); if(titleEl){titleEl.textContent=titles[result]||'游戏结束';titleEl.className=`gmk-result-title ${result==='player_win'?'win':result==='draw'?'draw':''}`;}
+  const badges={player_win:['🏆','💔'],ai_win:['💔','🏆'],draw:['🤝','🤝']};
+  const [pb,ab]=badges[result]||['',''];
+  const pbEl=$i('xq-result-player-badge'),abEl=$i('xq-result-ai-badge');
+  if(pbEl)pbEl.textContent=pb; if(abEl)abEl.textContent=ab;
+  const userAv=S.settings.userAvatar||S.settings.avatar||'😊';
+  const pAvEl=$i('xq-result-player-av');
+  if(pAvEl){if(userAv.startsWith('data:'))pAvEl.innerHTML=`<img src="${userAv}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`;else pAvEl.textContent=userAv;}
+  const aiAv=contact?.avatar||'🤖';
+  const aAvEl=$i('xq-result-ai-av');
+  if(aAvEl){if(aiAv.startsWith('data:'))aAvEl.innerHTML=`<img src="${aiAv}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`;else aAvEl.textContent=aiAv;}
+  const aiNameEl=$i('xq-result-ai-name'); if(aiNameEl)aiNameEl.textContent=contact?.name||'AI';
+  const mm=Math.floor(elapsed/60),ss=elapsed%60;
+  const statsEl=$i('xq-result-stats');
+  if(statsEl)statsEl.textContent=`本局用时 ${mm>0?mm+'分':''}${ss}秒  ·  共走 ${XIANGQI.moveCount} 步\n"${aiComment}"`;
+  const catEl=$i('xq-result-cat');
+  if(catEl){catEl.innerHTML=result==='player_win'?gomokuWinCatSVG():result==='ai_win'?gomokuLoseCatSVG():'<div style="font-size:60px;animation:cat-bounce .8s ease-in-out infinite">🐱</div>';}
+  const confEl=$i('xq-confetti');
+  if(confEl){confEl.innerHTML='';if(result==='player_win'){const cols=['#ff8fab','#a78bfa','#fcd34d','#6ee7b7','#67e8f9','#f472b6','#fb923c'];for(let i=0;i<36;i++){const el=document.createElement('div');el.className='gmk-confetti-piece';const sz=6+Math.random()*7;el.style.cssText=`left:${Math.random()*100}%;width:${sz}px;height:${sz}px;background:${cols[i%cols.length]};border-radius:${Math.random()>.5?'50%':'3px'};animation:confetti-fall ${1.2+Math.random()*0.8}s ease-in ${Math.random()*0.5}s forwards`;confEl.appendChild(el);}}}
+}
+function closeXiangqiResult(){closeModal('xiangqi-result-overlay');}
+
+async function saveXiangqiRecord(rec){let records=(await getSetting('xiangqiRecords'))||[];records.unshift({...rec,id:uid()});if(records.length>60)records=records.slice(0,60);await saveSetting('xiangqiRecords',records);}
+async function openXiangqiRecords(){
+  const records=(await getSetting('xiangqiRecords'))||[];
+  const overlay=$i('xiangqi-records-modal');if(!overlay)return;overlay.classList.add('show');
+  const wins=records.filter(r=>r.result==='player_win').length,losses=records.filter(r=>r.result==='ai_win').length,draws=records.filter(r=>r.result==='draw').length;
+  const sumEl=$i('xq-records-summary');if(sumEl)sumEl.innerHTML=`<div style="flex:1"><div style="font-size:22px;font-weight:900;color:#4ade80">${wins}</div><div style="font-size:11px;color:var(--text3)">胜</div></div><div style="flex:1"><div style="font-size:22px;font-weight:900;color:#f87171">${losses}</div><div style="font-size:11px;color:var(--text3)">负</div></div><div style="flex:1"><div style="font-size:22px;font-weight:900;color:var(--text2)">${draws}</div><div style="font-size:11px;color:var(--text3)">平</div></div><div style="flex:1"><div style="font-size:22px;font-weight:900;color:var(--accent)">${records.length}</div><div style="font-size:11px;color:var(--text3)">总局</div></div>`;
+  const listEl=$i('xq-records-list');if(!listEl)return;
+  if(!records.length){listEl.innerHTML='<div style="text-align:center;padding:30px;color:var(--text3);font-size:13px">还没有对战记录，快去下一局吧！</div>';return;}
+  listEl.innerHTML='';
+  records.forEach(r=>{const icons={player_win:'🏆',ai_win:'💔',draw:'🤝'};const labels={player_win:'胜利',ai_win:'败北',draw:'平局'};const mm=Math.floor((r.elapsed||0)/60),ss=(r.elapsed||0)%60;const date=r.date?new Date(r.date).toLocaleDateString('zh-CN',{month:'numeric',day:'numeric'}):'';const el=document.createElement('div');el.className='gmk-record-item';el.innerHTML=`<div class="gmk-record-result">${icons[r.result]||'🎮'}</div><div class="gmk-record-info"><div style="font-weight:700;color:var(--text)">${labels[r.result]||'未知'} · vs ${esc(r.aiName||'AI')}</div><div class="gmk-record-meta">${date} · ${mm>0?mm+'分':''}${ss}秒 · ${r.moves||0}步</div></div>`;listEl.appendChild(el);});
+}
+async function clearXiangqiRecords(){if(!confirm('确认清空所有象棋战绩？'))return;await saveSetting('xiangqiRecords',[]);openXiangqiRecords();}
+async function xiangqiShareToMoments(){
+  const records=(await getSetting('xiangqiRecords'))||[];const last=records[0];const contact=xqGetContact();const aiName=contact?.name||'AI';
+  const labels={player_win:'赢了🏆',ai_win:'输了💔',draw:'平局🤝'};
+  const mm=Math.floor((last?.elapsed||0)/60),ss=(last?.elapsed||0)%60;
+  const text=last?`刚刚和 ${aiName} 下了一局象棋，${labels[last.result]||'结束'}！共走了 ${last.moves} 步，用时 ${mm>0?mm+'分':''}${ss}秒～ #象棋 #和AI下棋`:`和 ${aiName} 下了一局象棋，好好玩！ #象棋 #和AI下棋`;
+  closeXiangqiResult();switchPage('moments-page');await new Promise(r=>setTimeout(r,200));
+  const ta=$i('compose-text');if(ta){ta.value=text;ta.dispatchEvent(new Event('input'));}
+  const modal=$i('compose-moment-modal');if(modal&&window.innerWidth<=768){const taM=modal.querySelector('textarea');if(taM)taM.value=text;openModal('compose-moment-modal');}
+  toast('已跳转到朋友圈，发送即可～');
+}
+
+// ══ International Chess (国际象棋) ══════════════════════
+
+const IC_PIECES = {
+  // white pieces (player), black pieces (AI)
+  wK:'♔', wQ:'♕', wR:'♖', wB:'♗', wN:'♘', wP:'♙',
+  bK:'♚', bQ:'♛', bR:'♜', bB:'♝', bN:'♞', bP:'♟',
+};
+
+const INTCHESS = {
+  board: null,  // 8x8, null or string like 'wK','bP' etc.
+  turn: 'w',   // 'w' = player (white), 'b' = AI (black)
+  over: false,
+  selected: null,
+  moves: [],
+  moveCount: 0,
+  startTime: 0,
+  contactId: null,
+  prefs: { boardColor:'classic', commentary:true },
+  enPassant: null,  // square pawn can capture en passant
+  castling: { wK:true, wQR:true, bK:true, bQR:true }, // can castle flags
+};
+
+const IC_BOARD_COLORS = { classic:'ic-board-classic', pink:'ic-board-pink', purple:'ic-board-purple', green:'ic-board-green', blue:'ic-board-blue' };
+
+function icInitBoard() {
+  const b = Array.from({length:8}, ()=>Array(8).fill(null));
+  // Black pieces (rows 0-1)
+  const backRow = ['bR','bN','bB','bQ','bK','bB','bN','bR'];
+  backRow.forEach((p,c)=>b[0][c]=p);
+  for(let c=0;c<8;c++) b[1][c]='bP';
+  // White pieces (rows 6-7)
+  for(let c=0;c<8;c++) b[6][c]='wP';
+  const whiteBack = ['wR','wN','wB','wQ','wK','wB','wN','wR'];
+  whiteBack.forEach((p,c)=>b[7][c]=p);
+  return b;
+}
+
+function icSide(piece) { return piece ? piece[0] : null; }
+function icType(piece) { return piece ? piece[1] : null; }
+
+function icGetMoves(board, r, c, enPassant, castling) {
+  const piece = board[r][c];
+  if (!piece) return [];
+  const side = icSide(piece), type = icType(piece);
+  const enemy = side==='w'?'b':'w';
+  const moves = [];
+  function inB(r,c){return r>=0&&r<8&&c>=0&&c<8;}
+  function canTo(r,c){return inB(r,c)&&icSide(board[r][c])!==side;}
+  function addSlide(dr,dc){for(let i=1;i<8;i++){const nr=r+dr*i,nc=c+dc*i;if(!inB(nr,nc))break;if(board[nr][nc]){if(icSide(board[nr][nc])!==side)moves.push([nr,nc]);break;}moves.push([nr,nc]);}}
+
+  if (type==='R') { addSlide(-1,0);addSlide(1,0);addSlide(0,-1);addSlide(0,1); }
+  else if (type==='B') { addSlide(-1,-1);addSlide(-1,1);addSlide(1,-1);addSlide(1,1); }
+  else if (type==='Q') { addSlide(-1,0);addSlide(1,0);addSlide(0,-1);addSlide(0,1);addSlide(-1,-1);addSlide(-1,1);addSlide(1,-1);addSlide(1,1); }
+  else if (type==='N') { [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]].forEach(([dr,dc])=>{if(canTo(r+dr,c+dc))moves.push([r+dr,c+dc]);}); }
+  else if (type==='K') {
+    [[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]].forEach(([dr,dc])=>{if(canTo(r+dr,c+dc))moves.push([r+dr,c+dc]);});
+    // Castling
+    if (side==='w'&&r===7&&c===4) {
+      if (castling?.wK&&!board[7][5]&&!board[7][6]&&board[7][7]==='wR') moves.push([7,6,'castle']);
+      if (castling?.wQR&&!board[7][3]&&!board[7][2]&&!board[7][1]&&board[7][0]==='wR') moves.push([7,2,'castle']);
+    }
+    if (side==='b'&&r===0&&c===4) {
+      if (castling?.bK&&!board[0][5]&&!board[0][6]&&board[0][7]==='bR') moves.push([0,6,'castle']);
+      if (castling?.bQR&&!board[0][3]&&!board[0][2]&&!board[0][1]&&board[0][0]==='bR') moves.push([0,2,'castle']);
+    }
+  }
+  else if (type==='P') {
+    const dir = side==='w'?-1:1;
+    const startRow = side==='w'?6:1;
+    if (inB(r+dir,c)&&!board[r+dir][c]) {
+      moves.push([r+dir,c]);
+      if (r===startRow&&!board[r+dir*2][c]) moves.push([r+dir*2,c]);
+    }
+    [-1,1].forEach(dc=>{
+      if (inB(r+dir,c+dc)) {
+        if (icSide(board[r+dir][c+dc])===enemy) moves.push([r+dir,c+dc]);
+        if (enPassant&&enPassant[0]===r+dir&&enPassant[1]===c+dc) moves.push([r+dir,c+dc,'ep']);
+      }
+    });
+  }
+  return moves;
+}
+
+function icIsInCheck(board, side) {
+  let kr=-1,kc=-1;
+  for(let r=0;r<8;r++) for(let c=0;c<8;c++) { if(board[r][c]===side+'K'){kr=r;kc=c;} }
+  if(kr===-1)return true;
+  const enemy=side==='w'?'b':'w';
+  for(let r=0;r<8;r++) for(let c=0;c<8;c++) {
+    if(icSide(board[r][c])===enemy) {
+      const ms=icGetMoves(board,r,c,null,null);
+      if(ms.some(([mr,mc])=>mr===kr&&mc===kc))return true;
+    }
+  }
+  return false;
+}
+
+function icLegalMoves(board, r, c, enPassant, castling) {
+  const piece = board[r][c]; if(!piece)return[];
+  const pseudo = icGetMoves(board,r,c,enPassant,castling);
+  return pseudo.filter(([nr,nc,flag]) => {
+    const copy = board.map(row=>[...row]);
+    if (flag==='castle') {
+      const side=icSide(piece);
+      if(nc===6){copy[r][5]=copy[r][7];copy[r][7]=null;}else{copy[r][3]=copy[r][0];copy[r][0]=null;}
+    }
+    if (flag==='ep') { copy[r][nc]=null; }
+    copy[nr][nc]=copy[r][c]; copy[r][c]=null;
+    return !icIsInCheck(copy,icSide(piece));
+  });
+}
+
+function icAllLegalMoves(board, side, enPassant, castling) {
+  const all=[];
+  for(let r=0;r<8;r++) for(let c=0;c<8;c++) {
+    if(icSide(board[r][c])===side) {
+      icLegalMoves(board,r,c,enPassant,castling).forEach(([nr,nc,flag])=>all.push({fromR:r,fromC:c,toR:nr,toC:nc,flag}));
+    }
+  }
+  return all;
+}
+
+function icPieceScore(type) {
+  return {K:20000,Q:900,R:500,B:330,N:320,P:100}[type]||0;
+}
+
+function icEval(board) {
+  let score=0;
+  for(let r=0;r<8;r++) for(let c=0;c<8;c++) {
+    const p=board[r][c];
+    if(p) score+=(icSide(p)==='b'?1:-1)*icPieceScore(icType(p));
+  }
+  return score;
+}
+
+function icHeuristic(board, side, enPassant, castling) {
+  const moves=icAllLegalMoves(board,side,enPassant,castling);
+  if(!moves.length)return null;
+  let best=null,bestScore=-Infinity;
+  const enemy=side==='w'?'b':'w';
+  for(const m of moves) {
+    const copy=board.map(r=>[...r]);
+    const cap=copy[m.toR][m.toC];
+    if(m.flag==='castle'){if(m.toC===6){copy[m.fromR][5]=copy[m.fromR][7];copy[m.fromR][7]=null;}else{copy[m.fromR][3]=copy[m.fromR][0];copy[m.fromR][0]=null;}}
+    if(m.flag==='ep')copy[m.fromR][m.toC]=null;
+    copy[m.toR][m.toC]=copy[m.fromR][m.fromC]; copy[m.fromR][m.fromC]=null;
+    // Pawn promotion
+    if(icType(copy[m.toR][m.toC])==='P'&&(m.toR===0||m.toR===7)) copy[m.toR][m.toC]=side+'Q';
+    let score=cap?icPieceScore(icType(cap)):0;
+    if(icIsInCheck(copy,enemy))score+=50;
+    score-=icIsInCheck(copy,side)?200:0;
+    score+=Math.random()*15;
+    if(score>bestScore){bestScore=score;best=m;}
+  }
+  return best||moves[Math.floor(Math.random()*moves.length)];
+}
+
+async function loadIntChessPrefs() {
+  const saved=await getSetting('intChessPrefs');if(saved)Object.assign(INTCHESS.prefs,saved);
+  const ct=$i('ic-commentary-toggle');if(ct)ct.checked=INTCHESS.prefs.commentary;
+  document.querySelectorAll('#ic-color-row .gmk-color-swatch').forEach(el=>el.classList.toggle('active',el.dataset.color===INTCHESS.prefs.boardColor));
+}
+async function saveIntChessPrefs(){await saveSetting('intChessPrefs',INTCHESS.prefs);}
+function setIntChessBoard(color,el){
+  INTCHESS.prefs.boardColor=color;
+  document.querySelectorAll('#ic-color-row .gmk-color-swatch').forEach(s=>s.classList.remove('active'));el.classList.add('active');
+  const board=$i('intchess-board');if(board)board.className='ic-board '+(IC_BOARD_COLORS[color]||'ic-board-classic');
+  saveIntChessPrefs();
+}
+function toggleIntChessCommentary(val){INTCHESS.prefs.commentary=val;saveIntChessPrefs();}
+function toggleIntChessSettings(){
+  const panel=$i('intchess-settings');if(!panel)return;
+  const show=panel.style.display==='none';panel.style.display=show?'':'none';
+  if(show){renderIntChessAiSelector();loadIntChessPrefs();}
+}
+function renderIntChessAiSelector(){
+  const el=$i('ic-ai-selector');if(!el)return;el.innerHTML='';
+  const contacts=Object.values(S._contacts);
+  if(!contacts.length){el.innerHTML='<span style="font-size:12px;color:var(--text3)">还没有AI助手，先去添加～</span>';return;}
+  contacts.forEach(c=>{
+    const btn=document.createElement('button');btn.className='gmk-ai-btn'+(INTCHESS.contactId===c.id?' active':'');
+    const av=c.avatar?.startsWith('data:')?`<img src="${c.avatar}" style="width:18px;height:18px;border-radius:50%;object-fit:cover">`:`<span>${c.avatar||'🤖'}</span>`;
+    btn.innerHTML=`${av}<span>${esc(c.name)}</span>`;
+    btn.onclick=()=>{INTCHESS.contactId=c.id;renderIntChessAiSelector();updateIntChessAiDisplay();};
+    el.appendChild(btn);
+  });
+}
+function icGetContact(){return(INTCHESS.contactId?S._contacts[INTCHESS.contactId]:null)||(S.currentContact?S._contacts[S.currentContact]:null)||Object.values(S._contacts)[0]||null;}
+function updateIntChessAiDisplay(){const contact=icGetContact();const el=$i('intchess-ai-name');if(el)el.textContent=`${contact?.name||'AI'}（黑方）`;}
+
+function initIntChess(){
+  INTCHESS.board=icInitBoard();INTCHESS.turn='w';INTCHESS.over=false;INTCHESS.selected=null;INTCHESS.moves=[];INTCHESS.moveCount=0;INTCHESS.startTime=Date.now();INTCHESS.enPassant=null;INTCHESS.castling={wK:true,wQR:true,bK:true,bQR:true};
+  if(!INTCHESS.contactId)INTCHESS.contactId=S.currentContact||Object.keys(S._contacts)[0]||null;
+  loadIntChessPrefs().then(()=>{const board=$i('intchess-board');if(board)board.className='ic-board '+(IC_BOARD_COLORS[INTCHESS.prefs.boardColor]||'ic-board-classic');});
+  updateIntChessAiDisplay();renderIntChessBoard();
+  icSetStatus('你先行棋（白方）！');
+  const contact=icGetContact();const aiName=contact?.name||'AI';
+  icSay(contact?`你好！我是${aiName}，来下国际象棋吧！`:'游戏开始！先去设置选个AI助手一起玩～');
+  const panel=$i('intchess-settings');if(panel)panel.style.display='none';
+}
+
+function renderIntChessBoard(){
+  const el=$i('intchess-board');if(!el)return;el.innerHTML='';
+  el.className='ic-board '+(IC_BOARD_COLORS[INTCHESS.prefs.boardColor]||'ic-board-classic');
+  const movableSet=new Set(INTCHESS.moves.map(([r,c])=>r+','+c));
+  for(let r=0;r<8;r++) for(let c=0;c<8;c++) {
+    const cell=document.createElement('div');
+    const isLight=(r+c)%2===0;
+    cell.className='ic-cell '+(isLight?'light':'dark');
+    const piece=INTCHESS.board[r][c];
+    const isSelected=INTCHESS.selected&&INTCHESS.selected.r===r&&INTCHESS.selected.c===c;
+    const isMovable=movableSet.has(r+','+c);
+    if(isSelected)cell.classList.add('selected');
+    if(isMovable){cell.classList.add('movable');if(piece&&icSide(piece)!==INTCHESS.turn)cell.classList.add('has-enemy');}
+    if(piece){
+      const pd=document.createElement('span');pd.className='ic-piece';pd.textContent=IC_PIECES[piece]||piece;
+      cell.appendChild(pd);
+    }
+    cell.addEventListener('click',()=>icCellClick(r,c));
+    el.appendChild(cell);
+  }
+}
+
+function icCellClick(r,c){
+  if(INTCHESS.over||INTCHESS.turn!=='w')return;
+  const piece=INTCHESS.board[r][c];
+  if(INTCHESS.selected&&INTCHESS.moves.some(([mr,mc])=>mr===r&&mc===c)){
+    const flag=icLegalMoves(INTCHESS.board,INTCHESS.selected.r,INTCHESS.selected.c,INTCHESS.enPassant,INTCHESS.castling).find(([mr,mc])=>mr===r&&mc===c)?.[2];
+    icPlayerMove(INTCHESS.selected.r,INTCHESS.selected.c,r,c,flag);return;
+  }
+  if(piece&&icSide(piece)==='w'){
+    INTCHESS.selected={r,c};
+    INTCHESS.moves=icLegalMoves(INTCHESS.board,r,c,INTCHESS.enPassant,INTCHESS.castling).map(([mr,mc])=>[mr,mc]);
+    renderIntChessBoard();
+    const infoEl=$i('ic-selected-info');if(infoEl)infoEl.textContent=`已选: ${IC_PIECES[piece]||piece} (${INTCHESS.moves.length}个可落位)`;return;
+  }
+  INTCHESS.selected=null;INTCHESS.moves=[];renderIntChessBoard();
+  const infoEl=$i('ic-selected-info');if(infoEl)infoEl.textContent='';
+}
+
+async function icPlayerMove(fr,fc,tr,tc,flag){
+  const movingPiece=INTCHESS.board[fr][fc];
+  if(flag==='castle'){if(tc===6){INTCHESS.board[fr][5]=INTCHESS.board[fr][7];INTCHESS.board[fr][7]=null;}else{INTCHESS.board[fr][3]=INTCHESS.board[fr][0];INTCHESS.board[fr][0]=null;}}
+  if(flag==='ep')INTCHESS.board[fr][tc]=null;
+  // Update en passant
+  INTCHESS.enPassant=null;
+  if(icType(movingPiece)==='P'&&Math.abs(tr-fr)===2) INTCHESS.enPassant=[(fr+tr)/2,tc];
+  // Update castling rights
+  if(movingPiece==='wK'){INTCHESS.castling.wK=false;INTCHESS.castling.wQR=false;}
+  if(movingPiece==='wR'&&fr===7&&fc===0)INTCHESS.castling.wQR=false;
+  if(movingPiece==='wR'&&fr===7&&fc===7)INTCHESS.castling.wK=false;
+  INTCHESS.board[tr][tc]=movingPiece; INTCHESS.board[fr][fc]=null;
+  // Promotion
+  if(icType(INTCHESS.board[tr][tc])==='P'&&tr===0) INTCHESS.board[tr][tc]='wQ';
+  INTCHESS.selected=null;INTCHESS.moves=[];INTCHESS.moveCount++;INTCHESS.turn='b';
+  const infoEl=$i('ic-selected-info');if(infoEl)infoEl.textContent='';
+  renderIntChessBoard();
+  const allBMoves=icAllLegalMoves(INTCHESS.board,'b',INTCHESS.enPassant,INTCHESS.castling);
+  if(!allBMoves.length){INTCHESS.over=true;if(icIsInCheck(INTCHESS.board,'b')){icSetStatus('将死！🎉 你赢了！');await icFinish('player_win');}else{icSetStatus('逼和！平局～');await icFinish('draw');}return;}
+  if(icIsInCheck(INTCHESS.board,'b'))icSay('将！');
+  icSetStatus('AI思考中…');
+  await new Promise(r=>setTimeout(r,500));
+  await icAiMove();
+}
+
+async function icAiMove(){
+  const contact=icGetContact();const useKey=contact?.apiKey||S.settings.apiKey;
+  const phase=INTCHESS.moveCount<=8?'开局':INTCHESS.moveCount<=25?'中局':'残局';
+  let move=null,comment='';
+  if(useKey){
+    try{
+      const boardStr=[];for(let r=0;r<8;r++)for(let c=0;c<8;c++){const p=INTCHESS.board[r][c];if(p)boardStr.push(`${IC_PIECES[p]}(${r},${c})`);}
+      const legalMoves=icAllLegalMoves(INTCHESS.board,'b',INTCHESS.enPassant,INTCHESS.castling);
+      const movesStr=legalMoves.slice(0,15).map(m=>`(${m.fromR},${m.fromC})→(${m.toR},${m.toC})`).join(' ');
+      const aiName=contact?.name||'AI',personality=(contact?.system||'').slice(0,120),model=contact?.model||'openai/gpt-4o-mini';
+      const prompt=`你是${aiName}，和用户下国际象棋。你执黑方，用户执白方。棋盘8×8，行0-7（0为黑方底），列0-7。\n当前棋子：${boardStr.join(' ')}\n合法移动（前15个）：${movesStr}\n性格：${personality||'聪明好胜'}\n阶段：第${INTCHESS.moveCount}步，${phase}。\n根据性格灵活决策：温柔型可能偶尔让步，强势型全力争胜。\n从合法移动中选一步，用1句话回应。只返回JSON：{"fromR":数字,"fromC":数字,"toR":数字,"toC":数字,"comment":"话"}`;
+      const res=await fetch(contact?.apiUrl||'https://openrouter.ai/api/v1/chat/completions',{method:'POST',headers:{'Authorization':`Bearer ${useKey}`,'Content-Type':'application/json','HTTP-Referer':'https://raimos.app','X-Title':'Raimos'},body:JSON.stringify({model,max_tokens:100,stream:false,temperature:0.7,messages:[{role:'user',content:prompt}]})});
+      const data=await res.json();const txt=data.choices?.[0]?.message?.content||'';const m=txt.match(/\{[\s\S]*?\}/);
+      if(m){const p=JSON.parse(m[0]);const lm=icAllLegalMoves(INTCHESS.board,'b',INTCHESS.enPassant,INTCHESS.castling);if(lm.some(mv=>mv.fromR===p.fromR&&mv.fromC===p.fromC&&mv.toR===p.toR&&mv.toC===p.toC)){move=p;comment=p.comment;}}
+    }catch(e){}
+  }
+  if(!move){move=icHeuristic(INTCHESS.board,'b',INTCHESS.enPassant,INTCHESS.castling);if(!comment)comment=icIsInCheck(INTCHESS.board,'w')?'将军！小心哦～':'让我想想……就这里！';}
+  if(!move){INTCHESS.over=true;icSetStatus('你赢了！AI无路可走～');await icFinish('player_win');return;}
+
+  const movingPiece=INTCHESS.board[move.fromR][move.fromC];
+  if(move.flag==='castle'){if(move.toC===6){INTCHESS.board[0][5]=INTCHESS.board[0][7];INTCHESS.board[0][7]=null;}else{INTCHESS.board[0][3]=INTCHESS.board[0][0];INTCHESS.board[0][0]=null;}}
+  if(move.flag==='ep')INTCHESS.board[move.fromR][move.toC]=null;
+  INTCHESS.enPassant=null;
+  if(icType(movingPiece)==='P'&&Math.abs(move.toR-move.fromR)===2)INTCHESS.enPassant=[(move.fromR+move.toR)/2,move.toC];
+  if(movingPiece==='bK'){INTCHESS.castling.bK=false;INTCHESS.castling.bQR=false;}
+  if(movingPiece==='bR'&&move.fromR===0&&move.fromC===0)INTCHESS.castling.bQR=false;
+  if(movingPiece==='bR'&&move.fromR===0&&move.fromC===7)INTCHESS.castling.bK=false;
+  INTCHESS.board[move.toR][move.toC]=movingPiece;INTCHESS.board[move.fromR][move.fromC]=null;
+  if(icType(INTCHESS.board[move.toR][move.toC])==='P'&&move.toR===7)INTCHESS.board[move.toR][move.toC]='bQ';
+  INTCHESS.moveCount++;INTCHESS.turn='w';
+  renderIntChessBoard();
+  if(comment&&INTCHESS.prefs.commentary)icSay(comment);
+  const allWMoves=icAllLegalMoves(INTCHESS.board,'w',INTCHESS.enPassant,INTCHESS.castling);
+  if(!allWMoves.length){INTCHESS.over=true;if(icIsInCheck(INTCHESS.board,'w')){icSetStatus('将死！AI赢了！');await icFinish('ai_win');}else{icSetStatus('逼和！平局～');await icFinish('draw');}return;}
+  if(icIsInCheck(INTCHESS.board,'w')){icSetStatus('⚠️ 你被将军了！');}else{icSetStatus('轮到你了！');}
+}
+
+function icSetStatus(msg){const el=$i('intchess-status');if(el)el.textContent=msg;}
+function icSay(text){const el=$i('intchess-comment');if(!el||!text)return;el.textContent=text;el.style.opacity='1';clearTimeout(el._t);el._t=setTimeout(()=>{if(el)el.style.opacity='0';},5500);}
+
+async function icFinish(result){
+  const contact=icGetContact();const elapsed=Math.round((Date.now()-INTCHESS.startTime)/1000);
+  await saveIntChessRecord({result,moves:INTCHESS.moveCount,elapsed,aiName:contact?.name||'AI',aiContactId:INTCHESS.contactId,date:Date.now()});
+  let aiComment='';const useKey=contact?.apiKey||S.settings.apiKey;
+  if(useKey){try{const aiName=contact?.name||'AI',personality=(contact?.system||'').slice(0,100);const resultDesc=result==='player_win'?'你输了':result==='ai_win'?'你赢了':'平局';const prompt=`你是${aiName}，性格：${personality||'聪明好胜'}。国际象棋结束，${resultDesc}。用1句符合性格的话回应。只返回JSON：{"comment":"话"}`;const res=await fetch(contact?.apiUrl||'https://openrouter.ai/api/v1/chat/completions',{method:'POST',headers:{'Authorization':`Bearer ${useKey}`,'Content-Type':'application/json','HTTP-Referer':'https://raimos.app','X-Title':'Raimos'},body:JSON.stringify({model:contact?.model||'openai/gpt-4o-mini',max_tokens:60,stream:false,messages:[{role:'user',content:prompt}]})});const data=await res.json();const txt=data.choices?.[0]?.message?.content||'';const m=txt.match(/\{[\s\S]*?\}/);if(m)aiComment=JSON.parse(m[0]).comment||'';}catch(e){}}
+  if(!aiComment)aiComment=result==='player_win'?'你赢了，下次再来较量！':result==='ai_win'?'我赢了！再来一局吧～':'旗鼓相当，平局！';
+  icSay(aiComment);setTimeout(()=>showIntChessResult(result,elapsed,aiComment,contact),800);
+}
+
+function showIntChessResult(result,elapsed,aiComment,contact){
+  const overlay=$i('intchess-result-overlay');if(!overlay)return;overlay.classList.add('show');
+  const titles={player_win:'🎉 你赢了！',ai_win:'💫 AI赢了！',draw:'🤝 平局！'};
+  const titleEl=$i('ic-result-title');if(titleEl){titleEl.textContent=titles[result]||'游戏结束';titleEl.className=`gmk-result-title ${result==='player_win'?'win':result==='draw'?'draw':''}`;}
+  const badges={player_win:['🏆','💔'],ai_win:['💔','🏆'],draw:['🤝','🤝']};const[pb,ab]=badges[result]||['',''];
+  const pbEl=$i('ic-result-player-badge'),abEl=$i('ic-result-ai-badge');if(pbEl)pbEl.textContent=pb;if(abEl)abEl.textContent=ab;
+  const userAv=S.settings.userAvatar||S.settings.avatar||'😊';const pAvEl=$i('ic-result-player-av');
+  if(pAvEl){if(userAv.startsWith('data:'))pAvEl.innerHTML=`<img src="${userAv}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`;else pAvEl.textContent=userAv;}
+  const aiAv=contact?.avatar||'🤖';const aAvEl=$i('ic-result-ai-av');
+  if(aAvEl){if(aiAv.startsWith('data:'))aAvEl.innerHTML=`<img src="${aiAv}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`;else aAvEl.textContent=aiAv;}
+  const aiNameEl=$i('ic-result-ai-name');if(aiNameEl)aiNameEl.textContent=contact?.name||'AI';
+  const mm=Math.floor(elapsed/60),ss=elapsed%60;const statsEl=$i('ic-result-stats');
+  if(statsEl)statsEl.textContent=`本局用时 ${mm>0?mm+'分':''}${ss}秒  ·  共走 ${INTCHESS.moveCount} 步\n"${aiComment}"`;
+  const catEl=$i('ic-result-cat');if(catEl){catEl.innerHTML=result==='player_win'?gomokuWinCatSVG():result==='ai_win'?gomokuLoseCatSVG():'<div style="font-size:60px;animation:cat-bounce .8s ease-in-out infinite">🐱</div>';}
+  const confEl=$i('ic-confetti');if(confEl){confEl.innerHTML='';if(result==='player_win'){const cols=['#ff8fab','#a78bfa','#fcd34d','#6ee7b7','#67e8f9','#f472b6','#fb923c'];for(let i=0;i<36;i++){const el=document.createElement('div');el.className='gmk-confetti-piece';const sz=6+Math.random()*7;el.style.cssText=`left:${Math.random()*100}%;width:${sz}px;height:${sz}px;background:${cols[i%cols.length]};border-radius:${Math.random()>.5?'50%':'3px'};animation:confetti-fall ${1.2+Math.random()*0.8}s ease-in ${Math.random()*0.5}s forwards`;confEl.appendChild(el);}}}
+}
+function closeIntChessResult(){closeModal('intchess-result-overlay');}
+async function saveIntChessRecord(rec){let records=(await getSetting('intChessRecords'))||[];records.unshift({...rec,id:uid()});if(records.length>60)records=records.slice(0,60);await saveSetting('intChessRecords',records);}
+async function openIntChessRecords(){
+  const records=(await getSetting('intChessRecords'))||[];const overlay=$i('intchess-records-modal');if(!overlay)return;overlay.classList.add('show');
+  const wins=records.filter(r=>r.result==='player_win').length,losses=records.filter(r=>r.result==='ai_win').length,draws=records.filter(r=>r.result==='draw').length;
+  const sumEl=$i('ic-records-summary');if(sumEl)sumEl.innerHTML=`<div style="flex:1"><div style="font-size:22px;font-weight:900;color:#4ade80">${wins}</div><div style="font-size:11px;color:var(--text3)">胜</div></div><div style="flex:1"><div style="font-size:22px;font-weight:900;color:#f87171">${losses}</div><div style="font-size:11px;color:var(--text3)">负</div></div><div style="flex:1"><div style="font-size:22px;font-weight:900;color:var(--text2)">${draws}</div><div style="font-size:11px;color:var(--text3)">平</div></div><div style="flex:1"><div style="font-size:22px;font-weight:900;color:var(--accent)">${records.length}</div><div style="font-size:11px;color:var(--text3)">总局</div></div>`;
+  const listEl=$i('ic-records-list');if(!listEl)return;
+  if(!records.length){listEl.innerHTML='<div style="text-align:center;padding:30px;color:var(--text3);font-size:13px">还没有对战记录，快去下一局吧！</div>';return;}
+  listEl.innerHTML='';
+  records.forEach(r=>{const icons={player_win:'🏆',ai_win:'💔',draw:'🤝'};const labels={player_win:'胜利',ai_win:'败北',draw:'平局'};const mm=Math.floor((r.elapsed||0)/60),ss=(r.elapsed||0)%60;const date=r.date?new Date(r.date).toLocaleDateString('zh-CN',{month:'numeric',day:'numeric'}):'';const el=document.createElement('div');el.className='gmk-record-item';el.innerHTML=`<div class="gmk-record-result">${icons[r.result]||'🎮'}</div><div class="gmk-record-info"><div style="font-weight:700;color:var(--text)">${labels[r.result]||'未知'} · vs ${esc(r.aiName||'AI')}</div><div class="gmk-record-meta">${date} · ${mm>0?mm+'分':''}${ss}秒 · ${r.moves||0}步</div></div>`;listEl.appendChild(el);});
+}
+async function clearIntChessRecords(){if(!confirm('确认清空所有国际象棋战绩？'))return;await saveSetting('intChessRecords',[]);openIntChessRecords();}
+async function intChessShareToMoments(){
+  const records=(await getSetting('intChessRecords'))||[];const last=records[0];const contact=icGetContact();const aiName=contact?.name||'AI';
+  const labels={player_win:'赢了🏆',ai_win:'输了💔',draw:'平局🤝'};const mm=Math.floor((last?.elapsed||0)/60),ss=(last?.elapsed||0)%60;
+  const text=last?`刚刚和 ${aiName} 下了一局国际象棋，${labels[last.result]||'结束'}！共走了 ${last.moves} 步，用时 ${mm>0?mm+'分':''}${ss}秒～ #国际象棋 #和AI下棋`:`和 ${aiName} 下了一局国际象棋，好好玩！ #国际象棋 #和AI下棋`;
+  closeIntChessResult();switchPage('moments-page');await new Promise(r=>setTimeout(r,200));
+  const ta=$i('compose-text');if(ta){ta.value=text;ta.dispatchEvent(new Event('input'));}
+  const modal=$i('compose-moment-modal');if(modal&&window.innerWidth<=768){const taM=modal.querySelector('textarea');if(taM)taM.value=text;openModal('compose-moment-modal');}
+  toast('已跳转到朋友圈，发送即可～');
 }

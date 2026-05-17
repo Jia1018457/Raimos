@@ -708,23 +708,59 @@
       </div>
     </div>
     <div class="gmk-settings-section">
-      <div class="gmk-settings-label">棋子样式</div>
-      <div class="gmk-piece-row" id="gmk-piece-row">
-        <button class="gmk-piece-btn active" data-style="classic" onclick="setGomokuPiece('classic',this)">⚫⚪<span>经典</span></button>
-        <button class="gmk-piece-btn" data-style="bear" onclick="setGomokuPiece('bear',this)">🐻🐼<span>小熊</span></button>
-        <button class="gmk-piece-btn" data-style="cat" onclick="setGomokuPiece('cat',this)">🐱😺<span>小猫</span></button>
-        <button class="gmk-piece-btn" data-style="fox" onclick="setGomokuPiece('fox',this)">🦊🦝<span>小狐</span></button>
-        <button class="gmk-piece-btn" data-style="rabbit" onclick="setGomokuPiece('rabbit',this)">🐰🐇<span>小兔</span></button>
-        <button class="gmk-piece-btn" data-style="dog" onclick="setGomokuPiece('dog',this)">🐶🐕<span>小狗</span></button>
-        <button class="gmk-piece-btn" data-style="wolf" onclick="setGomokuPiece('wolf',this)">🐺🦴<span>小狼</span></button>
+      <div class="gmk-settings-label">AI难度</div>
+      <div class="gmk-diff-row">
+        <button class="gmk-diff-btn active" data-diff="beginner" onclick="setGomokuDiff('beginner',this)">😊 新手</button>
+        <button class="gmk-diff-btn" data-diff="normal" onclick="setGomokuDiff('normal',this)">🎯 进阶</button>
+        <button class="gmk-diff-btn" data-diff="hard" onclick="setGomokuDiff('hard',this)">🔥 专业</button>
       </div>
     </div>
-    <div class="gmk-settings-section" style="flex-direction:row;align-items:center;justify-content:space-between">
-      <div class="gmk-settings-label" style="margin-bottom:0">游戏过程中AI评论</div>
-      <label class="toggle" style="flex-shrink:0">
-        <input type="checkbox" id="gmk-commentary-toggle" onchange="toggleGomokuCommentary(this.checked)"/>
-        <span class="tslider"></span>
-      </label>
+    <div class="gmk-settings-section">
+      <div class="gmk-settings-label">你的棋子</div>
+      <div class="gmk-piece-selector" id="gmk-player-piece-row">
+        <button class="gmk-piece-opt active" data-key="classic" onclick="setGomokuPlayerPiece('classic',this)" title="经典">⚫</button>
+        <button class="gmk-piece-opt" data-key="bear" onclick="setGomokuPlayerPiece('bear',this)">🐻</button>
+        <button class="gmk-piece-opt" data-key="panda" onclick="setGomokuPlayerPiece('panda',this)">🐼</button>
+        <button class="gmk-piece-opt" data-key="cat" onclick="setGomokuPlayerPiece('cat',this)">🐱</button>
+        <button class="gmk-piece-opt" data-key="smile-cat" onclick="setGomokuPlayerPiece('smile-cat',this)">😺</button>
+        <button class="gmk-piece-opt" data-key="fox" onclick="setGomokuPlayerPiece('fox',this)">🦊</button>
+        <button class="gmk-piece-opt" data-key="raccoon" onclick="setGomokuPlayerPiece('raccoon',this)">🦝</button>
+        <button class="gmk-piece-opt" data-key="rabbit" onclick="setGomokuPlayerPiece('rabbit',this)">🐰</button>
+        <button class="gmk-piece-opt" data-key="bunny" onclick="setGomokuPlayerPiece('bunny',this)">🐇</button>
+        <button class="gmk-piece-opt" data-key="dog" onclick="setGomokuPlayerPiece('dog',this)">🐶</button>
+        <button class="gmk-piece-opt" data-key="star" onclick="setGomokuPlayerPiece('star',this)">⭐</button>
+        <button class="gmk-piece-opt" data-key="heart" onclick="setGomokuPlayerPiece('heart',this)">💗</button>
+        <button class="gmk-piece-opt" data-key="moon" onclick="setGomokuPlayerPiece('moon',this)">🌙</button>
+        <button class="gmk-piece-opt" data-key="flower" onclick="setGomokuPlayerPiece('flower',this)">🌸</button>
+      </div>
+    </div>
+    <div class="gmk-settings-section">
+      <div class="gmk-settings-label">AI棋子</div>
+      <div class="gmk-piece-selector" id="gmk-ai-piece-row">
+        <button class="gmk-piece-opt" data-key="classic" onclick="setGomokuAiPiece('classic',this)" title="经典">⚪</button>
+        <button class="gmk-piece-opt" data-key="bear" onclick="setGomokuAiPiece('bear',this)">🐻</button>
+        <button class="gmk-piece-opt active" data-key="panda" onclick="setGomokuAiPiece('panda',this)">🐼</button>
+        <button class="gmk-piece-opt" data-key="cat" onclick="setGomokuAiPiece('cat',this)">🐱</button>
+        <button class="gmk-piece-opt" data-key="smile-cat" onclick="setGomokuAiPiece('smile-cat',this)">😺</button>
+        <button class="gmk-piece-opt" data-key="fox" onclick="setGomokuAiPiece('fox',this)">🦊</button>
+        <button class="gmk-piece-opt" data-key="raccoon" onclick="setGomokuAiPiece('raccoon',this)">🦝</button>
+        <button class="gmk-piece-opt" data-key="rabbit" onclick="setGomokuAiPiece('rabbit',this)">🐰</button>
+        <button class="gmk-piece-opt" data-key="bunny" onclick="setGomokuAiPiece('bunny',this)">🐇</button>
+        <button class="gmk-piece-opt" data-key="dog" onclick="setGomokuAiPiece('dog',this)">🐶</button>
+        <button class="gmk-piece-opt" data-key="star" onclick="setGomokuAiPiece('star',this)">⭐</button>
+        <button class="gmk-piece-opt" data-key="heart" onclick="setGomokuAiPiece('heart',this)">💗</button>
+        <button class="gmk-piece-opt" data-key="moon" onclick="setGomokuAiPiece('moon',this)">🌙</button>
+        <button class="gmk-piece-opt" data-key="flower" onclick="setGomokuAiPiece('flower',this)">🌸</button>
+      </div>
+    </div>
+    <div class="gmk-settings-section">
+      <div class="gmk-settings-label">AI评论频率</div>
+      <select id="gmk-comment-freq" onchange="setGomokuCommentFreq(this.value)" style="padding:4px 8px;border-radius:8px;border:1.5px solid var(--border)">
+        <option value="off">关闭</option>
+        <option value="low">低（每5步）</option>
+        <option value="normal" selected>适中（每3步）</option>
+        <option value="high">高（每步）</option>
+      </select>
     </div>
   </div>
   <div class="gomoku-wrap">
@@ -775,23 +811,59 @@
       </div>
     </div>
     <div class="gmk-settings-section">
-      <div class="gmk-settings-label">棋子样式</div>
-      <div class="gmk-piece-row" id="go-piece-row">
-        <button class="gmk-piece-btn active" data-style="classic" onclick="setGoPiece('classic',this)">⚫⚪<span>经典</span></button>
-        <button class="gmk-piece-btn" data-style="bear" onclick="setGoPiece('bear',this)">🐻🐼<span>小熊</span></button>
-        <button class="gmk-piece-btn" data-style="cat" onclick="setGoPiece('cat',this)">🐱😺<span>小猫</span></button>
-        <button class="gmk-piece-btn" data-style="fox" onclick="setGoPiece('fox',this)">🦊🦝<span>小狐</span></button>
-        <button class="gmk-piece-btn" data-style="rabbit" onclick="setGoPiece('rabbit',this)">🐰🐇<span>小兔</span></button>
-        <button class="gmk-piece-btn" data-style="dog" onclick="setGoPiece('dog',this)">🐶🐕<span>小狗</span></button>
-        <button class="gmk-piece-btn" data-style="wolf" onclick="setGoPiece('wolf',this)">🐺🦴<span>小狼</span></button>
+      <div class="gmk-settings-label">AI难度</div>
+      <div class="gmk-diff-row">
+        <button class="gmk-diff-btn active" data-diff="beginner" onclick="setGoDiff('beginner',this)">😊 新手</button>
+        <button class="gmk-diff-btn" data-diff="normal" onclick="setGoDiff('normal',this)">🎯 进阶</button>
+        <button class="gmk-diff-btn" data-diff="hard" onclick="setGoDiff('hard',this)">🔥 专业</button>
       </div>
     </div>
-    <div class="gmk-settings-section" style="flex-direction:row;align-items:center;justify-content:space-between">
-      <div class="gmk-settings-label" style="margin-bottom:0">游戏过程中AI评论</div>
-      <label class="toggle" style="flex-shrink:0">
-        <input type="checkbox" id="go-commentary-toggle" onchange="toggleGoCommentary(this.checked)"/>
-        <span class="tslider"></span>
-      </label>
+    <div class="gmk-settings-section">
+      <div class="gmk-settings-label">你的棋子</div>
+      <div class="gmk-piece-selector" id="go-player-piece-row">
+        <button class="gmk-piece-opt active" data-key="classic" onclick="setGoPlayerPiece('classic',this)" title="经典">⚫</button>
+        <button class="gmk-piece-opt" data-key="bear" onclick="setGoPlayerPiece('bear',this)">🐻</button>
+        <button class="gmk-piece-opt" data-key="panda" onclick="setGoPlayerPiece('panda',this)">🐼</button>
+        <button class="gmk-piece-opt" data-key="cat" onclick="setGoPlayerPiece('cat',this)">🐱</button>
+        <button class="gmk-piece-opt" data-key="smile-cat" onclick="setGoPlayerPiece('smile-cat',this)">😺</button>
+        <button class="gmk-piece-opt" data-key="fox" onclick="setGoPlayerPiece('fox',this)">🦊</button>
+        <button class="gmk-piece-opt" data-key="raccoon" onclick="setGoPlayerPiece('raccoon',this)">🦝</button>
+        <button class="gmk-piece-opt" data-key="rabbit" onclick="setGoPlayerPiece('rabbit',this)">🐰</button>
+        <button class="gmk-piece-opt" data-key="bunny" onclick="setGoPlayerPiece('bunny',this)">🐇</button>
+        <button class="gmk-piece-opt" data-key="dog" onclick="setGoPlayerPiece('dog',this)">🐶</button>
+        <button class="gmk-piece-opt" data-key="star" onclick="setGoPlayerPiece('star',this)">⭐</button>
+        <button class="gmk-piece-opt" data-key="heart" onclick="setGoPlayerPiece('heart',this)">💗</button>
+        <button class="gmk-piece-opt" data-key="moon" onclick="setGoPlayerPiece('moon',this)">🌙</button>
+        <button class="gmk-piece-opt" data-key="flower" onclick="setGoPlayerPiece('flower',this)">🌸</button>
+      </div>
+    </div>
+    <div class="gmk-settings-section">
+      <div class="gmk-settings-label">AI棋子</div>
+      <div class="gmk-piece-selector" id="go-ai-piece-row">
+        <button class="gmk-piece-opt" data-key="classic" onclick="setGoAiPiece('classic',this)" title="经典">⚪</button>
+        <button class="gmk-piece-opt" data-key="bear" onclick="setGoAiPiece('bear',this)">🐻</button>
+        <button class="gmk-piece-opt active" data-key="panda" onclick="setGoAiPiece('panda',this)">🐼</button>
+        <button class="gmk-piece-opt" data-key="cat" onclick="setGoAiPiece('cat',this)">🐱</button>
+        <button class="gmk-piece-opt" data-key="smile-cat" onclick="setGoAiPiece('smile-cat',this)">😺</button>
+        <button class="gmk-piece-opt" data-key="fox" onclick="setGoAiPiece('fox',this)">🦊</button>
+        <button class="gmk-piece-opt" data-key="raccoon" onclick="setGoAiPiece('raccoon',this)">🦝</button>
+        <button class="gmk-piece-opt" data-key="rabbit" onclick="setGoAiPiece('rabbit',this)">🐰</button>
+        <button class="gmk-piece-opt" data-key="bunny" onclick="setGoAiPiece('bunny',this)">🐇</button>
+        <button class="gmk-piece-opt" data-key="dog" onclick="setGoAiPiece('dog',this)">🐶</button>
+        <button class="gmk-piece-opt" data-key="star" onclick="setGoAiPiece('star',this)">⭐</button>
+        <button class="gmk-piece-opt" data-key="heart" onclick="setGoAiPiece('heart',this)">💗</button>
+        <button class="gmk-piece-opt" data-key="moon" onclick="setGoAiPiece('moon',this)">🌙</button>
+        <button class="gmk-piece-opt" data-key="flower" onclick="setGoAiPiece('flower',this)">🌸</button>
+      </div>
+    </div>
+    <div class="gmk-settings-section">
+      <div class="gmk-settings-label">AI评论频率</div>
+      <select id="go-comment-freq" onchange="setGoCommentFreq(this.value)" style="padding:4px 8px;border-radius:8px;border:1.5px solid var(--border)">
+        <option value="off">关闭</option>
+        <option value="low">低（每5步）</option>
+        <option value="normal" selected>适中（每3步）</option>
+        <option value="high">高（每步）</option>
+      </select>
     </div>
   </div>
   <div class="gomoku-wrap">
@@ -982,6 +1054,104 @@
     <div class="gmk-result-btns" style="margin-top:16px">
       <button class="btn-s" onclick="$i('fly-result-overlay').style.display='none';switchPage('chess-page')">返回</button>
       <button class="btn-p" onclick="$i('fly-result-overlay').style.display='none';switchPage('fly-setup-page');initFlySetup()">再来一局</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── XIANGQI PAGE ── -->
+<div class="page" id="xiangqi-page">
+  <div class="page-header" style="flex-wrap:wrap;gap:6px">
+    <button class="page-back-btn" onclick="switchPage('chess-page')">‹ 返回</button>
+    <h2>♜ 中国象棋</h2>
+    <div style="display:flex;gap:5px;margin-left:auto;flex-shrink:0">
+      <button class="btn-s" style="font-size:11px;padding:4px 9px" onclick="toggleXiangqiSettings()">⚙️ 设置</button>
+      <button class="btn-s" style="font-size:11px;padding:4px 9px" onclick="initXiangqi()">🔄 重开</button>
+    </div>
+  </div>
+  <div class="gmk-settings-panel" id="xiangqi-settings" style="display:none">
+    <div class="gmk-settings-section">
+      <div class="gmk-settings-label">选择对手</div>
+      <div class="gmk-ai-selector" id="xq-ai-selector"></div>
+    </div>
+    <div class="gmk-settings-section">
+      <div class="gmk-settings-label">AI难度</div>
+      <div class="gmk-diff-row">
+        <button class="gmk-diff-btn active" data-diff="beginner" onclick="setXiangqiDiff('beginner',this)">😊 新手</button>
+        <button class="gmk-diff-btn" data-diff="normal" onclick="setXiangqiDiff('normal',this)">🎯 进阶</button>
+        <button class="gmk-diff-btn" data-diff="hard" onclick="setXiangqiDiff('hard',this)">🔥 专业</button>
+      </div>
+    </div>
+    <div class="gmk-settings-section" style="flex-direction:row;align-items:center;justify-content:space-between">
+      <div class="gmk-settings-label" style="margin-bottom:0">AI评论</div>
+      <label class="toggle" style="flex-shrink:0">
+        <input type="checkbox" id="xq-commentary-toggle" checked onchange="XQ.commentary=this.checked"/>
+        <span class="tslider"></span>
+      </label>
+    </div>
+  </div>
+  <div class="gomoku-wrap" style="overflow:auto">
+    <div class="gomoku-info-bar">
+      <div class="gomoku-player"><span>红方（你）</span></div>
+      <div class="gomoku-status" id="xq-status">等待开始…</div>
+      <div class="gomoku-player"><span id="xq-ai-name">黑方（AI）</span></div>
+    </div>
+    <div class="gomoku-ai-say" id="xq-comment"></div>
+    <div class="gomoku-board-scroll">
+      <div class="xq-board" id="xq-board"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ── INTCHESS PAGE ── -->
+<div class="page" id="intchess-page">
+  <div class="page-header" style="flex-wrap:wrap;gap:6px">
+    <button class="page-back-btn" onclick="switchPage('chess-page')">‹ 返回</button>
+    <h2>♛ 国际象棋</h2>
+    <div style="display:flex;gap:5px;margin-left:auto;flex-shrink:0">
+      <button class="btn-s" style="font-size:11px;padding:4px 9px" onclick="toggleIntChessSettings()">⚙️ 设置</button>
+      <button class="btn-s" style="font-size:11px;padding:4px 9px" onclick="initIntChess()">🔄 重开</button>
+    </div>
+  </div>
+  <div class="gmk-settings-panel" id="intchess-settings" style="display:none">
+    <div class="gmk-settings-section">
+      <div class="gmk-settings-label">选择对手</div>
+      <div class="gmk-ai-selector" id="ic-ai-selector"></div>
+    </div>
+    <div class="gmk-settings-section">
+      <div class="gmk-settings-label">AI难度</div>
+      <div class="gmk-diff-row">
+        <button class="gmk-diff-btn active" data-diff="beginner" onclick="setIntChessDiff('beginner',this)">😊 新手</button>
+        <button class="gmk-diff-btn" data-diff="normal" onclick="setIntChessDiff('normal',this)">🎯 进阶</button>
+        <button class="gmk-diff-btn" data-diff="hard" onclick="setIntChessDiff('hard',this)">🔥 专业</button>
+      </div>
+    </div>
+    <div class="gmk-settings-section">
+      <div class="gmk-settings-label">棋盘颜色风格</div>
+      <div class="ic-color-row" id="ic-color-row">
+        <div class="ic-color-swatch active" data-color="classic" style="background:#b58863" title="经典" onclick="setIntChessColor('classic',this)"></div>
+        <div class="ic-color-swatch" data-color="pink" style="background:#f9a8d4" title="粉色" onclick="setIntChessColor('pink',this)"></div>
+        <div class="ic-color-swatch" data-color="blue" style="background:#93c5fd" title="蓝色" onclick="setIntChessColor('blue',this)"></div>
+        <div class="ic-color-swatch" data-color="green" style="background:#86efac" title="绿色" onclick="setIntChessColor('green',this)"></div>
+        <div class="ic-color-swatch" data-color="purple" style="background:#c4b5fd" title="紫色" onclick="setIntChessColor('purple',this)"></div>
+      </div>
+    </div>
+    <div class="gmk-settings-section" style="flex-direction:row;align-items:center;justify-content:space-between">
+      <div class="gmk-settings-label" style="margin-bottom:0">AI评论</div>
+      <label class="toggle" style="flex-shrink:0">
+        <input type="checkbox" id="ic-commentary-toggle" checked onchange="IC.commentary=this.checked"/>
+        <span class="tslider"></span>
+      </label>
+    </div>
+  </div>
+  <div class="gomoku-wrap" style="overflow:auto">
+    <div class="gomoku-info-bar">
+      <div class="gomoku-player"><span>白方（你）</span></div>
+      <div class="gomoku-status" id="ic-status">等待开始…</div>
+      <div class="gomoku-player"><span id="ic-ai-name">黑方（AI）</span></div>
+    </div>
+    <div class="gomoku-ai-say" id="ic-comment"></div>
+    <div class="gomoku-board-scroll">
+      <div class="ic-board" id="ic-board"></div>
     </div>
   </div>
 </div>

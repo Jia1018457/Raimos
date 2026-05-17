@@ -153,6 +153,11 @@ function uid() { return Date.now().toString(36) + Math.random().toString(36).sli
 function switchPage(id) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  // Hide fly overlays when navigating away
+  ['fly-dice-overlay','fly-event-overlay','fly-result-overlay'].forEach(oid => {
+    const el = document.getElementById(oid);
+    if (el) el.style.display = 'none';
+  });
   $i(id).classList.add('active');
   document.querySelector(`[data-page="${id}"]`)?.classList.add('active');
   if (id === 'memory-page') renderMemories();
@@ -1978,6 +1983,23 @@ function initGameHubStars() {
 }
 
 // ══ Gomoku (五子棋) ══════════════════════
+const PIECE_OPTIONS = [
+  { key: 'classic', label: '⚫经典', emoji: null },
+  { key: 'bear',    label: '🐻', emoji: '🐻' },
+  { key: 'panda',   label: '🐼', emoji: '🐼' },
+  { key: 'cat',     label: '🐱', emoji: '🐱' },
+  { key: 'smile-cat', label: '😺', emoji: '😺' },
+  { key: 'fox',     label: '🦊', emoji: '🦊' },
+  { key: 'raccoon', label: '🦝', emoji: '🦝' },
+  { key: 'rabbit',  label: '🐰', emoji: '🐰' },
+  { key: 'bunny',   label: '🐇', emoji: '🐇' },
+  { key: 'dog',     label: '🐶', emoji: '🐶' },
+  { key: 'star',    label: '⭐', emoji: '⭐' },
+  { key: 'heart',   label: '💗', emoji: '💗' },
+  { key: 'moon',    label: '🌙', emoji: '🌙' },
+  { key: 'flower',  label: '🌸', emoji: '🌸' },
+];
+// Legacy mapping for backward compat
 const PIECE_STYLES = {
   classic: { p: null,   ai: null },
   bear:    { p: '🐻',  ai: '🐼' },
@@ -2001,23 +2023,45 @@ const GOMOKU = {
   moveCount: 0,
   startTime: 0,
   contactId: null,   // currently selected AI contact id
-  prefs: { boardColor:'wood', pieceStyle:'classic', commentary:true },
+  prefs: { boardColor:'wood', playerPiece:'classic', aiPiece:'panda', commentary:true, difficulty:'normal', commentFreq:'normal' },
 };
 
 // ── Prefs load/save ──
 async function loadGomokuPrefs() {
   const saved = await getSetting('gomokuPrefs');
-  if (saved) Object.assign(GOMOKU.prefs, saved);
+  if (saved) {
+    Object.assign(GOMOKU.prefs, saved);
+    // Migrate old pieceStyle to new separate player/AI pieces
+    if (saved.pieceStyle && !saved.playerPiece) {
+      const old = PIECE_STYLES[saved.pieceStyle];
+      GOMOKU.prefs.playerPiece = old?.p ? saved.pieceStyle : 'classic';
+      // Map old ai piece to nearest PIECE_OPTIONS key
+      const aiEmoji = old?.ai;
+      const found = PIECE_OPTIONS.find(o => o.emoji === aiEmoji);
+      GOMOKU.prefs.aiPiece = found ? found.key : 'panda';
+      delete GOMOKU.prefs.pieceStyle;
+    }
+  }
   // Apply UI state
   const ct = $i('gmk-commentary-toggle');
   if (ct) ct.checked = GOMOKU.prefs.commentary;
   // board color swatch
-  document.querySelectorAll('.gmk-color-swatch').forEach(el => {
+  document.querySelectorAll('#gmk-color-row .gmk-color-swatch').forEach(el => {
     el.classList.toggle('active', el.dataset.color === GOMOKU.prefs.boardColor);
   });
-  // piece btn
-  document.querySelectorAll('.gmk-piece-btn').forEach(el => {
-    el.classList.toggle('active', el.dataset.style === GOMOKU.prefs.pieceStyle);
+  // difficulty buttons
+  document.querySelectorAll('#gomoku-settings .gmk-diff-btn').forEach(el => {
+    el.classList.toggle('active', el.dataset.diff === GOMOKU.prefs.difficulty);
+  });
+  // comment freq
+  const cf = $i('gmk-comment-freq');
+  if (cf) cf.value = GOMOKU.prefs.commentFreq || 'normal';
+  // piece option buttons
+  document.querySelectorAll('#gmk-player-piece-row .gmk-piece-opt').forEach(el => {
+    el.classList.toggle('active', el.dataset.key === GOMOKU.prefs.playerPiece);
+  });
+  document.querySelectorAll('#gmk-ai-piece-row .gmk-piece-opt').forEach(el => {
+    el.classList.toggle('active', el.dataset.key === GOMOKU.prefs.aiPiece);
   });
 }
 async function saveGomokuPrefs() { await saveSetting('gomokuPrefs', GOMOKU.prefs); }
@@ -2034,8 +2078,31 @@ function setGomokuPiece(style, el) {
   GOMOKU.prefs.pieceStyle = style;
   document.querySelectorAll('.gmk-piece-btn').forEach(b => b.classList.remove('active'));
   el.classList.add('active');
-  // Update indicator circles in info bar
   gmkUpdatePlayerIndicators();
+  saveGomokuPrefs();
+}
+function setGomokuPlayerPiece(key, el) {
+  GOMOKU.prefs.playerPiece = key;
+  document.querySelectorAll('#gmk-player-piece-row .gmk-piece-opt').forEach(b => b.classList.remove('active'));
+  if (el) el.classList.add('active');
+  gmkUpdatePlayerIndicators();
+  saveGomokuPrefs();
+}
+function setGomokuAiPiece(key, el) {
+  GOMOKU.prefs.aiPiece = key;
+  document.querySelectorAll('#gmk-ai-piece-row .gmk-piece-opt').forEach(b => b.classList.remove('active'));
+  if (el) el.classList.add('active');
+  gmkUpdatePlayerIndicators();
+  saveGomokuPrefs();
+}
+function setGomokuDiff(diff, el) {
+  GOMOKU.prefs.difficulty = diff;
+  document.querySelectorAll('#gomoku-settings .gmk-diff-btn').forEach(b => b.classList.remove('active'));
+  if (el) el.classList.add('active');
+  saveGomokuPrefs();
+}
+function setGomokuCommentFreq(val) {
+  GOMOKU.prefs.commentFreq = val;
   saveGomokuPrefs();
 }
 function toggleGomokuCommentary(val) {
@@ -2043,15 +2110,22 @@ function toggleGomokuCommentary(val) {
   saveGomokuPrefs();
 }
 
+function gmkGetPieceEmoji(key) {
+  const opt = PIECE_OPTIONS.find(o => o.key === key);
+  return opt ? opt.emoji : null;
+}
 function gmkUpdatePlayerIndicators() {
-  const ps = GOMOKU.prefs.pieceStyle;
-  const pInfo = PIECE_STYLES[ps] || PIECE_STYLES.classic;
+  const playerEmoji = gmkGetPieceEmoji(GOMOKU.prefs.playerPiece);
+  const aiEmoji = gmkGetPieceEmoji(GOMOKU.prefs.aiPiece);
   const pEl = $i('gmk-player-piece'), aEl = $i('gmk-ai-piece');
-  if (pInfo.p) {
-    if (pEl) { pEl.className='gmk-stone-indicator'; pEl.textContent=pInfo.p; pEl.style.fontSize='18px'; pEl.style.background='none'; pEl.style.boxShadow='none'; }
-    if (aEl) { aEl.className='gmk-stone-indicator'; aEl.textContent=pInfo.ai; aEl.style.fontSize='18px'; aEl.style.background='none'; aEl.style.boxShadow='none'; }
+  if (playerEmoji) {
+    if (pEl) { pEl.className='gmk-stone-indicator'; pEl.textContent=playerEmoji; pEl.style.fontSize='18px'; pEl.style.background='none'; pEl.style.boxShadow='none'; }
   } else {
     if (pEl) { pEl.className='gmk-stone-indicator black'; pEl.textContent=''; pEl.style=''; }
+  }
+  if (aiEmoji) {
+    if (aEl) { aEl.className='gmk-stone-indicator'; aEl.textContent=aiEmoji; aEl.style.fontSize='18px'; aEl.style.background='none'; aEl.style.boxShadow='none'; }
+  } else {
     if (aEl) { aEl.className='gmk-stone-indicator white'; aEl.textContent=''; aEl.style=''; }
   }
 }
@@ -2127,8 +2201,8 @@ function renderGomokuBoard() {
   const el = $i('gomoku-board');
   if (!el) return;
   el.innerHTML = '';
-  const ps = GOMOKU.prefs.pieceStyle;
-  const pInfo = PIECE_STYLES[ps] || PIECE_STYLES.classic;
+  const playerEmoji = gmkGetPieceEmoji(GOMOKU.prefs.playerPiece);
+  const aiEmoji = gmkGetPieceEmoji(GOMOKU.prefs.aiPiece);
   for (let r = 0; r < 15; r++) {
     for (let c = 0; c < 15; c++) {
       const cell = document.createElement('div');
@@ -2138,10 +2212,10 @@ function renderGomokuBoard() {
       }
       const v = GOMOKU.board[r][c];
       if (v !== 0) {
-        if (pInfo.p) {
-          // Emoji piece
+        const emoji = v === 1 ? playerEmoji : aiEmoji;
+        if (emoji) {
           cell.classList.add('emoji-piece');
-          cell.textContent = v === 1 ? pInfo.p : pInfo.ai;
+          cell.textContent = emoji;
         } else {
           const stone = document.createElement('div');
           stone.className = `gmk-stone-piece ${v === 1 ? 'black' : 'white'}`;
@@ -2245,6 +2319,8 @@ async function gomokuAiMove() {
   let row, col, comment;
   GOMOKU.moveCount++;
 
+  const difficulty = GOMOKU.prefs.difficulty || 'normal';
+
   // Determine game phase
   const phase = GOMOKU.moveCount <= 6 ? 'early' : GOMOKU.moveCount <= 20 ? 'mid' : 'late';
   const phaseHint = phase==='early'?'开局阶段，可以随意发挥':phase==='mid'?'中局关键期，要认真思考':'终局阶段，胜负即将揭晓';
@@ -2253,7 +2329,29 @@ async function gomokuAiMove() {
   const playerLastR = GOMOKU.lastMove?.[0], playerLastC = GOMOKU.lastMove?.[1];
   const playerThreat = (playerLastR!=null) ? gomokuMaxLine(playerLastR, playerLastC, 1) : 0;
 
-  if (useKey) {
+  // Comment frequency
+  const freqMap = { off: 0, low: 5, normal: 3, high: 1 };
+  const freq = freqMap[GOMOKU.prefs.commentFreq ?? 'normal'] ?? 3;
+  const shouldComment = freq > 0 && GOMOKU.moveCount % freq === 0;
+
+  // Beginner: skip LLM, use simple heuristic with 40% random nearby move
+  if (difficulty === 'beginner') {
+    const h = gomokuHeuristic();
+    // 40% chance of random nearby move
+    if (Math.random() < 0.4 && GOMOKU.moveCount > 1) {
+      const candidates = [];
+      for (let r=0;r<15;r++) for (let c=0;c<15;c++) {
+        if (GOMOKU.board[r][c]!==0) continue;
+        for (let dr=-1;dr<=1;dr++) for (let dc=-1;dc<=1;dc++) {
+          const nr=r+dr,nc=c+dc;
+          if (nr>=0&&nr<15&&nc>=0&&nc<15&&GOMOKU.board[nr][nc]!==0) { candidates.push({r,c}); break; }
+        }
+      }
+      if (candidates.length) { const pick=candidates[Math.floor(Math.random()*candidates.length)]; row=pick.r; col=pick.c; }
+    }
+    if (typeof row!=='number') { row=h.r; col=h.c; }
+    comment = shouldComment ? '嘻嘻，我随便下～' : '';
+  } else if (useKey) {
     const blacks = [], whites = [];
     for (let r=0;r<15;r++) for (let c=0;c<15;c++) {
       if (GOMOKU.board[r][c]===1) blacks.push(`(${r},${c})`);
@@ -2263,20 +2361,21 @@ async function gomokuAiMove() {
     const aiName = contact?.name || 'AI';
     const personality = (contact?.system || '你是可爱温柔的AI助手').slice(0, 130);
     const model = contact?.model || 'openai/gpt-4o-mini';
-    // Commentary hint: if player is threatening, AI may warn/tease; if early game, be casual
+    // Commentary hint based on frequency setting
     const commentHint = playerThreat >= 4
       ? '对手刚连了4子，你需要反应！评论可以紧张/惊讶/挑衅'
       : playerThreat >= 3
       ? '对手有威胁，评论可以提示/安慰/警告'
-      : GOMOKU.prefs.commentary && GOMOKU.moveCount%4===0
+      : shouldComment
       ? '过程评论，可以说游戏感受/小技巧/鼓励/调侃'
       : '';
-    const prompt = `你是${aiName}，和用户下五子棋。你执白子，用户执黑子，棋盘15×15（行列0-14）。\n${boardTxt}\n性格：${personality}\n阶段：第${GOMOKU.moveCount}步，${phaseHint}。\n策略要求：根据性格和阶段灵活决策。温柔性格不代表一直让，可能开始认真、局势好时才礼让一步；强势性格会全力争胜；总之要有真实的游戏节奏感，避免机械。${commentHint ? '\n评论方向：'+commentHint : ''}\n在空位落子并用1句符合性格的话回应（${commentHint?'按方向':'可以是棋局感受'}）。\n只返回JSON：{"row":数字,"col":数字,"comment":"一句话"}`;
+    const hardHint = difficulty === 'hard' ? '你是高水平棋手，必须尽全力争胜。' : '';
+    const prompt = `你是${aiName}，和用户下五子棋。你执白子，用户执黑子，棋盘15×15（行列0-14）。\n${boardTxt}\n性格：${personality}\n阶段：第${GOMOKU.moveCount}步，${phaseHint}。\n策略要求：${hardHint}根据性格和阶段灵活决策。温柔性格不代表一直让，可能开始认真、局势好时才礼让一步；强势性格会全力争胜；总之要有真实的游戏节奏感，避免机械。${commentHint ? '\n评论方向：'+commentHint : ''}\n在空位落子并用1句符合性格的话回应（${commentHint?'按方向':'可以是棋局感受'}）。\n只返回JSON：{"row":数字,"col":数字,"comment":"一句话"}`;
     try {
       const res = await fetch(useUrl, {
         method:'POST',
         headers:{'Authorization':`Bearer ${useKey}`,'Content-Type':'application/json','HTTP-Referer':'https://raimos.app','X-Title':'Raimos'},
-        body:JSON.stringify({model,max_tokens:90,stream:false,temperature:0.8,messages:[{role:'user',content:prompt}]}),
+        body:JSON.stringify({model,max_tokens:90,stream:false,temperature: difficulty==='hard'?0.5:0.8,messages:[{role:'user',content:prompt}]}),
       });
       const data = await res.json();
       const txt = data.choices?.[0]?.message?.content || '';
@@ -2297,7 +2396,8 @@ async function gomokuAiMove() {
   GOMOKU.turn = 'player';
   GOMOKU.thinking = false;
   renderGomokuBoard();
-  if (comment && GOMOKU.prefs.commentary) gomokuSay(comment);
+  const showComment = freq > 0 || playerThreat >= 4;
+  if (comment && showComment) gomokuSay(comment);
 
   if (gomokuCheckWin(row, col, 2)) {
     GOMOKU.over = true;
@@ -2314,28 +2414,52 @@ async function gomokuAiMove() {
   gomokuSetStatus('轮到你了！');
 }
 
-// Heuristic: win > block > weighted proximity + center bias
+// Heuristic: score-based evaluation with win/block priority
 function gomokuHeuristic() {
-  for (let r=0;r<15;r++) for (let c=0;c<15;c++) {
-    if (GOMOKU.board[r][c]!==0) continue;
-    GOMOKU.board[r][c]=2; const w=gomokuCheckWin(r,c,2); GOMOKU.board[r][c]=0;
-    if (w) return {r,c};
-  }
-  for (let r=0;r<15;r++) for (let c=0;c<15;c++) {
-    if (GOMOKU.board[r][c]!==0) continue;
-    GOMOKU.board[r][c]=1; const w=gomokuCheckWin(r,c,1); GOMOKU.board[r][c]=0;
-    if (w) return {r,c};
-  }
-  let best=null, bestScore=-1;
-  for (let r=0;r<15;r++) for (let c=0;c<15;c++) {
-    if (GOMOKU.board[r][c]!==0) continue;
-    let score=0;
-    for (let dr=-2;dr<=2;dr++) for (let dc=-2;dc<=2;dc++) {
-      const nr=r+dr,nc=c+dc;
-      if (nr>=0&&nr<15&&nc>=0&&nc<15&&GOMOKU.board[nr][nc]!==0) score+=2;
+  function scorePos(r, c, player) {
+    let score = 0;
+    const dirs = [[0,1],[1,0],[1,1],[1,-1]];
+    for (const [dr,dc] of dirs) {
+      let cnt = 1, open = 0;
+      for (let i=1;i<6;i++){const nr=r+dr*i,nc=c+dc*i;if(nr<0||nr>=15||nc<0||nc>=15)break;if(GOMOKU.board[nr][nc]===player)cnt++;else{if(GOMOKU.board[nr][nc]===0)open++;break;}}
+      for (let i=1;i<6;i++){const nr=r-dr*i,nc=c-dc*i;if(nr<0||nr>=15||nc<0||nc>=15)break;if(GOMOKU.board[nr][nc]===player)cnt++;else{if(GOMOKU.board[nr][nc]===0)open++;break;}}
+      if(cnt>=5)score+=100000;
+      else if(cnt===4&&open>0)score+=10000;
+      else if(cnt===4)score+=1000;
+      else if(cnt===3&&open>=2)score+=500;
+      else if(cnt===3&&open===1)score+=100;
+      else if(cnt===2&&open>=2)score+=50;
+      else if(cnt===2&&open===1)score+=10;
     }
-    score += 8/(1+Math.abs(r-7)+Math.abs(c-7));
-    if (score>bestScore){bestScore=score;best={r,c};}
+    return score;
+  }
+  // Priority 1: AI wins
+  for(let r=0;r<15;r++)for(let c=0;c<15;c++){
+    if(GOMOKU.board[r][c]!==0)continue;
+    GOMOKU.board[r][c]=2;const w=gomokuCheckWin(r,c,2);GOMOKU.board[r][c]=0;
+    if(w)return{r,c};
+  }
+  // Priority 2: Block player win
+  for(let r=0;r<15;r++)for(let c=0;c<15;c++){
+    if(GOMOKU.board[r][c]!==0)continue;
+    GOMOKU.board[r][c]=1;const w=gomokuCheckWin(r,c,1);GOMOKU.board[r][c]=0;
+    if(w)return{r,c};
+  }
+  // Priority 3: Best scored position
+  let best=null,bestScore=-1;
+  for(let r=0;r<15;r++)for(let c=0;c<15;c++){
+    if(GOMOKU.board[r][c]!==0)continue;
+    let hasNeighbor=false;
+    for(let dr=-2;dr<=2&&!hasNeighbor;dr++)for(let dc=-2;dc<=2&&!hasNeighbor;dc++){
+      const nr=r+dr,nc=c+dc;
+      if(nr>=0&&nr<15&&nc>=0&&nc<15&&GOMOKU.board[nr][nc]!==0)hasNeighbor=true;
+    }
+    if(!hasNeighbor&&GOMOKU.moveCount>0)continue;
+    const aiScore=scorePos(r,c,2)*2;
+    const blockScore=scorePos(r,c,1)*1.8;
+    const centerBonus=8/(1+Math.abs(r-7)+Math.abs(c-7));
+    const total=aiScore+blockScore+centerBonus;
+    if(total>bestScore){bestScore=total;best={r,c};}
   }
   return best||{r:7,c:7};
 }
@@ -2535,20 +2659,39 @@ const GO = {
   prevBoardState: null,
   startTime: 0,
   contactId: null,
-  prefs: { boardColor: 'wood', pieceStyle: 'classic', commentary: true },
+  prefs: { boardColor: 'wood', playerPiece: 'classic', aiPiece: 'panda', commentary: true, difficulty: 'normal', commentFreq: 'normal' },
 };
 
 // ── Prefs ──
 async function loadGoPrefs() {
   const saved = await getSetting('goPrefs');
-  if (saved) Object.assign(GO.prefs, saved);
+  if (saved) {
+    Object.assign(GO.prefs, saved);
+    // Migrate old pieceStyle
+    if (saved.pieceStyle && !saved.playerPiece) {
+      const old = PIECE_STYLES[saved.pieceStyle];
+      GO.prefs.playerPiece = old?.p ? saved.pieceStyle : 'classic';
+      const aiEmoji = old?.ai;
+      const found = PIECE_OPTIONS.find(o => o.emoji === aiEmoji);
+      GO.prefs.aiPiece = found ? found.key : 'panda';
+      delete GO.prefs.pieceStyle;
+    }
+  }
   const ct = $i('go-commentary-toggle');
   if (ct) ct.checked = GO.prefs.commentary;
   document.querySelectorAll('#go-color-row .gmk-color-swatch').forEach(el => {
     el.classList.toggle('active', el.dataset.color === GO.prefs.boardColor);
   });
-  document.querySelectorAll('#go-piece-row .gmk-piece-btn').forEach(el => {
-    el.classList.toggle('active', el.dataset.style === GO.prefs.pieceStyle);
+  document.querySelectorAll('#go-settings .gmk-diff-btn').forEach(el => {
+    el.classList.toggle('active', el.dataset.diff === GO.prefs.difficulty);
+  });
+  const cf = $i('go-comment-freq');
+  if (cf) cf.value = GO.prefs.commentFreq || 'normal';
+  document.querySelectorAll('#go-player-piece-row .gmk-piece-opt').forEach(el => {
+    el.classList.toggle('active', el.dataset.key === GO.prefs.playerPiece);
+  });
+  document.querySelectorAll('#go-ai-piece-row .gmk-piece-opt').forEach(el => {
+    el.classList.toggle('active', el.dataset.key === GO.prefs.aiPiece);
   });
 }
 async function saveGoPrefs() { await saveSetting('goPrefs', GO.prefs); }
@@ -2561,15 +2704,40 @@ function setGoBoard(color, el) {
   saveGoPrefs();
 }
 function setGoPiece(style, el) {
-  GO.prefs.pieceStyle = style;
-  document.querySelectorAll('#go-piece-row .gmk-piece-btn').forEach(e => e.classList.toggle('active', e === el));
+  GO.prefs.playerPiece = style;
   renderGoBoard();
   saveGoPrefs();
 }
+function setGoPlayerPiece(key, el) {
+  GO.prefs.playerPiece = key;
+  document.querySelectorAll('#go-player-piece-row .gmk-piece-opt').forEach(b => b.classList.remove('active'));
+  if (el) el.classList.add('active');
+  goUpdateAiPieceDisplay();
+  renderGoBoard();
+  saveGoPrefs();
+}
+function setGoAiPiece(key, el) {
+  GO.prefs.aiPiece = key;
+  document.querySelectorAll('#go-ai-piece-row .gmk-piece-opt').forEach(b => b.classList.remove('active'));
+  if (el) el.classList.add('active');
+  goUpdateAiPieceDisplay();
+  renderGoBoard();
+  saveGoPrefs();
+}
+function setGoDiff(diff, el) {
+  GO.prefs.difficulty = diff;
+  document.querySelectorAll('#go-settings .gmk-diff-btn').forEach(b => b.classList.remove('active'));
+  if (el) el.classList.add('active');
+  saveGoPrefs();
+}
+function setGoCommentFreq(val) { GO.prefs.commentFreq = val; saveGoPrefs(); }
 function toggleGoCommentary(val) { GO.prefs.commentary = val; saveGoPrefs(); }
 function toggleGoSettings() {
   const s = $i('go-settings');
-  if (s) s.style.display = s.style.display === 'none' ? '' : 'none';
+  if (!s) return;
+  const show = s.style.display === 'none';
+  s.style.display = show ? '' : 'none';
+  if (show) { renderGoAiSelector(); loadGoPrefs(); }
 }
 
 // ── AI Selector ──
@@ -2591,21 +2759,26 @@ function goGetContact() {
   return GO.contactId ? S._contacts[GO.contactId]
     : (S.currentContact ? S._contacts[S.currentContact] : Object.values(S._contacts||{})[0]);
 }
+function goUpdateAiPieceDisplay() {
+  const aiEmoji = gmkGetPieceEmoji(GO.prefs.aiPiece);
+  const playerEmoji = gmkGetPieceEmoji(GO.prefs.playerPiece);
+  const pEl = $i('go-player-piece'), aEl = $i('go-ai-piece');
+  if (playerEmoji) {
+    if (pEl) { pEl.className='gmk-stone-indicator'; pEl.textContent=playerEmoji; pEl.style.fontSize='18px'; pEl.style.background='none'; pEl.style.boxShadow='none'; }
+  } else {
+    if (pEl) { pEl.className='gmk-stone-indicator black'; pEl.textContent=''; pEl.style=''; }
+  }
+  if (aiEmoji) {
+    if (aEl) { aEl.className='gmk-stone-indicator'; aEl.textContent=aiEmoji; aEl.style.fontSize='18px'; aEl.style.background='none'; aEl.style.boxShadow='none'; }
+  } else {
+    if (aEl) { aEl.className='gmk-stone-indicator white'; aEl.textContent=''; aEl.style=''; }
+  }
+}
 function updateGoAiDisplay() {
   const contact = goGetContact();
   const aiNameEl = $i('go-ai-name');
   if (aiNameEl) aiNameEl.textContent = contact?.name || 'AI（白子）';
-  const aiPieceEl = $i('go-ai-piece');
-  if (aiPieceEl) {
-    const ps = GO.prefs.pieceStyle;
-    if (ps === 'classic' || !PIECE_STYLES[ps]) {
-      aiPieceEl.className = 'gmk-stone-indicator white';
-      aiPieceEl.textContent = '';
-    } else {
-      aiPieceEl.className = 'gmk-stone-indicator';
-      aiPieceEl.textContent = PIECE_STYLES[ps].ai;
-    }
-  }
+  goUpdateAiPieceDisplay();
 }
 
 // ── Init ──
@@ -2659,7 +2832,8 @@ function renderGoBoard() {
   if (!boardEl) return;
   boardEl.innerHTML = '';
   const N = GO.SIZE;
-  const ps = GO.prefs.pieceStyle;
+  const playerEmoji = gmkGetPieceEmoji(GO.prefs.playerPiece);
+  const aiEmoji = gmkGetPieceEmoji(GO.prefs.aiPiece);
 
   // Star points (hoshi) for 13x13: 0-indexed
   const starSet = new Set([
@@ -2688,11 +2862,12 @@ function renderGoBoard() {
           cell.classList.add('last-move');
         }
         const stone = document.createElement('div');
-        if (ps === 'classic' || !PIECE_STYLES[ps]) {
-          stone.className = 'go-stone ' + (v === 1 ? 'black' : 'white');
-        } else {
+        const emoji = v === 1 ? playerEmoji : aiEmoji;
+        if (emoji) {
           stone.className = 'go-stone emoji';
-          stone.textContent = v === 1 ? PIECE_STYLES[ps].p : PIECE_STYLES[ps].ai;
+          stone.textContent = emoji;
+        } else {
+          stone.className = 'go-stone ' + (v === 1 ? 'black' : 'white');
         }
         cell.appendChild(stone);
       } else if (!GO.over && GO.turn === 'player' && !GO.thinking) {
@@ -2830,8 +3005,26 @@ async function goAiMove() {
   let move = null;
   const contact = goGetContact();
   const useKey = contact?.apiKey || S.settings.apiKey;
+  const difficulty = GO.prefs.difficulty || 'normal';
 
-  if (useKey) {
+  // Beginner: always use heuristic (with 40% random)
+  if (difficulty === 'beginner') {
+    move = goHeuristic();
+    if (move && Math.random() < 0.4) {
+      // pick a random nearby legal move
+      const N = GO.SIZE;
+      const candidates = [];
+      for (let r=0;r<N;r++) for (let c=0;c<N;c++) {
+        if (GO.board[r][c] !== 0) continue;
+        if (GO.koPoint && GO.koPoint[0]===r && GO.koPoint[1]===c) continue;
+        for (const [dr,dc] of [[-1,0],[1,0],[0,-1],[0,1]]) {
+          const nr=r+dr,nc=c+dc;
+          if (nr>=0&&nr<N&&nc>=0&&nc<N&&GO.board[nr][nc]!==0) { candidates.push({row:r,col:c,comment:'嘻嘻随便下～'}); break; }
+        }
+      }
+      if (candidates.length) move = candidates[Math.floor(Math.random()*candidates.length)];
+    }
+  } else if (useKey) {
     try { move = await goCallAI(contact, useKey); } catch(e) {}
   }
 
@@ -2885,7 +3078,11 @@ async function goAiMove() {
   GO.lastMove = [mr, mc];
   GO.turn = 'player';
 
-  if (comment && GO.prefs.commentary) goSay(comment);
+  const goFreqMap = { off: 0, low: 5, normal: 3, high: 1 };
+  const goFreq = goFreqMap[GO.prefs.commentFreq ?? 'normal'] ?? 3;
+  const goMoveNum = GO.captures.ai + GO.captures.player + 1;
+  const goShouldComment = goFreq > 0 && goMoveNum % goFreq === 0;
+  if (comment && goShouldComment) goSay(comment);
 
   renderGoBoard();
   goUpdateCaptures();
@@ -3764,4 +3961,861 @@ async function gomokuShareToMoments() {
     openModal('compose-moment-modal');
   }
   toast('已跳转到朋友圈，发送即可～');
+}
+
+// ══════════════════════════════════════════
+// XIANGQI (中国象棋)
+// ══════════════════════════════════════════
+
+const XQ = {
+  board: null,      // 10 rows × 9 cols, null or {type, color}
+  turn: 'red',      // 'red' | 'black'
+  over: false,
+  selected: null,   // {r, c}
+  validMoves: [],
+  thinking: false,
+  contactId: null,
+  commentary: true,
+  difficulty: 'normal',
+  moveCount: 0,
+};
+
+// Piece values for evaluation
+const XQ_VAL = { k:10000, a:200, b:200, n:300, r:900, c:450, p:100,
+                  K:10000, A:200, B:200, N:300, R:900, C:450, P:100 };
+
+// Initial board layout
+function xqInitialBoard() {
+  const b = Array.from({length:10}, () => Array(9).fill(null));
+  // Black (top, rows 0-9)
+  const blackRow = ['R','N','B','A','K','A','B','N','R'];
+  for (let c=0;c<9;c++) b[0][c] = {t:blackRow[c], red:false};
+  b[2][1] = {t:'C', red:false}; b[2][7] = {t:'C', red:false};
+  for (let c=0;c<9;c+=2) b[3][c] = {t:'P', red:false};
+  // Red (bottom)
+  const redRow = ['r','n','b','a','k','a','b','n','r'];
+  for (let c=0;c<9;c++) b[9][c] = {t:redRow[c], red:true};
+  b[7][1] = {t:'c', red:true}; b[7][7] = {t:'c', red:true};
+  for (let c=0;c<9;c+=2) b[6][c] = {t:'p', red:true};
+  return b;
+}
+
+function xqPieceLabel(piece) {
+  if (!piece) return '';
+  const labels = {
+    k:'帅', a:'仕', b:'相', n:'马', r:'车', c:'炮', p:'兵',
+    K:'将', A:'士', B:'象', N:'馬', R:'車', C:'砲', P:'卒',
+  };
+  return labels[piece.t] || piece.t;
+}
+
+function xqIsRed(piece) { return piece && piece.red; }
+
+function xqFindKing(red) {
+  for (let r=0;r<10;r++) for (let c=0;c<9;c++) {
+    const p = XQ.board[r][c];
+    if (p && (p.t === (red?'k':'K'))) return {r,c};
+  }
+  return null;
+}
+
+function xqKingsFacingEachOther() {
+  const redK = xqFindKing(true), blkK = xqFindKing(false);
+  if (!redK||!blkK) return false;
+  if (redK.c !== blkK.c) return false;
+  for (let r=blkK.r+1;r<redK.r;r++) {
+    if (XQ.board[r][redK.c]) return false;
+  }
+  return true;
+}
+
+function xqGetRawMoves(r, c) {
+  const piece = XQ.board[r][c];
+  if (!piece) return [];
+  const moves = [];
+  const t = piece.t.toLowerCase();
+  const isRed = piece.red;
+
+  if (t === 'r') { // rook/car
+    for (const [dr,dc] of [[0,1],[0,-1],[1,0],[-1,0]]) {
+      for (let i=1;i<10;i++) {
+        const nr=r+dr*i, nc=c+dc*i;
+        if (nr<0||nr>=10||nc<0||nc>=9) break;
+        if (!XQ.board[nr][nc]) { moves.push({r:nr,c:nc}); }
+        else { if (xqIsRed(XQ.board[nr][nc])!==isRed) moves.push({r:nr,c:nc}); break; }
+      }
+    }
+  } else if (t === 'n') { // knight/horse
+    const knightMoves = [[2,1],[2,-1],[-2,1],[-2,-1],[1,2],[1,-2],[-1,2],[-1,-2]];
+    for (const [dr,dc] of knightMoves) {
+      const nr=r+dr, nc=c+dc;
+      if (nr<0||nr>=10||nc<0||nc>=9) continue;
+      // Check leg blocking
+      const legR=r+(dr>0?1:dr<0?-1:0), legC=c+(dc>0?1:dc<0?-1:0);
+      if (Math.abs(dr)===2) { if (XQ.board[legR][c]) continue; }
+      else { if (XQ.board[r][legC]) continue; }
+      if (!XQ.board[nr][nc]||xqIsRed(XQ.board[nr][nc])!==isRed) moves.push({r:nr,c:nc});
+    }
+  } else if (t === 'b') { // elephant/bishop - can't cross river
+    for (const [dr,dc] of [[2,2],[2,-2],[-2,2],[-2,-2]]) {
+      const nr=r+dr, nc=c+dc;
+      if (nr<0||nr>=10||nc<0||nc>=9) continue;
+      if (isRed && nr<5) continue; // red stays below river
+      if (!isRed && nr>4) continue; // black stays above river
+      if (XQ.board[r+dr/2][c+dc/2]) continue; // blocked
+      if (!XQ.board[nr][nc]||xqIsRed(XQ.board[nr][nc])!==isRed) moves.push({r:nr,c:nc});
+    }
+  } else if (t === 'a') { // advisor/guard - stays in palace
+    for (const [dr,dc] of [[1,1],[1,-1],[-1,1],[-1,-1]]) {
+      const nr=r+dr, nc=c+dc;
+      if (nc<3||nc>5) continue;
+      if (isRed && (nr<7||nr>9)) continue;
+      if (!isRed && (nr<0||nr>2)) continue;
+      if (!XQ.board[nr][nc]||xqIsRed(XQ.board[nr][nc])!==isRed) moves.push({r:nr,c:nc});
+    }
+  } else if (t === 'k') { // king - stays in palace
+    for (const [dr,dc] of [[0,1],[0,-1],[1,0],[-1,0]]) {
+      const nr=r+dr, nc=c+dc;
+      if (nc<3||nc>5) continue;
+      if (isRed && (nr<7||nr>9)) continue;
+      if (!isRed && (nr<0||nr>2)) continue;
+      if (!XQ.board[nr][nc]||xqIsRed(XQ.board[nr][nc])!==isRed) moves.push({r:nr,c:nc});
+    }
+  } else if (t === 'c') { // cannon - moves like rook, captures by jumping over one
+    for (const [dr,dc] of [[0,1],[0,-1],[1,0],[-1,0]]) {
+      let jumped = false;
+      for (let i=1;i<10;i++) {
+        const nr=r+dr*i, nc=c+dc*i;
+        if (nr<0||nr>=10||nc<0||nc>=9) break;
+        if (!jumped) {
+          if (!XQ.board[nr][nc]) moves.push({r:nr,c:nc});
+          else jumped=true;
+        } else {
+          if (XQ.board[nr][nc]) {
+            if (xqIsRed(XQ.board[nr][nc])!==isRed) moves.push({r:nr,c:nc});
+            break;
+          }
+        }
+      }
+    }
+  } else if (t === 'p') { // pawn
+    const forward = isRed ? -1 : 1;
+    const crossedRiver = isRed ? r<=4 : r>=5;
+    // Forward
+    const nr=r+forward, nc=c;
+    if (nr>=0&&nr<10&&(!XQ.board[nr][nc]||xqIsRed(XQ.board[nr][nc])!==isRed)) moves.push({r:nr,c:nc});
+    // Sideways (only after crossing river)
+    if (crossedRiver) {
+      for (const dc of [-1,1]) {
+        const nc2=c+dc;
+        if (nc2>=0&&nc2<9&&(!XQ.board[r][nc2]||xqIsRed(XQ.board[r][nc2])!==isRed)) moves.push({r:r,c:nc2});
+      }
+    }
+  }
+  return moves;
+}
+
+function xqIsInCheck(isRed) {
+  const kingPos = xqFindKing(isRed);
+  if (!kingPos) return true;
+  for (let r=0;r<10;r++) for (let c=0;c<9;c++) {
+    const p = XQ.board[r][c];
+    if (!p||xqIsRed(p)===isRed) continue;
+    const moves = xqGetRawMoves(r,c);
+    if (moves.some(m=>m.r===kingPos.r&&m.c===kingPos.c)) return true;
+  }
+  if (xqKingsFacingEachOther()) return true;
+  return false;
+}
+
+function xqGetMoves(r, c) {
+  const piece = XQ.board[r][c];
+  if (!piece) return [];
+  const raw = xqGetRawMoves(r, c);
+  // Filter moves that leave own king in check
+  return raw.filter(mv => {
+    const orig = XQ.board[mv.r][mv.c];
+    XQ.board[mv.r][mv.c] = piece;
+    XQ.board[r][c] = null;
+    const inCheck = xqIsInCheck(piece.red);
+    XQ.board[r][c] = piece;
+    XQ.board[mv.r][mv.c] = orig;
+    return !inCheck;
+  });
+}
+
+function initXiangqi() {
+  XQ.board = xqInitialBoard();
+  XQ.turn = 'red';
+  XQ.over = false;
+  XQ.selected = null;
+  XQ.validMoves = [];
+  XQ.thinking = false;
+  XQ.moveCount = 0;
+  if (!XQ.contactId) {
+    XQ.contactId = S.currentContact || Object.keys(S._contacts||{})[0] || null;
+  }
+  renderXiangqiAiSelector();
+  updateXiangqiAiDisplay();
+  xqSetStatus('你先行（红方）');
+  renderXiangqiBoard();
+  xqSay('棋盘就绪！红方先行，开始对局～');
+  const p = $i('xiangqi-settings');
+  if (p) p.style.display = 'none';
+}
+
+function xqSetStatus(msg) { const el=$i('xq-status'); if(el) el.textContent=msg; }
+function xqSay(msg) {
+  const el=$i('xq-comment');
+  if(!el||!msg) return;
+  el.textContent=msg; el.style.opacity='1';
+  clearTimeout(el._t);
+  el._t=setTimeout(()=>{if(el)el.style.opacity='0';},5500);
+}
+
+function renderXiangqiAiSelector() {
+  const el=$i('xq-ai-selector'); if(!el) return; el.innerHTML='';
+  const contacts=Object.values(S._contacts||{});
+  if(!contacts.length){el.innerHTML='<span style="font-size:12px;color:var(--text3)">还没有AI助手～</span>';return;}
+  contacts.forEach(c=>{
+    const btn=document.createElement('button');
+    btn.className='gmk-ai-btn'+(XQ.contactId===c.id?' active':'');
+    const av=c.avatar?.startsWith('data:')?`<img src="${c.avatar}" style="width:18px;height:18px;border-radius:50%;object-fit:cover">`:`<span>${c.avatar||'🤖'}</span>`;
+    btn.innerHTML=`${av}<span>${esc(c.name)}</span>`;
+    btn.onclick=()=>{XQ.contactId=c.id;renderXiangqiAiSelector();updateXiangqiAiDisplay();};
+    el.appendChild(btn);
+  });
+}
+function updateXiangqiAiDisplay() {
+  const contact=XQ.contactId?S._contacts[XQ.contactId]:Object.values(S._contacts||{})[0];
+  const el=$i('xq-ai-name'); if(el) el.textContent=(contact?.name||'AI')+'（黑方）';
+}
+function toggleXiangqiSettings() {
+  const p=$i('xiangqi-settings'); if(!p) return;
+  const show=p.style.display==='none'; p.style.display=show?'':'none';
+  if(show){renderXiangqiAiSelector();}
+}
+function setXiangqiDiff(diff, el) {
+  XQ.difficulty=diff;
+  document.querySelectorAll('#xiangqi-settings .gmk-diff-btn').forEach(b=>b.classList.remove('active'));
+  if(el) el.classList.add('active');
+}
+
+function renderXiangqiBoard() {
+  const boardEl=$i('xq-board'); if(!boardEl) return;
+  boardEl.innerHTML='';
+  for (let r=0;r<10;r++) {
+    for (let c=0;c<9;c++) {
+      const cell=document.createElement('div');
+      cell.className='xq-cell';
+      // Mark valid moves
+      if (XQ.validMoves.some(m=>m.r===r&&m.c===c)) cell.classList.add('valid-move');
+      const piece=XQ.board[r][c];
+      if (piece) {
+        const pd=document.createElement('div');
+        pd.className='xq-piece '+(piece.red?'red':'black');
+        if(XQ.selected&&XQ.selected.r===r&&XQ.selected.c===c) pd.classList.add('selected');
+        pd.textContent=xqPieceLabel(piece);
+        cell.appendChild(pd);
+      }
+      cell.onclick=()=>xqPlayerClick(r,c);
+      boardEl.appendChild(cell);
+    }
+  }
+}
+
+function xqPlayerClick(r, c) {
+  if (XQ.over||XQ.turn!=='red'||XQ.thinking) return;
+  const piece=XQ.board[r][c];
+  // If clicked a valid move destination
+  if (XQ.selected && XQ.validMoves.some(m=>m.r===r&&m.c===c)) {
+    xqMakeMove(XQ.selected.r, XQ.selected.c, r, c);
+    XQ.selected=null; XQ.validMoves=[];
+    renderXiangqiBoard();
+    if (XQ.over) return;
+    // Check if black is in checkmate
+    if (xqHasNoMoves(false)) {
+      XQ.over=true; xqSetStatus('红方胜！将死！'); xqSay('你赢啦！将死！🎉'); return;
+    }
+    xqSetStatus('AI思考中…'); XQ.thinking=true; renderXiangqiBoard();
+    setTimeout(()=>xqAiMove(), 400);
+    return;
+  }
+  // Select own piece
+  if (piece && piece.red) {
+    XQ.selected={r,c};
+    XQ.validMoves=xqGetMoves(r,c);
+    renderXiangqiBoard();
+  } else {
+    XQ.selected=null; XQ.validMoves=[];
+    renderXiangqiBoard();
+  }
+}
+
+function xqMakeMove(fr, fc, tr, tc) {
+  XQ.board[tr][tc]=XQ.board[fr][fc];
+  XQ.board[fr][fc]=null;
+  XQ.turn = XQ.turn==='red'?'black':'red';
+  XQ.moveCount++;
+}
+
+function xqHasNoMoves(isRed) {
+  for (let r=0;r<10;r++) for (let c=0;c<9;c++) {
+    const p=XQ.board[r][c];
+    if(!p||xqIsRed(p)!==isRed) continue;
+    if(xqGetMoves(r,c).length>0) return false;
+  }
+  return true;
+}
+
+function xqEvaluate() {
+  let score=0;
+  for (let r=0;r<10;r++) for (let c=0;c<9;c++) {
+    const p=XQ.board[r][c]; if(!p) continue;
+    const v=XQ_VAL[p.t]||0;
+    score+=(p.red?1:-1)*v;
+  }
+  return score; // positive = red advantage
+}
+
+function xqGetAllMoves(isRed) {
+  const moves=[];
+  for (let r=0;r<10;r++) for (let c=0;c<9;c++) {
+    const p=XQ.board[r][c];
+    if(!p||xqIsRed(p)!==isRed) continue;
+    const ms=xqGetMoves(r,c);
+    ms.forEach(m=>moves.push({fr:r,fc:c,tr:m.r,tc:m.c}));
+  }
+  return moves;
+}
+
+function xqAiHeuristic() {
+  const difficulty=XQ.difficulty||'normal';
+  const allMoves=xqGetAllMoves(false);
+  if(!allMoves.length) return null;
+  if(difficulty==='beginner') {
+    return allMoves[Math.floor(Math.random()*allMoves.length)];
+  }
+  // Score each move (material eval)
+  let best=null, bestScore=-Infinity;
+  for (const mv of allMoves) {
+    const orig=XQ.board[mv.tr][mv.tc];
+    XQ.board[mv.tr][mv.tc]=XQ.board[mv.fr][mv.fc];
+    XQ.board[mv.fr][mv.fc]=null;
+    let score=-xqEvaluate(); // negative because we want black to minimize red
+    if(difficulty==='hard') {
+      // Depth 2: look at opponent's best response
+      const redMoves=xqGetAllMoves(true);
+      let minOpp=Infinity;
+      for(const rm of redMoves.slice(0,15)) {
+        const orig2=XQ.board[rm.tr][rm.tc];
+        XQ.board[rm.tr][rm.tc]=XQ.board[rm.fr][rm.fc];
+        XQ.board[rm.fr][rm.fc]=null;
+        const s2=-xqEvaluate();
+        XQ.board[rm.fr][rm.fc]=XQ.board[rm.tr][rm.tc];
+        XQ.board[rm.tr][rm.tc]=orig2;
+        if(s2<minOpp) minOpp=s2;
+      }
+      score=minOpp;
+    }
+    XQ.board[mv.fr][mv.fc]=XQ.board[mv.tr][mv.tc];
+    XQ.board[mv.tr][mv.tc]=orig;
+    if(score>bestScore){bestScore=score;best=mv;}
+  }
+  return best;
+}
+
+async function xqAiMove() {
+  const contact=XQ.contactId?S._contacts[XQ.contactId]:Object.values(S._contacts||{})[0];
+  const useKey=contact?.apiKey||S.settings.apiKey;
+  let mv=null, comment='';
+
+  if(useKey && XQ.difficulty!=='beginner') {
+    try {
+      // Build board text
+      const lines=[];
+      for(let r=0;r<10;r++){
+        let row='';
+        for(let c=0;c<9;c++){const p=XQ.board[r][c];row+=p?xqPieceLabel(p)+'('+(p.red?'红':'黑')+')'+'  ':'空   ';}
+        lines.push(`Row${r}: ${row}`);
+      }
+      const boardTxt=lines.join('\n');
+      const aiName=contact?.name||'AI';
+      const model=contact?.model||S.settings.model||'openai/gpt-4o-mini';
+      const prompt=`你是${aiName}，和用户下中国象棋。你执黑方，用户执红方。棋盘10行9列（0-9行，0-8列）。\n${boardTxt}\n请选择最佳落子。只返回JSON：{"fr":起始行,"fc":起始列,"tr":目标行,"tc":目标列,"comment":"一句话"}`;
+      const res=await fetch(contact?.apiUrl||'https://openrouter.ai/api/v1/chat/completions',{
+        method:'POST',
+        headers:{'Authorization':`Bearer ${useKey}`,'Content-Type':'application/json','HTTP-Referer':'https://raimos.app','X-Title':'Raimos'},
+        body:JSON.stringify({model,max_tokens:100,stream:false,messages:[{role:'user',content:prompt}]}),
+      });
+      const data=await res.json();
+      const txt=data.choices?.[0]?.message?.content||'';
+      const m=txt.match(/\{[\s\S]*?\}/);
+      if(m){const p=JSON.parse(m[0]);mv={fr:p.fr,fc:p.fc,tr:p.tr,tc:p.tc};comment=p.comment||'';}
+    } catch(e){}
+  }
+
+  // Validate AI move
+  if(!mv||mv.fr==null||mv.tr==null||!XQ.board[mv.fr]?.[mv.fc]||xqIsRed(XQ.board[mv.fr][mv.fc])||
+     !xqGetMoves(mv.fr,mv.fc).some(m=>m.r===mv.tr&&m.c===mv.tc)) {
+    mv=xqAiHeuristic();
+  }
+  if(!mv){XQ.over=true;xqSetStatus('红方胜！');XQ.thinking=false;return;}
+
+  // Check if capturing the red king
+  const target=XQ.board[mv.tr][mv.tc];
+  xqMakeMove(mv.fr,mv.fc,mv.tr,mv.tc);
+  XQ.thinking=false;
+  renderXiangqiBoard();
+  if(comment&&XQ.commentary) xqSay(comment);
+  if(target&&(target.t==='k')) {
+    XQ.over=true; xqSetStatus('黑方胜！将帅被捉！'); xqSay('哈哈，你的帅被我抓住了！'); return;
+  }
+  if(xqIsInCheck(true)) xqSetStatus('红方被将军！');
+  else if(xqHasNoMoves(true)){XQ.over=true;xqSetStatus('黑方胜！红方无路可走！');return;}
+  else xqSetStatus('轮到你了（红方）');
+  XQ.turn='red';
+}
+
+
+// ══════════════════════════════════════════
+// INTERNATIONAL CHESS (国际象棋)
+// ══════════════════════════════════════════
+
+const IC = {
+  board: null,      // 8×8, null or {t, white}
+  turn: 'white',
+  over: false,
+  selected: null,
+  validMoves: [],
+  thinking: false,
+  contactId: null,
+  commentary: true,
+  difficulty: 'normal',
+  boardColor: 'classic',
+  moveCount: 0,
+  enPassant: null,   // {r,c} target square for en passant
+  castling: { wK:true, wQR:true, wKR:true, bK:true, bQR:true, bKR:true },
+  promotionPending: null,
+};
+
+const IC_VAL = { k:10000, q:900, r:500, b:300, n:300, p:100 };
+// Unicode chess pieces
+const IC_GLYPHS = {
+  wk:'♔', wq:'♕', wr:'♖', wb:'♗', wn:'♘', wp:'♙',
+  bk:'♚', bq:'♛', br:'♜', bb:'♝', bn:'♞', bp:'♟',
+};
+
+function icInitialBoard() {
+  const b = Array.from({length:8},()=>Array(8).fill(null));
+  const backRank = ['r','n','b','q','k','b','n','r'];
+  for(let c=0;c<8;c++){
+    b[0][c]={t:backRank[c],white:false};
+    b[1][c]={t:'p',white:false};
+    b[6][c]={t:'p',white:true};
+    b[7][c]={t:backRank[c],white:true};
+  }
+  return b;
+}
+
+function icGlyph(piece) {
+  if(!piece) return '';
+  return IC_GLYPHS[(piece.white?'w':'b')+piece.t]||piece.t;
+}
+
+function icFindKing(white) {
+  for(let r=0;r<8;r++) for(let c=0;c<8;c++){
+    const p=IC.board[r][c];
+    if(p&&p.t==='k'&&p.white===white) return {r,c};
+  }
+  return null;
+}
+
+function icGetRawMoves(r, c, board, enPassant, castling) {
+  board=board||IC.board;
+  enPassant=enPassant!==undefined?enPassant:IC.enPassant;
+  castling=castling||IC.castling;
+  const piece=board[r][c];
+  if(!piece) return [];
+  const moves=[];
+  const {t,white}=piece;
+  const opp=p=>p&&p.white!==white;
+  const empty=p=>!p;
+  const ok=(r,c)=>r>=0&&r<8&&c>=0&&c<8;
+
+  if(t==='r'||t==='q') { // rook/queen straight
+    for(const [dr,dc] of [[0,1],[0,-1],[1,0],[-1,0]]){
+      for(let i=1;i<8;i++){
+        const nr=r+dr*i,nc=c+dc*i;
+        if(!ok(nr,nc)) break;
+        if(empty(board[nr][nc])){moves.push({r:nr,c:nc});}
+        else{if(opp(board[nr][nc]))moves.push({r:nr,c:nc});break;}
+      }
+    }
+  }
+  if(t==='b'||t==='q') { // bishop/queen diagonal
+    for(const [dr,dc] of [[1,1],[1,-1],[-1,1],[-1,-1]]){
+      for(let i=1;i<8;i++){
+        const nr=r+dr*i,nc=c+dc*i;
+        if(!ok(nr,nc)) break;
+        if(empty(board[nr][nc])){moves.push({r:nr,c:nc});}
+        else{if(opp(board[nr][nc]))moves.push({r:nr,c:nc});break;}
+      }
+    }
+  }
+  if(t==='n') {
+    for(const [dr,dc] of [[2,1],[2,-1],[-2,1],[-2,-1],[1,2],[1,-2],[-1,2],[-1,-2]]){
+      const nr=r+dr,nc=c+dc;
+      if(ok(nr,nc)&&(empty(board[nr][nc])||opp(board[nr][nc])))moves.push({r:nr,c:nc});
+    }
+  }
+  if(t==='k') {
+    for(const [dr,dc] of [[0,1],[0,-1],[1,0],[-1,0],[1,1],[1,-1],[-1,1],[-1,-1]]){
+      const nr=r+dr,nc=c+dc;
+      if(ok(nr,nc)&&(empty(board[nr][nc])||opp(board[nr][nc])))moves.push({r:nr,c:nc});
+    }
+    // Castling
+    if(white&&castling.wK&&r===7&&c===4){
+      if(castling.wKR&&!board[7][5]&&!board[7][6])moves.push({r:7,c:6,castleK:true});
+      if(castling.wQR&&!board[7][3]&&!board[7][2]&&!board[7][1])moves.push({r:7,c:2,castleQ:true});
+    }
+    if(!white&&castling.bK&&r===0&&c===4){
+      if(castling.bKR&&!board[0][5]&&!board[0][6])moves.push({r:0,c:6,castleK:true});
+      if(castling.bQR&&!board[0][3]&&!board[0][2]&&!board[0][1])moves.push({r:0,c:2,castleQ:true});
+    }
+  }
+  if(t==='p') {
+    const dir=white?-1:1;
+    const startRow=white?6:1;
+    // Forward
+    if(ok(r+dir,c)&&empty(board[r+dir][c])){
+      moves.push({r:r+dir,c});
+      if(r===startRow&&empty(board[r+dir*2][c]))moves.push({r:r+dir*2,c,doublePawn:true});
+    }
+    // Captures
+    for(const dc of [-1,1]){
+      const nr=r+dir,nc=c+dc;
+      if(!ok(nr,nc)) continue;
+      if(opp(board[nr][nc]))moves.push({r:nr,c:nc});
+      // En passant
+      if(enPassant&&enPassant.r===nr&&enPassant.c===nc)moves.push({r:nr,c:nc,ep:true});
+    }
+  }
+  return moves;
+}
+
+function icIsInCheck(white, board, enPassant) {
+  board=board||IC.board;
+  enPassant=enPassant!==undefined?enPassant:IC.enPassant;
+  let kr=-1,kc=-1;
+  for(let r=0;r<8;r++) for(let c=0;c<8;c++){
+    const p=board[r][c];
+    if(p&&p.t==='k'&&p.white===white){kr=r;kc=c;}
+  }
+  if(kr<0) return true;
+  for(let r=0;r<8;r++) for(let c=0;c<8;c++){
+    const p=board[r][c];
+    if(!p||p.white===white) continue;
+    const ms=icGetRawMoves(r,c,board,enPassant,{wK:false,bK:false,wQR:false,wKR:false,bQR:false,bKR:false});
+    if(ms.some(m=>m.r===kr&&m.c===kc)) return true;
+  }
+  return false;
+}
+
+function icGetMoves(r, c) {
+  const piece=IC.board[r][c];
+  if(!piece) return [];
+  const raw=icGetRawMoves(r,c);
+  return raw.filter(mv=>{
+    // Simulate move
+    const nb=IC.board.map(row=>[...row]);
+    const nep=mv.doublePawn?{r:r+(piece.white?-1:1),c}:null;
+    nb[mv.r][mv.c]=nb[r][c];
+    nb[r][c]=null;
+    if(mv.ep){nb[r][mv.c]=null;}
+    if(mv.castleK){nb[mv.r][mv.c-1]=nb[mv.r][mv.c+1];nb[mv.r][mv.c+1]=null;}
+    if(mv.castleQ){nb[mv.r][mv.c+1]=nb[mv.r][mv.c-2];nb[mv.r][mv.c-2]=null;}
+    return !icIsInCheck(piece.white,nb,nep);
+  });
+}
+
+function initIntChess() {
+  IC.board=icInitialBoard();
+  IC.turn='white';
+  IC.over=false;
+  IC.selected=null;
+  IC.validMoves=[];
+  IC.thinking=false;
+  IC.moveCount=0;
+  IC.enPassant=null;
+  IC.castling={wK:true,wQR:true,wKR:true,bK:true,bQR:true,bKR:true};
+  IC.promotionPending=null;
+  if(!IC.contactId){
+    IC.contactId=S.currentContact||Object.keys(S._contacts||{})[0]||null;
+  }
+  renderIntChessAiSelector();
+  updateIntChessAiDisplay();
+  icSetStatus('白方先行（你）');
+  renderIntChessBoard();
+  icSay('国际象棋对局开始！白方先行～');
+  const p=$i('intchess-settings'); if(p) p.style.display='none';
+  // Apply board color
+  const boardEl=$i('ic-board');
+  if(boardEl){boardEl.className='ic-board'+(IC.boardColor!=='classic'?' ic-'+IC.boardColor:'');}
+}
+
+function icSetStatus(msg){const el=$i('ic-status');if(el)el.textContent=msg;}
+function icSay(msg){
+  const el=$i('ic-comment');
+  if(!el||!msg) return;
+  el.textContent=msg;el.style.opacity='1';
+  clearTimeout(el._t);
+  el._t=setTimeout(()=>{if(el)el.style.opacity='0';},5500);
+}
+
+function renderIntChessAiSelector(){
+  const el=$i('ic-ai-selector');if(!el)return;el.innerHTML='';
+  const contacts=Object.values(S._contacts||{});
+  if(!contacts.length){el.innerHTML='<span style="font-size:12px;color:var(--text3)">还没有AI助手～</span>';return;}
+  contacts.forEach(c=>{
+    const btn=document.createElement('button');
+    btn.className='gmk-ai-btn'+(IC.contactId===c.id?' active':'');
+    const av=c.avatar?.startsWith('data:')?`<img src="${c.avatar}" style="width:18px;height:18px;border-radius:50%;object-fit:cover">`:`<span>${c.avatar||'🤖'}</span>`;
+    btn.innerHTML=`${av}<span>${esc(c.name)}</span>`;
+    btn.onclick=()=>{IC.contactId=c.id;renderIntChessAiSelector();updateIntChessAiDisplay();};
+    el.appendChild(btn);
+  });
+}
+function updateIntChessAiDisplay(){
+  const contact=IC.contactId?S._contacts[IC.contactId]:Object.values(S._contacts||{})[0];
+  const el=$i('ic-ai-name');if(el)el.textContent=(contact?.name||'AI')+'（黑方）';
+}
+function toggleIntChessSettings(){
+  const p=$i('intchess-settings');if(!p)return;
+  const show=p.style.display==='none';p.style.display=show?'':'none';
+  if(show)renderIntChessAiSelector();
+}
+function setIntChessDiff(diff,el){
+  IC.difficulty=diff;
+  document.querySelectorAll('#intchess-settings .gmk-diff-btn').forEach(b=>b.classList.remove('active'));
+  if(el)el.classList.add('active');
+}
+function setIntChessColor(color,el){
+  IC.boardColor=color;
+  document.querySelectorAll('#ic-color-row .ic-color-swatch').forEach(s=>s.classList.remove('active'));
+  if(el)el.classList.add('active');
+  const boardEl=$i('ic-board');
+  if(boardEl)boardEl.className='ic-board'+(color!=='classic'?' ic-'+color:'');
+}
+
+function renderIntChessBoard(){
+  const boardEl=$i('ic-board');if(!boardEl)return;
+  boardEl.innerHTML='';
+  for(let r=0;r<8;r++){
+    for(let c=0;c<8;c++){
+      const cell=document.createElement('div');
+      const isLight=(r+c)%2===0;
+      cell.className='ic-cell '+(isLight?'light':'dark');
+      if(IC.selected&&IC.selected.r===r&&IC.selected.c===c)cell.classList.add('selected');
+      if(IC.validMoves.some(m=>m.r===r&&m.c===c)){
+        const target=IC.board[r][c];
+        if(target)cell.classList.add('capture-move');
+        else cell.classList.add('valid-move');
+      }
+      const piece=IC.board[r][c];
+      if(piece) cell.textContent=icGlyph(piece);
+      cell.onclick=()=>icPlayerClick(r,c);
+      boardEl.appendChild(cell);
+    }
+  }
+}
+
+function icPlayerClick(r,c){
+  if(IC.over||IC.turn!=='white'||IC.thinking) return;
+  const piece=IC.board[r][c];
+  if(IC.selected&&IC.validMoves.some(m=>m.r===r&&m.c===c)){
+    const mv=IC.validMoves.find(m=>m.r===r&&m.c===c);
+    icMakeMove(IC.selected.r,IC.selected.c,r,c,mv);
+    IC.selected=null;IC.validMoves=[];
+    renderIntChessBoard();
+    if(IC.over) return;
+    // Check AI turn
+    if(icHasNoMoves(false)){
+      IC.over=true;
+      icSetStatus(icIsInCheck(false)?'白方胜！将死！':'平局（逼和）');
+      icSay(icIsInCheck(false)?'你赢了！将死AI！🎉':'平局！势均力敌！');
+      return;
+    }
+    icSetStatus('AI思考中…');IC.thinking=true;renderIntChessBoard();
+    setTimeout(()=>icAiMove(),400);
+    return;
+  }
+  if(piece&&piece.white){
+    IC.selected={r,c};
+    IC.validMoves=icGetMoves(r,c);
+    renderIntChessBoard();
+  } else {
+    IC.selected=null;IC.validMoves=[];
+    renderIntChessBoard();
+  }
+}
+
+function icMakeMove(fr,fc,tr,tc,mv){
+  const piece=IC.board[fr][fc];
+  IC.board[tr][tc]=piece;
+  IC.board[fr][fc]=null;
+  IC.enPassant=mv?.doublePawn?{r:fr+(piece.white?-1:1),c:fc}:null;
+  // En passant capture
+  if(mv?.ep) IC.board[fr][tc]=null;
+  // Castling rook
+  if(mv?.castleK){IC.board[tr][tc-1]=IC.board[tr][tc+1];IC.board[tr][tc+1]=null;}
+  if(mv?.castleQ){IC.board[tr][tc+1]=IC.board[tr][tc-2];IC.board[tr][tc-2]=null;}
+  // Update castling rights
+  if(piece.t==='k'){if(piece.white){IC.castling.wK=false;IC.castling.wQR=false;IC.castling.wKR=false;}else{IC.castling.bK=false;IC.castling.bQR=false;IC.castling.bKR=false;}}
+  if(piece.t==='r'){if(fr===7&&fc===0)IC.castling.wQR=false;if(fr===7&&fc===7)IC.castling.wKR=false;if(fr===0&&fc===0)IC.castling.bQR=false;if(fr===0&&fc===7)IC.castling.bKR=false;}
+  IC.moveCount++;
+  // Pawn promotion
+  if(piece.t==='p'&&(tr===0||tr===7)){
+    IC.board[tr][tc]={t:'q',white:piece.white}; // auto-promote to queen
+  }
+  IC.turn=IC.turn==='white'?'black':'white';
+  // Check game state for moving player's opponent
+  const oppWhite=!piece.white;
+  if(icIsInCheck(oppWhite)){
+    if(icHasNoMoves(oppWhite)){IC.over=true;icSetStatus(piece.white?'白方胜！将死！':'黑方胜！将死！');return;}
+    icSetStatus(oppWhite?'黑方被将军！':'白方被将军！');
+  } else {
+    if(icHasNoMoves(oppWhite)){IC.over=true;icSetStatus('平局（逼和）');return;}
+    icSetStatus(oppWhite?'AI回合（黑方）':'轮到你了（白方）');
+  }
+}
+
+function icHasNoMoves(white){
+  for(let r=0;r<8;r++) for(let c=0;c<8;c++){
+    const p=IC.board[r][c];
+    if(!p||p.white!==white) continue;
+    if(icGetMoves(r,c).length>0) return false;
+  }
+  return true;
+}
+
+function icEvaluate(board){
+  board=board||IC.board;
+  let score=0;
+  for(let r=0;r<8;r++) for(let c=0;c<8;c++){
+    const p=board[r][c];if(!p)continue;
+    const v=IC_VAL[p.t]||0;
+    score+=(p.white?1:-1)*v;
+  }
+  return score;
+}
+
+function icNegamax(board,depth,alpha,beta,white,enPassant,castling){
+  if(depth===0) return (white?1:-1)*icEvaluate(board);
+  let best=-Infinity;
+  for(let r=0;r<8;r++) for(let c=0;c<8;c++){
+    const p=board[r][c];if(!p||p.white!==white)continue;
+    const moves=icGetRawMoves(r,c,board,enPassant,castling).filter(mv=>{
+      const nb=board.map(row=>[...row]);
+      nb[mv.r][mv.c]=nb[r][c];nb[r][c]=null;
+      if(mv.ep)nb[r][mv.c]=null;
+      return !icIsInCheck(white,nb,mv.doublePawn?{r:r+(white?-1:1),c}:null);
+    });
+    for(const mv of moves){
+      const nb=board.map(row=>[...row]);
+      const nep=mv.doublePawn?{r:r+(white?-1:1),c}:null;
+      nb[mv.r][mv.c]=nb[r][c];nb[r][c]=null;
+      if(mv.ep)nb[r][mv.c]=null;
+      if(nb[mv.r][mv.c]&&nb[mv.r][mv.c].t==='p'&&(mv.r===0||mv.r===7))nb[mv.r][mv.c]={t:'q',white};
+      const v=-icNegamax(nb,depth-1,-beta,-alpha,!white,nep,castling);
+      if(v>best)best=v;
+      if(v>alpha)alpha=v;
+      if(alpha>=beta)return best;
+    }
+  }
+  return best===Infinity?10000:best;
+}
+
+function icAiHeuristic(){
+  const difficulty=IC.difficulty||'normal';
+  const depth=difficulty==='beginner'?1:difficulty==='hard'?3:2;
+  let best=null,bestScore=-Infinity;
+  for(let r=0;r<8;r++) for(let c=0;c<8;c++){
+    const p=IC.board[r][c];if(!p||p.white)continue;
+    const moves=icGetMoves(r,c);
+    for(const mv of moves){
+      // Random move for beginner 30% of time
+      if(difficulty==='beginner'&&Math.random()<0.3){
+        return {fr:r,fc:c,mv};
+      }
+      const nb=IC.board.map(row=>[...row]);
+      const nep=mv.doublePawn?{r:r+1,c}:null;
+      nb[mv.r][mv.c]=nb[r][c];nb[r][c]=null;
+      if(mv.ep)nb[r][mv.c]=null;
+      if(nb[mv.r][mv.c]&&nb[mv.r][mv.c].t==='p'&&(mv.r===0||mv.r===7))nb[mv.r][mv.c]={t:'q',white:false};
+      const score=-icNegamax(nb,depth-1,-Infinity,Infinity,true,nep,IC.castling);
+      if(score>bestScore){bestScore=score;best={fr:r,fc:c,mv};}
+    }
+  }
+  return best;
+}
+
+async function icAiMove(){
+  const contact=IC.contactId?S._contacts[IC.contactId]:Object.values(S._contacts||{})[0];
+  const useKey=contact?.apiKey||S.settings.apiKey;
+  let chosen=null;
+
+  if(useKey&&IC.difficulty!=='beginner'){
+    try{
+      const rows='ABCDEFGH';
+      const aiName=contact?.name||'AI';
+      const model=contact?.model||S.settings.model||'openai/gpt-4o-mini';
+      let boardTxt='';
+      for(let r=0;r<8;r++){
+        boardTxt+=`${8-r} `;
+        for(let c=0;c<8;c++){const p=IC.board[r][c];boardTxt+=(p?icGlyph(p):'.')+ ' ';}
+        boardTxt+='\n';
+      }
+      boardTxt+='  A B C D E F G H';
+      const prompt=`你是${aiName}，下国际象棋，你执黑方。白方在你的对面。棋盘：\n${boardTxt}\n请选择一步合法的落棋并用中文评论。只返回JSON：{"from":"A1","to":"A2","comment":"一句话"}（列A-H，行1-8）`;
+      const res=await fetch(contact?.apiUrl||'https://openrouter.ai/api/v1/chat/completions',{
+        method:'POST',
+        headers:{'Authorization':`Bearer ${useKey}`,'Content-Type':'application/json','HTTP-Referer':'https://raimos.app','X-Title':'Raimos'},
+        body:JSON.stringify({model,max_tokens:80,stream:false,messages:[{role:'user',content:prompt}]}),
+      });
+      const data=await res.json();
+      const txt=data.choices?.[0]?.message?.content||'';
+      const m=txt.match(/\{[\s\S]*?\}/);
+      if(m){
+        const p=JSON.parse(m[0]);
+        const fc=rows.indexOf(p.from?.[0]?.toUpperCase());
+        const fr=8-parseInt(p.from?.[1]);
+        const tc=rows.indexOf(p.to?.[0]?.toUpperCase());
+        const tr=8-parseInt(p.to?.[1]);
+        if(fc>=0&&fr>=0&&tc>=0&&tr>=0){
+          const legalMoves=icGetMoves(fr,fc);
+          const lm=legalMoves.find(mv=>mv.r===tr&&mv.c===tc);
+          if(lm) chosen={fr,fc,mv:lm,comment:p.comment};
+        }
+      }
+    }catch(e){}
+  }
+
+  if(!chosen) chosen=icAiHeuristic();
+  if(!chosen){IC.over=true;icSetStatus('白方胜！');IC.thinking=false;renderIntChessBoard();return;}
+
+  icMakeMove(chosen.fr,chosen.fc,chosen.mv.r,chosen.mv.c,chosen.mv);
+  IC.thinking=false;
+  renderIntChessBoard();
+  if(chosen.comment&&IC.commentary) icSay(chosen.comment);
+  if(IC.over) return;
+  // Final check for white player
+  if(icIsInCheck(true)){
+    if(icHasNoMoves(true)){IC.over=true;icSetStatus('黑方胜！将死！');icSay('哈哈，将死你了！');return;}
+    icSetStatus('白方被将军！轮到你了～');
+  } else if(icHasNoMoves(true)){
+    IC.over=true;icSetStatus('平局（逼和）');icSay('平局了～');
+  } else {
+    icSetStatus('轮到你了（白方）');
+  }
 }

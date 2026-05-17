@@ -2179,6 +2179,7 @@ async function uploadToCloudinary(fileOrDataUrl, folder='raimos') {
 //  FILES
 // ══════════════════════════════
 function triggerFile(){haptic(8);$i('file-upload').click();}
+function triggerChatPhoto(){haptic(8);$i('chat-photo-upload').click();}
 function triggerFileOrStopRec() {
   if (S.isRecording) { stopRecToInput(); }
   else { triggerFile(); }
@@ -2286,7 +2287,20 @@ function toggleEmoji(e){
 }
 
 function insertEmoji(e){const i=$i('msg-input');if(!i)return;const s=i.selectionStart||0,end=i.selectionEnd||0;i.value=i.value.slice(0,s)+e+i.value.slice(end);i.selectionStart=i.selectionEnd=s+[...e].reduce((n,c)=>n+c.length,0);}
-async function sendSticker(sk){const chat=S._chats[S.currentChat];if(!chat)return;await addMsg(S.currentChat,{role:'user',type:'sticker',content:sk.content||sk.label||'',url:sk.url,isImg:sk.isImg});await renderMsgs();scrollTo_(false);$i('emoji-picker').classList.remove('show');}
+async function sendSticker(sk){
+  const chat=S._chats[S.currentChat];if(!chat)return;
+  $i('emoji-picker').classList.remove('show');
+  const stickerModal=$i('sticker-modal');if(stickerModal)stickerModal.classList.remove('show');
+  if(sk.isImg){
+    // Real image → send as type:'image' so AI can see it
+    await addMsg(S.currentChat,{role:'user',type:'image',imageData:sk.url,url:sk.url,content:'[图片]'});
+    await renderMsgs();scrollTo_(false);
+    await callAI(S.currentChat);
+  } else {
+    await addMsg(S.currentChat,{role:'user',type:'sticker',content:sk.content||sk.label||'',url:sk.url,isImg:false});
+    await renderMsgs();scrollTo_(false);
+  }
+}
 // ══════════════════════════════════════════════════════
 //  相册（照片 + 表情包合并管理）
 // ══════════════════════════════════════════════════════
@@ -5970,7 +5984,7 @@ const XIANGQI = {
   moveCount: 0,
   startTime: 0,
   contactId: null,
-  prefs: { boardColor:'classic', commentary:true, difficulty:'normal' },
+  prefs: { boardColor:'classic', commentFreq:'normal', difficulty:'normal' },
 };
 
 const XQ_BOARD_COLORS = { classic:'xq-board-classic', pink:'xq-board-pink', purple:'xq-board-purple', green:'xq-board-green', dark:'xq-board-dark' };
@@ -6148,8 +6162,8 @@ function xqHeuristic(board, side) {
 async function loadXiangqiPrefs() {
   const saved = await getSetting('xiangqiPrefs');
   if (saved) Object.assign(XIANGQI.prefs, saved);
-  const ct = $i('xq-commentary-toggle');
-  if (ct) ct.checked = XIANGQI.prefs.commentary;
+  const cf = $i('xq-comment-freq');
+  if (cf) cf.value = XIANGQI.prefs.commentFreq || 'normal';
   document.querySelectorAll('#xq-color-row .gmk-color-swatch').forEach(el => {
     el.classList.toggle('active', el.dataset.color === XIANGQI.prefs.boardColor);
   });
@@ -6174,7 +6188,7 @@ function setXiangqiBoard(color, el) {
   saveXiangqiPrefs();
 }
 
-function toggleXiangqiCommentary(val) { XIANGQI.prefs.commentary = val; saveXiangqiPrefs(); }
+function setXiangqiCommentFreq(val) { XIANGQI.prefs.commentFreq = val; saveXiangqiPrefs(); }
 
 function toggleXiangqiSettings() {
   const panel = $i('xiangqi-settings');
@@ -6345,7 +6359,9 @@ async function xqAiMove() {
   XIANGQI.moveCount++;
   XIANGQI.turn = 'red';
   renderXiangqiBoard();
-  if (comment && XIANGQI.prefs.commentary) xqSay(comment);
+  const freq = XIANGQI.prefs.commentFreq || 'normal';
+  const shouldComment = freq === 'off' ? false : freq === 'high' ? true : freq === 'low' ? XIANGQI.moveCount % 5 === 0 : XIANGQI.moveCount % 3 === 0;
+  if (comment && shouldComment) xqSay(comment);
 
   const redKing = XIANGQI.board.flat().some(p=>p?.type==='king'&&p?.side==='red');
   if (!redKing || !xqAllLegalMoves(XIANGQI.board,'red').length) {
@@ -6448,7 +6464,7 @@ const INTCHESS = {
   moveCount: 0,
   startTime: 0,
   contactId: null,
-  prefs: { boardColor:'classic', commentary:true, difficulty:'normal' },
+  prefs: { boardColor:'classic', commentFreq:'normal', difficulty:'normal' },
   enPassant: null,  // square pawn can capture en passant
   castling: { wK:true, wQR:true, bK:true, bQR:true }, // can castle flags
 };
@@ -6590,8 +6606,8 @@ function icHeuristic(board, side, enPassant, castling) {
 
 async function loadIntChessPrefs() {
   const saved=await getSetting('intChessPrefs');if(saved)Object.assign(INTCHESS.prefs,saved);
-  const ct=$i('ic-commentary-toggle');if(ct)ct.checked=INTCHESS.prefs.commentary;
-  document.querySelectorAll('#ic-color-row .gmk-color-swatch').forEach(el=>el.classList.toggle('active',el.dataset.color===INTCHESS.prefs.boardColor));
+  const cf=$i('ic-comment-freq');if(cf)cf.value=INTCHESS.prefs.commentFreq||'normal';
+  document.querySelectorAll('#ic-color-row .ic-color-swatch').forEach(el=>el.classList.toggle('active',el.dataset.color===INTCHESS.prefs.boardColor));
   document.querySelectorAll('#intchess-settings .gmk-diff-btn').forEach(el=>el.classList.toggle('active',el.dataset.diff===INTCHESS.prefs.difficulty));
 }
 async function saveIntChessPrefs(){await saveSetting('intChessPrefs',INTCHESS.prefs);}
@@ -6614,7 +6630,7 @@ function setIntChessBoard(color,el){
   const board=$i('ic-board');if(board)board.className='ic-board '+(IC_BOARD_COLORS[color]||'ic-board-classic');
   saveIntChessPrefs();
 }
-function toggleIntChessCommentary(val){INTCHESS.prefs.commentary=val;saveIntChessPrefs();}
+function setIntChessCommentFreq(val){INTCHESS.prefs.commentFreq=val;saveIntChessPrefs();}
 function toggleIntChessSettings(){
   const panel=$i('intchess-settings');if(!panel)return;
   const show=panel.style.display==='none';panel.style.display=show?'':'none';
@@ -6741,7 +6757,9 @@ async function icAiMove(){
   if(icType(INTCHESS.board[move.toR][move.toC])==='P'&&move.toR===7)INTCHESS.board[move.toR][move.toC]='bQ';
   INTCHESS.moveCount++;INTCHESS.turn='w';
   renderIntChessBoard();
-  if(comment&&INTCHESS.prefs.commentary)icSay(comment);
+  const freq = INTCHESS.prefs.commentFreq || 'normal';
+  const shouldComment = freq === 'off' ? false : freq === 'high' ? true : freq === 'low' ? INTCHESS.moveCount % 5 === 0 : INTCHESS.moveCount % 3 === 0;
+  if(comment&&shouldComment)icSay(comment);
   const allWMoves=icAllLegalMoves(INTCHESS.board,'w',INTCHESS.enPassant,INTCHESS.castling);
   if(!allWMoves.length){INTCHESS.over=true;if(icIsInCheck(INTCHESS.board,'w')){icSetStatus('将死！AI赢了！');await icFinish('ai_win');}else{icSetStatus('逼和！平局～');await icFinish('draw');}return;}
   if(icIsInCheck(INTCHESS.board,'w')){icSetStatus('⚠️ 你被将军了！');}else{icSetStatus('轮到你了！');}
@@ -7555,6 +7573,16 @@ const FLY_ROMANCE_EVENTS = [
   '说出一个你认为比告白更勇敢的爱情行为🦋',
   '你觉得接受还是拒绝一段感情，哪个需要更大的勇气？🫧',
   '描述一个让你觉得"这就是爱情"的电影或故事场景🎬',
+  '你最喜欢对方身上哪一点是你最难以抗拒的？💫',
+  '如果可以和对方做一件从未尝试过的事，你最想做什么？🌟',
+  '你有没有因为对方的一个动作或眼神，突然心跳加速？描述一下💓',
+  '你觉得两个人在一起，什么样的瞬间最让你感到幸福？💝',
+  '如果要给对方写一段心里话，你最想让他/她知道什么？💌',
+  '什么时候你会觉得对方是你最重要的人？举个例子说说🥰',
+  '你觉得两个人在一起，最难维持的是什么？你们是怎么处理的？🌹',
+  '描述你心目中和对方最完美的一天，从早到晚🌅',
+  '你有哪些小习惯是专门为对方养成的？💗',
+  '如果用一个拥抱来表达你现在的心情，你想要多长时间的拥抱？🤗',
 ];
 
 const FLY_DEEP_EVENTS = [
@@ -7590,6 +7618,11 @@ const FLY_DEEP_EVENTS = [
   '你觉得什么是你生命中最不可替代的体验？✨',
   '如果你的人生只能传递一个信息给下一代，是什么？📚',
   '你有没有感受过被命运安排的时刻？分享一下🌌',
+  '你觉得真正了解一个人最重要的是什么？怎样才算真正了解？💞',
+  '如果可以看见对方内心最深处的想法，你会怕吗？为什么？🌌',
+  '你觉得在感情里，什么事情是你绝对不愿意妥协的？❤️',
+  '你有没有一个时刻，觉得自己真的很依赖某个人？是什么感觉？🌙',
+  '你觉得维持一段长久关系最难的挑战是什么？如何面对？🌿',
 ];
 
 const FLY_DAILY_EVENTS = [
@@ -7661,9 +7694,32 @@ const FLY = {
   over: false,
   lastDice: 0,
   spaceTypes: [],
+  contactId: null,
+  _aiName: null,
 };
 
 // ── Setup ──
+function renderFlyAiSelector() {
+  const el = $i('fly-ai-selector');
+  if (!el) return;
+  el.innerHTML = '';
+  const contacts = Object.values(S._contacts);
+  if (!contacts.length) {
+    el.innerHTML = '<span style="font-size:12px;color:var(--text3)">还没有AI助手，先去添加～</span>';
+    return;
+  }
+  contacts.forEach(c => {
+    const btn = document.createElement('button');
+    btn.className = 'fly-ai-selector-btn' + (FLY.contactId === c.id ? ' active' : '');
+    const av = c.avatar?.startsWith('data:') ? `<img src="${c.avatar}" style="width:22px;height:22px;border-radius:50%;object-fit:cover">` : `<span style="font-size:18px">${c.avatar||'🤖'}</span>`;
+    btn.innerHTML = `${av}<span>${esc(c.name)}</span>`;
+    btn.onclick = () => { FLY.contactId = c.id; renderFlyAiSelector(); };
+    el.appendChild(btn);
+  });
+  // Auto-select first if none selected
+  if (!FLY.contactId && contacts.length) FLY.contactId = contacts[0].id;
+}
+
 function initFlySetup() {
   FLY.playerCount = 2;
   FLY.over = false;
@@ -7673,6 +7729,7 @@ function initFlySetup() {
   document.querySelectorAll('.fly-count-btn').forEach((btn, i) => {
     btn.classList.toggle('active', i === 0); // 2人 is index 0
   });
+  renderFlyAiSelector();
 }
 
 function setFlyPlayerCount(n, el) {
@@ -7966,10 +8023,14 @@ function flyShowEvent(eventText, type, playerIdx) {
   const typeEl = $i('fly-event-type');
   const playerEl = $i('fly-event-player');
   const textEl = $i('fly-event-text');
+  const answerInput = $i('fly-answer-input');
+  const submitBtn = $i('fly-submit-btn');
+  const aiResponse = $i('fly-ai-response');
+  const continueBtn = $i('fly-continue-btn');
   if (!overlay || !card) return;
 
   const typeInfo = {
-    romance: { label: '💗 浪漫事件', class: 'romance' },
+    romance: { label: '💗 浪漫问答', class: 'romance' },
     deep:    { label: '💭 深度问答', class: 'deep' },
     daily:   { label: '☀️ 日常挑战', class: 'daily' },
     challenge: { label: '🎯 趣味挑战', class: 'challenge' },
@@ -7983,16 +8044,74 @@ function flyShowEvent(eventText, type, playerIdx) {
   if (playerEl) playerEl.textContent = `${p?.emoji || ''} ${p?.name || '玩家'} 触发`;
   if (textEl) textEl.textContent = eventText;
 
-  overlay.style.display = 'flex';
+  // Reset answer section
+  if (answerInput) { answerInput.value = ''; answerInput.disabled = false; }
+  if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = '📤 提交给AI'; submitBtn.style.display = ''; }
+  if (aiResponse) { aiResponse.className = 'fly-ai-response'; }
+  if (continueBtn) continueBtn.style.display = 'none';
 
-  // Store current player for when done
+  overlay.style.display = 'flex';
   FLY._pendingEventPlayer = playerIdx;
+  FLY._pendingEventText = eventText;
+  FLY._pendingEventType = type;
 }
 
 function flyEventDone() {
   const overlay = $i('fly-event-overlay');
   if (overlay) overlay.style.display = 'none';
+  const answerInput = $i('fly-answer-input');
+  if (answerInput) answerInput.value = '';
   setTimeout(flyNextTurn, 300);
+}
+
+async function flySubmitAnswer() {
+  const answerInput = $i('fly-answer-input');
+  const submitBtn = $i('fly-submit-btn');
+  const aiResponse = $i('fly-ai-response');
+  const aiResponseText = $i('fly-ai-response-text');
+  const aiResponseLabel = $i('fly-ai-response-label');
+  const continueBtn = $i('fly-continue-btn');
+
+  const answer = answerInput?.value?.trim();
+  if (!answer) { toast('请先输入你的回答～'); return; }
+
+  if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'AI思考中…'; }
+  if (answerInput) answerInput.disabled = true;
+
+  const contact = FLY.contactId ? S._contacts[FLY.contactId] : Object.values(S._contacts)[0];
+  const aiName = contact?.name || 'AI';
+  const useKey = contact?.apiKey || S.settings?.apiKey;
+
+  if (aiResponseLabel) aiResponseLabel.textContent = `🤖 ${aiName} 的回应：`;
+
+  let aiReply = '';
+  if (useKey) {
+    try {
+      const p = FLY.players[FLY._pendingEventPlayer];
+      const prompt = `你是${aiName}，正在和用户玩飞行棋情侣互动游戏。
+问题：${FLY._pendingEventText}
+${p?.name || '玩家'}的回答：${answer}
+请用温柔、有互动感的语气回应他们的回答，可以追问、分享你的看法、或给予鼓励。回应要自然、亲密、有温度，2-3句话即可。只返回JSON：{"reply":"回应内容"}`;
+      const res = await fetch(contact?.apiUrl || 'https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${useKey}`, 'Content-Type': 'application/json', 'HTTP-Referer': 'https://raimos.app', 'X-Title': 'Raimos' },
+        body: JSON.stringify({ model: contact?.model || 'openai/gpt-4o-mini', max_tokens: 150, stream: false, temperature: 0.85, messages: [{ role: 'user', content: prompt }] })
+      });
+      const data = await res.json();
+      const txt = data.choices?.[0]?.message?.content || '';
+      const m = txt.match(/\{[\s\S]*?\}/);
+      if (m) aiReply = JSON.parse(m[0]).reply || '';
+    } catch(e) {}
+  }
+  if (!aiReply) {
+    const defaults = ['好有趣的回答！我也觉得～💕', '谢谢你的分享，听起来好棒！🌸', '我很喜欢你这样想，继续加油～✨', '哇，没想到你会这么回答，真可爱！😊'];
+    aiReply = defaults[Math.floor(Math.random() * defaults.length)];
+  }
+
+  if (aiResponseText) aiResponseText.textContent = aiReply;
+  if (aiResponse) aiResponse.className = 'fly-ai-response visible';
+  if (submitBtn) submitBtn.style.display = 'none';
+  if (continueBtn) continueBtn.style.display = 'block';
 }
 
 function flyNextTurn() {

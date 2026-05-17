@@ -107,11 +107,13 @@
     <div id="mob-input-bar">
       <button id="input-expand-btn" onclick="toggleExpandInput()" title="展开/收起输入框">⤢</button>
       <button class="ibtn ibtn-g" id="btn-emoji" onclick="toggleEmoji(event)" type="button">😊</button>
-      <button class="ibtn ibtn-g" id="btn-sticker" onclick="openChatAlbum()" title="表情包 / 我的相册">🖼️</button>
+      <button class="ibtn ibtn-g" id="btn-photo" onclick="triggerChatPhoto()" title="从相册选图">📷</button>
+      <button class="ibtn ibtn-g" id="btn-sticker" onclick="openChatAlbum()" title="表情包 / 贴纸">🖼️</button>
     </div>
     <div id="input-row">
       <button class="ibtn ibtn-g mob-hidden" id="input-expand-btn-desk" onclick="toggleExpandInput()" title="展开/收起输入框" style="display:none;font-size:13px">⤢</button>
       <button class="ibtn ibtn-g mob-hidden" id="btn-emoji-desk" onclick="toggleEmoji(event)" type="button">😊</button>
+      <button class="ibtn ibtn-g" id="btn-photo-desk" onclick="triggerChatPhoto()" title="从相册选图">📷</button>
       <button class="ibtn ibtn-g" id="btn-file" onclick="triggerFileOrStopRec()" title="发文件/图片">📎</button>
       <div class="input-ta-wrap">
         <textarea id="msg-input" placeholder="发消息…（Enter 换行，Ctrl/⌘+Enter 发送）" rows="1" onkeydown="onKey(event)" oninput="autoH(this);onInputTyping()"></textarea>
@@ -682,7 +684,7 @@
 <!-- ── GOMOKU PAGE ── -->
 <div class="page" id="gomoku-page">
   <div class="page-header" style="flex-wrap:wrap;gap:6px">
-    <button class="page-back-btn" onclick="switchPage('chess-page')">‹ 返回</button>
+    <button class="page-back-btn" onclick="if(confirm('确定退出游戏？'))switchPage('chess-page')">✕ 退出</button>
     <h2>⚫ 五子棋</h2>
     <div style="display:flex;gap:5px;margin-left:auto;flex-shrink:0">
       <button class="btn-s" style="font-size:11px;padding:4px 9px" onclick="openGomokuRecords()" title="对战记录">📊 战绩</button>
@@ -762,6 +764,9 @@
         <option value="high">高（每步）</option>
       </select>
     </div>
+    <div class="gmk-settings-section" style="padding-bottom:4px">
+      <button class="settings-save-btn" onclick="saveGomokuPrefs();toggleGomokuSettings()">💾 保存设置</button>
+    </div>
   </div>
   <div class="gomoku-wrap">
     <div class="gomoku-info-bar">
@@ -785,7 +790,7 @@
 <!-- ── GO PAGE ── -->
 <div class="page" id="go-page">
   <div class="page-header" style="flex-wrap:wrap;gap:6px">
-    <button class="page-back-btn" onclick="switchPage('chess-page')">‹ 返回</button>
+    <button class="page-back-btn" onclick="if(confirm('确定退出游戏？'))switchPage('chess-page')">✕ 退出</button>
     <h2>⚫ 围棋 13×13</h2>
     <div style="display:flex;gap:5px;margin-left:auto;flex-shrink:0">
       <button class="btn-s" style="font-size:11px;padding:4px 9px" onclick="openGoRecords()" title="对战记录">📊 战绩</button>
@@ -865,6 +870,9 @@
         <option value="high">高（每步）</option>
       </select>
     </div>
+    <div class="gmk-settings-section" style="padding-bottom:4px">
+      <button class="settings-save-btn" onclick="saveGoPrefs();toggleGoSettings()">💾 保存设置</button>
+    </div>
   </div>
   <div class="gomoku-wrap">
     <div class="gomoku-info-bar">
@@ -907,6 +915,12 @@
       <div class="fly-setup-section">
         <div class="fly-setup-title">✏️ 玩家名称</div>
         <div id="fly-setup-players"></div>
+      </div>
+      <div class="fly-setup-section">
+        <div class="fly-setup-title">🤖 选择AI助手</div>
+        <div class="fly-ai-selector-section">
+          <div class="fly-ai-selector-grid" id="fly-ai-selector"></div>
+        </div>
       </div>
       <div class="fly-setup-section fly-rules-box">
         <div class="fly-setup-title">📋 游戏规则</div>
@@ -1034,12 +1048,21 @@
 </div>
 
 <!-- ── FLY EVENT OVERLAY ── -->
-<div id="fly-event-overlay" style="display:none" onclick="">
-  <div class="fly-event-card" id="fly-event-card">
+<div id="fly-event-overlay" style="display:none">
+  <div class="fly-event-card" id="fly-event-card" style="max-height:90vh;overflow-y:auto">
     <div class="fly-event-type" id="fly-event-type">💗 浪漫事件</div>
     <div class="fly-event-player" id="fly-event-player">玩家触发</div>
     <div class="fly-event-text" id="fly-event-text"></div>
-    <button class="btn-p" style="width:100%;margin-top:12px" onclick="flyEventDone()">✓ 完成！前进</button>
+    <div class="fly-event-answer-section" id="fly-answer-section">
+      <div class="fly-event-answer-label" id="fly-answer-label">✍️ 请回答：</div>
+      <textarea class="fly-event-answer-input" id="fly-answer-input" placeholder="在这里输入你的回答…" rows="3"></textarea>
+      <button class="fly-event-submit-btn" id="fly-submit-btn" onclick="flySubmitAnswer()">📤 提交给AI</button>
+    </div>
+    <div class="fly-ai-response" id="fly-ai-response">
+      <div class="fly-ai-response-label" id="fly-ai-response-label">🤖 AI回应：</div>
+      <div id="fly-ai-response-text"></div>
+    </div>
+    <button class="fly-event-continue-btn" id="fly-continue-btn" style="margin-top:10px;display:none" onclick="flyEventDone()">✓ 继续游戏</button>
   </div>
 </div>
 
@@ -1141,7 +1164,7 @@
 <!-- ── XIANGQI PAGE ── -->
 <div class="page" id="xiangqi-page">
   <div class="page-header" style="flex-wrap:wrap;gap:6px">
-    <button class="page-back-btn" onclick="switchPage('chess-page')">‹ 返回</button>
+    <button class="page-back-btn" onclick="if(confirm('确定退出游戏？'))switchPage('chess-page')">✕ 退出</button>
     <h2>♜ 中国象棋</h2>
     <div style="display:flex;gap:5px;margin-left:auto;flex-shrink:0">
       <button class="btn-s" style="font-size:11px;padding:4px 9px" onclick="openXiangqiRecords()">📊 战绩</button>
@@ -1155,6 +1178,16 @@
       <div class="gmk-ai-selector" id="xq-ai-selector"></div>
     </div>
     <div class="gmk-settings-section">
+      <div class="gmk-settings-label">棋盘颜色</div>
+      <div class="gmk-color-row" id="xq-color-row">
+        <div class="gmk-color-swatch active" data-color="classic" style="background:#f0d9a0" title="经典" onclick="setXiangqiBoard('classic',this)"></div>
+        <div class="gmk-color-swatch" data-color="pink" style="background:#f5b8cc" title="樱粉" onclick="setXiangqiBoard('pink',this)"></div>
+        <div class="gmk-color-swatch" data-color="purple" style="background:#c8b8f5" title="薰衣草" onclick="setXiangqiBoard('purple',this)"></div>
+        <div class="gmk-color-swatch" data-color="green" style="background:#b8f0d0" title="抹茶" onclick="setXiangqiBoard('green',this)"></div>
+        <div class="gmk-color-swatch" data-color="dark" style="background:#4a3728" title="深棕" onclick="setXiangqiBoard('dark',this)"></div>
+      </div>
+    </div>
+    <div class="gmk-settings-section">
       <div class="gmk-settings-label">AI难度</div>
       <div class="gmk-diff-row">
         <button class="gmk-diff-btn active" data-diff="beginner" onclick="setXiangqiDiff('beginner',this)">😊 新手</button>
@@ -1162,12 +1195,17 @@
         <button class="gmk-diff-btn" data-diff="hard" onclick="setXiangqiDiff('hard',this)">🔥 专业</button>
       </div>
     </div>
-    <div class="gmk-settings-section" style="flex-direction:row;align-items:center;justify-content:space-between">
-      <div class="gmk-settings-label" style="margin-bottom:0">AI评论</div>
-      <label class="toggle" style="flex-shrink:0">
-        <input type="checkbox" id="xq-commentary-toggle" checked onchange="XIANGQI.prefs.commentary=this.checked"/>
-        <span class="tslider"></span>
-      </label>
+    <div class="gmk-settings-section">
+      <div class="gmk-settings-label">AI评论频率</div>
+      <select id="xq-comment-freq" onchange="setXiangqiCommentFreq(this.value)" style="padding:4px 8px;border-radius:8px;border:1.5px solid var(--border)">
+        <option value="off">关闭</option>
+        <option value="low">低（每5步）</option>
+        <option value="normal" selected>适中（每3步）</option>
+        <option value="high">高（每步）</option>
+      </select>
+    </div>
+    <div class="gmk-settings-section" style="padding-bottom:4px">
+      <button class="settings-save-btn" onclick="saveXiangqiPrefs();toggleXiangqiSettings()">💾 保存设置</button>
     </div>
   </div>
   <div class="gomoku-wrap" style="overflow:auto">
@@ -1186,7 +1224,7 @@
 <!-- ── INTCHESS PAGE ── -->
 <div class="page" id="intchess-page">
   <div class="page-header" style="flex-wrap:wrap;gap:6px">
-    <button class="page-back-btn" onclick="switchPage('chess-page')">‹ 返回</button>
+    <button class="page-back-btn" onclick="if(confirm('确定退出游戏？'))switchPage('chess-page')">✕ 退出</button>
     <h2>♛ 国际象棋</h2>
     <div style="display:flex;gap:5px;margin-left:auto;flex-shrink:0">
       <button class="btn-s" style="font-size:11px;padding:4px 9px" onclick="openIntChessRecords()">📊 战绩</button>
@@ -1217,12 +1255,17 @@
         <div class="ic-color-swatch" data-color="purple" style="background:#c4b5fd" title="紫色" onclick="setIntChessColor('purple',this)"></div>
       </div>
     </div>
-    <div class="gmk-settings-section" style="flex-direction:row;align-items:center;justify-content:space-between">
-      <div class="gmk-settings-label" style="margin-bottom:0">AI评论</div>
-      <label class="toggle" style="flex-shrink:0">
-        <input type="checkbox" id="ic-commentary-toggle" checked onchange="INTCHESS.prefs.commentary=this.checked"/>
-        <span class="tslider"></span>
-      </label>
+    <div class="gmk-settings-section">
+      <div class="gmk-settings-label">AI评论频率</div>
+      <select id="ic-comment-freq" onchange="setIntChessCommentFreq(this.value)" style="padding:4px 8px;border-radius:8px;border:1.5px solid var(--border)">
+        <option value="off">关闭</option>
+        <option value="low">低（每5步）</option>
+        <option value="normal" selected>适中（每3步）</option>
+        <option value="high">高（每步）</option>
+      </select>
+    </div>
+    <div class="gmk-settings-section" style="padding-bottom:4px">
+      <button class="settings-save-btn" onclick="saveIntChessPrefs();toggleIntChessSettings()">💾 保存设置</button>
     </div>
   </div>
   <div class="gomoku-wrap" style="overflow:auto">
@@ -2085,6 +2128,7 @@
 <div id="ptost"><span id="ptost-txt">嗨！</span><button class="ptclose" onclick="$i('ptost').classList.remove('show')">✕</button></div>
 
 <input type="file" id="file-upload" accept="image/*,application/pdf,.txt,.md,.doc,.docx" multiple style="display:none" onchange="handleFiles(this)"/>
+<input type="file" id="chat-photo-upload" accept="image/*" multiple style="display:none" onchange="handleFiles(this)"/>
 <input type="file" id="compose-pic-file" accept="image/*" multiple style="display:none" onchange="handleComposePic(this)"/>
 <input type="file" id="compose-pic-modal-file" accept="image/*" multiple style="display:none" onchange="handleComposePic(this,'modal')"/>
 <input type="file" id="companion-media-file" accept="image/*,video/*,audio/*" style="display:none" onchange="handleCompanionMedia(this)"/>

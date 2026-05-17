@@ -1303,7 +1303,7 @@ body.comp-immersive #comp-panel{display:none;}
   transition: opacity .5s; display: flex; align-items: center; justify-content: center;
   font-style: italic; flex-shrink: 0; opacity: 0;
 }
-.gomoku-board-scroll { overflow: auto; -webkit-overflow-scrolling: touch; width: 100%; display: flex; justify-content: center; flex: 1; min-height: 0; }
+.gomoku-board-scroll { overflow: auto; -webkit-overflow-scrolling: touch; width: 100%; display: flex; justify-content: safe center; flex: 1; min-height: 0; }
 .gomoku-board {
   display: grid; grid-template-columns: repeat(15, 1fr); grid-template-rows: repeat(15, 1fr);
   background: #c8a05e; border-radius: 8px;
@@ -2431,14 +2431,14 @@ button, a, .nav-tab, .nav-logo, .chat-item, .ibtn, .hbtn, .act-btn,
 }
 .ic-cell.light { background: #f0d9b5; }
 .ic-cell.dark  { background: #b58863; }
-.ic-board.ic-pink .ic-cell.light { background: #fce7f3; }
-.ic-board.ic-pink .ic-cell.dark  { background: #f472b6; }
-.ic-board.ic-blue .ic-cell.light { background: #dbeafe; }
-.ic-board.ic-blue .ic-cell.dark  { background: #3b82f6; }
-.ic-board.ic-green .ic-cell.light { background: #dcfce7; }
-.ic-board.ic-green .ic-cell.dark  { background: #22c55e; }
-.ic-board.ic-purple .ic-cell.light { background: #ede9fe; }
-.ic-board.ic-purple .ic-cell.dark  { background: #8b5cf6; }
+.ic-board.ic-board-pink .ic-cell.light { background: #fce7f3; }
+.ic-board.ic-board-pink .ic-cell.dark  { background: #f472b6; }
+.ic-board.ic-board-blue .ic-cell.light { background: #dbeafe; }
+.ic-board.ic-board-blue .ic-cell.dark  { background: #3b82f6; }
+.ic-board.ic-board-green .ic-cell.light { background: #dcfce7; }
+.ic-board.ic-board-green .ic-cell.dark  { background: #22c55e; }
+.ic-board.ic-board-purple .ic-cell.light { background: #ede9fe; }
+.ic-board.ic-board-purple .ic-cell.dark  { background: #8b5cf6; }
 .ic-cell.selected { background: #7fc97f !important; }
 .ic-cell.valid-move::after {
   content: ''; position: absolute; width: 28px; height: 28px;
@@ -2457,3 +2457,21 @@ button, a, .nav-tab, .nav-logo, .chat-item, .ibtn, .hbtn, .act-btn,
   cursor: pointer; transition: border-color .15s;
 }
 .ic-color-swatch.active { border-color: var(--accent); }
+.fly-event-answer-section { margin-top: 12px; display: flex; flex-direction: column; gap: 8px; }
+.fly-event-answer-label { font-size: 12px; font-weight: 700; color: var(--text2); }
+.fly-event-answer-input { width: 100%; padding: 10px 12px; border-radius: 12px; border: 1.5px solid var(--border); background: var(--bg); font-family: inherit; font-size: 14px; resize: none; min-height: 70px; box-sizing: border-box; color: var(--text); }
+.fly-event-answer-input:focus { outline: none; border-color: var(--accent); }
+.fly-ai-response { margin-top: 10px; padding: 10px 12px; border-radius: 12px; background: var(--hover); border: 1.5px solid var(--border); font-size: 13px; color: var(--text); line-height: 1.6; display: none; }
+.fly-ai-response.visible { display: block; }
+.fly-ai-response-label { font-size: 11px; font-weight: 700; color: var(--accent); margin-bottom: 4px; }
+.fly-event-submit-btn { width: 100%; padding: 10px; font-size: 14px; border-radius: 12px; border: none; background: var(--accent); color: #fff; cursor: pointer; font-family: inherit; font-weight: 700; transition: opacity .15s; }
+.fly-event-submit-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.fly-event-continue-btn { width: 100%; padding: 10px; font-size: 14px; border-radius: 12px; border: 1.5px solid var(--border); background: var(--bg); color: var(--text); cursor: pointer; font-family: inherit; font-weight: 600; }
+.fly-ai-selector-section { margin-top: 12px; }
+.fly-ai-selector-label { font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 8px; }
+.fly-ai-selector-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+.fly-ai-selector-btn { display: flex; align-items: center; gap: 6px; padding: 8px 12px; border-radius: 20px; border: 1.5px solid var(--border); background: var(--bg); cursor: pointer; font-size: 13px; font-family: inherit; transition: border-color .15s, background .15s; }
+.fly-ai-selector-btn.active { border-color: var(--accent); background: var(--hover); }
+.game-quit-btn { background: none; border: 1.5px solid var(--border); border-radius: 8px; padding: 5px 10px; font-size: 12px; cursor: pointer; color: var(--text2); font-family: inherit; transition: background .15s; }
+.game-quit-btn:hover { background: var(--hover); }
+.settings-save-btn { width: 100%; padding: 9px; margin-top: 8px; border-radius: 10px; border: none; background: var(--accent); color: #fff; font-size: 14px; font-family: inherit; font-weight: 700; cursor: pointer; }

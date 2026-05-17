@@ -1058,12 +1058,93 @@
   </div>
 </div>
 
+<!-- ── XIANGQI RESULT MODAL ── -->
+<div class="overlay" id="xiangqi-result-overlay">
+  <div class="gmk-result-card">
+    <div class="gmk-result-confetti" id="xq-confetti"></div>
+    <div class="gmk-result-cat" id="xq-result-cat"></div>
+    <div class="gmk-result-title" id="xq-result-title">游戏结束</div>
+    <div class="gmk-result-vs">
+      <div class="gmk-result-player">
+        <div class="gmk-result-avatar" id="xq-result-player-av">😊</div>
+        <div class="gmk-result-name">你</div>
+        <div class="gmk-result-badge" id="xq-result-player-badge"></div>
+      </div>
+      <div class="gmk-result-vstext">VS</div>
+      <div class="gmk-result-player">
+        <div class="gmk-result-avatar" id="xq-result-ai-av">🤖</div>
+        <div class="gmk-result-name" id="xq-result-ai-name">AI</div>
+        <div class="gmk-result-badge" id="xq-result-ai-badge"></div>
+      </div>
+    </div>
+    <div class="gmk-result-stats" id="xq-result-stats"></div>
+    <div class="gmk-result-btns">
+      <button class="btn-s" onclick="closeXiangqiResult();switchPage('chess-page')">返回</button>
+      <button class="btn-p" onclick="closeXiangqiResult();initXiangqi()">再来一局</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── XIANGQI RECORDS MODAL ── -->
+<div class="overlay" id="xiangqi-records-modal">
+  <div class="modal" style="max-width:420px;max-height:80vh;display:flex;flex-direction:column">
+    <h2>📊 象棋战绩 <button class="mclose" onclick="closeModal('xiangqi-records-modal')">✕</button></h2>
+    <div id="xq-records-summary" style="display:flex;gap:12px;margin-bottom:12px;padding:10px;background:var(--hover);border-radius:12px;text-align:center"></div>
+    <div id="xq-records-list" style="flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:8px"></div>
+    <div class="mbtns" style="margin-top:10px">
+      <button class="btn-s" style="color:#e74c3c;font-size:11px" onclick="clearXiangqiRecords()">清空记录</button>
+      <button class="btn-p" onclick="closeModal('xiangqi-records-modal')">关闭</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── INTCHESS RESULT MODAL ── -->
+<div class="overlay" id="intchess-result-overlay">
+  <div class="gmk-result-card">
+    <div class="gmk-result-confetti" id="ic-confetti"></div>
+    <div class="gmk-result-cat" id="ic-result-cat"></div>
+    <div class="gmk-result-title" id="ic-result-title">游戏结束</div>
+    <div class="gmk-result-vs">
+      <div class="gmk-result-player">
+        <div class="gmk-result-avatar" id="ic-result-player-av">😊</div>
+        <div class="gmk-result-name">你</div>
+        <div class="gmk-result-badge" id="ic-result-player-badge"></div>
+      </div>
+      <div class="gmk-result-vstext">VS</div>
+      <div class="gmk-result-player">
+        <div class="gmk-result-avatar" id="ic-result-ai-av">🤖</div>
+        <div class="gmk-result-name" id="ic-result-ai-name">AI</div>
+        <div class="gmk-result-badge" id="ic-result-ai-badge"></div>
+      </div>
+    </div>
+    <div class="gmk-result-stats" id="ic-result-stats"></div>
+    <div class="gmk-result-btns">
+      <button class="btn-s" onclick="closeIntChessResult();switchPage('chess-page')">返回</button>
+      <button class="btn-p" onclick="closeIntChessResult();initIntChess()">再来一局</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── INTCHESS RECORDS MODAL ── -->
+<div class="overlay" id="intchess-records-modal">
+  <div class="modal" style="max-width:420px;max-height:80vh;display:flex;flex-direction:column">
+    <h2>📊 国际象棋战绩 <button class="mclose" onclick="closeModal('intchess-records-modal')">✕</button></h2>
+    <div id="ic-records-summary" style="display:flex;gap:12px;margin-bottom:12px;padding:10px;background:var(--hover);border-radius:12px;text-align:center"></div>
+    <div id="ic-records-list" style="flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:8px"></div>
+    <div class="mbtns" style="margin-top:10px">
+      <button class="btn-s" style="color:#e74c3c;font-size:11px" onclick="clearIntChessRecords()">清空记录</button>
+      <button class="btn-p" onclick="closeModal('intchess-records-modal')">关闭</button>
+    </div>
+  </div>
+</div>
+
 <!-- ── XIANGQI PAGE ── -->
 <div class="page" id="xiangqi-page">
   <div class="page-header" style="flex-wrap:wrap;gap:6px">
     <button class="page-back-btn" onclick="switchPage('chess-page')">‹ 返回</button>
     <h2>♜ 中国象棋</h2>
     <div style="display:flex;gap:5px;margin-left:auto;flex-shrink:0">
+      <button class="btn-s" style="font-size:11px;padding:4px 9px" onclick="openXiangqiRecords()">📊 战绩</button>
       <button class="btn-s" style="font-size:11px;padding:4px 9px" onclick="toggleXiangqiSettings()">⚙️ 设置</button>
       <button class="btn-s" style="font-size:11px;padding:4px 9px" onclick="initXiangqi()">🔄 重开</button>
     </div>
@@ -1084,7 +1165,7 @@
     <div class="gmk-settings-section" style="flex-direction:row;align-items:center;justify-content:space-between">
       <div class="gmk-settings-label" style="margin-bottom:0">AI评论</div>
       <label class="toggle" style="flex-shrink:0">
-        <input type="checkbox" id="xq-commentary-toggle" checked onchange="XQ.commentary=this.checked"/>
+        <input type="checkbox" id="xq-commentary-toggle" checked onchange="XIANGQI.prefs.commentary=this.checked"/>
         <span class="tslider"></span>
       </label>
     </div>
@@ -1108,6 +1189,7 @@
     <button class="page-back-btn" onclick="switchPage('chess-page')">‹ 返回</button>
     <h2>♛ 国际象棋</h2>
     <div style="display:flex;gap:5px;margin-left:auto;flex-shrink:0">
+      <button class="btn-s" style="font-size:11px;padding:4px 9px" onclick="openIntChessRecords()">📊 战绩</button>
       <button class="btn-s" style="font-size:11px;padding:4px 9px" onclick="toggleIntChessSettings()">⚙️ 设置</button>
       <button class="btn-s" style="font-size:11px;padding:4px 9px" onclick="initIntChess()">🔄 重开</button>
     </div>
@@ -1138,7 +1220,7 @@
     <div class="gmk-settings-section" style="flex-direction:row;align-items:center;justify-content:space-between">
       <div class="gmk-settings-label" style="margin-bottom:0">AI评论</div>
       <label class="toggle" style="flex-shrink:0">
-        <input type="checkbox" id="ic-commentary-toggle" checked onchange="IC.commentary=this.checked"/>
+        <input type="checkbox" id="ic-commentary-toggle" checked onchange="INTCHESS.prefs.commentary=this.checked"/>
         <span class="tslider"></span>
       </label>
     </div>

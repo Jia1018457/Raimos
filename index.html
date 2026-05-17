@@ -663,17 +663,17 @@
         <div class="chess-desc">国际智力运动</div>
         <div class="chess-tag chess-tag-available">立即游戏</div>
       </div>
-      <div class="chess-card chess-coming" onclick="toast('围棋即将上线～')">
+      <div class="chess-card chess-available" onclick="switchPage('go-page');initGo()">
         <div class="chess-icon">🔵</div>
         <div class="chess-name">围棋</div>
         <div class="chess-desc">方圆之道，万变之妙</div>
-        <div class="chess-tag chess-tag-coming">即将推出</div>
+        <div class="chess-tag chess-tag-available">立即游戏</div>
       </div>
-      <div class="chess-card chess-coming" onclick="toast('飞行棋即将上线～')">
+      <div class="chess-card chess-available" onclick="switchPage('fly-setup-page');initFlySetup()">
         <div class="chess-icon">✈️</div>
         <div class="chess-name">飞行棋</div>
         <div class="chess-desc">欢乐飞行对战</div>
-        <div class="chess-tag chess-tag-coming">即将推出</div>
+        <div class="chess-tag chess-tag-available">立即游戏</div>
       </div>
     </div>
   </div>
@@ -746,37 +746,50 @@
   </div>
 </div>
 
-<!-- ── XIANGQI PAGE ── -->
-<div class="page" id="xiangqi-page">
+<!-- ── GO PAGE ── -->
+<div class="page" id="go-page">
   <div class="page-header" style="flex-wrap:wrap;gap:6px">
     <button class="page-back-btn" onclick="switchPage('chess-page')">‹ 返回</button>
-    <h2>♜ 中国象棋</h2>
+    <h2>⚫ 围棋 13×13</h2>
     <div style="display:flex;gap:5px;margin-left:auto;flex-shrink:0">
-      <button class="btn-s" style="font-size:11px;padding:4px 9px" onclick="openXiangqiRecords()" title="对战记录">📊 战绩</button>
-      <button class="btn-s" style="font-size:11px;padding:4px 9px" onclick="toggleXiangqiSettings()" title="棋盘设置">⚙️ 设置</button>
-      <button class="btn-s" style="font-size:11px;padding:4px 9px" onclick="initXiangqi()">🔄 重开</button>
+      <button class="btn-s" style="font-size:11px;padding:4px 9px" onclick="openGoRecords()" title="对战记录">📊 战绩</button>
+      <button class="btn-s" style="font-size:11px;padding:4px 9px" onclick="toggleGoSettings()" title="棋盘设置">⚙️ 设置</button>
+      <button class="btn-s" style="font-size:11px;padding:4px 9px" onclick="initGo()">🔄 重开</button>
     </div>
   </div>
   <!-- Settings Panel -->
-  <div class="xq-settings-panel" id="xiangqi-settings" style="display:none">
+  <div class="gmk-settings-panel" id="go-settings" style="display:none">
     <div class="gmk-settings-section">
       <div class="gmk-settings-label">选择对手</div>
-      <div class="gmk-ai-selector" id="xq-ai-selector"></div>
+      <div class="gmk-ai-selector" id="go-ai-selector"></div>
     </div>
     <div class="gmk-settings-section">
       <div class="gmk-settings-label">棋盘颜色</div>
-      <div class="gmk-color-row" id="xq-color-row">
-        <div class="gmk-color-swatch active" data-color="classic" style="background:#f0c070" title="传统" onclick="setXiangqiBoard('classic',this)"></div>
-        <div class="gmk-color-swatch" data-color="pink" style="background:#f5b8cc" title="樱粉" onclick="setXiangqiBoard('pink',this)"></div>
-        <div class="gmk-color-swatch" data-color="purple" style="background:#c8b8f5" title="薰衣草" onclick="setXiangqiBoard('purple',this)"></div>
-        <div class="gmk-color-swatch" data-color="green" style="background:#b8f0d0" title="抹茶" onclick="setXiangqiBoard('green',this)"></div>
-        <div class="gmk-color-swatch" data-color="dark" style="background:#3a2a1a" title="深棕" onclick="setXiangqiBoard('dark',this)"></div>
+      <div class="gmk-color-row" id="go-color-row">
+        <div class="gmk-color-swatch active" data-color="wood" style="background:#c8a05e" title="木色" onclick="setGoBoard('wood',this)"></div>
+        <div class="gmk-color-swatch" data-color="pink" style="background:#f5b8cc" title="樱粉" onclick="setGoBoard('pink',this)"></div>
+        <div class="gmk-color-swatch" data-color="purple" style="background:#c8b8f5" title="薰衣草" onclick="setGoBoard('purple',this)"></div>
+        <div class="gmk-color-swatch" data-color="blue" style="background:#b8d8f5" title="天蓝" onclick="setGoBoard('blue',this)"></div>
+        <div class="gmk-color-swatch" data-color="green" style="background:#b8f0d0" title="抹茶" onclick="setGoBoard('green',this)"></div>
+        <div class="gmk-color-swatch" data-color="dark" style="background:#4a3728" title="深棕" onclick="setGoBoard('dark',this)"></div>
+      </div>
+    </div>
+    <div class="gmk-settings-section">
+      <div class="gmk-settings-label">棋子样式</div>
+      <div class="gmk-piece-row" id="go-piece-row">
+        <button class="gmk-piece-btn active" data-style="classic" onclick="setGoPiece('classic',this)">⚫⚪<span>经典</span></button>
+        <button class="gmk-piece-btn" data-style="bear" onclick="setGoPiece('bear',this)">🐻🐼<span>小熊</span></button>
+        <button class="gmk-piece-btn" data-style="cat" onclick="setGoPiece('cat',this)">🐱😺<span>小猫</span></button>
+        <button class="gmk-piece-btn" data-style="fox" onclick="setGoPiece('fox',this)">🦊🦝<span>小狐</span></button>
+        <button class="gmk-piece-btn" data-style="rabbit" onclick="setGoPiece('rabbit',this)">🐰🐇<span>小兔</span></button>
+        <button class="gmk-piece-btn" data-style="dog" onclick="setGoPiece('dog',this)">🐶🐕<span>小狗</span></button>
+        <button class="gmk-piece-btn" data-style="wolf" onclick="setGoPiece('wolf',this)">🐺🦴<span>小狼</span></button>
       </div>
     </div>
     <div class="gmk-settings-section" style="flex-direction:row;align-items:center;justify-content:space-between">
       <div class="gmk-settings-label" style="margin-bottom:0">游戏过程中AI评论</div>
       <label class="toggle" style="flex-shrink:0">
-        <input type="checkbox" id="xq-commentary-toggle" onchange="toggleXiangqiCommentary(this.checked)"/>
+        <input type="checkbox" id="go-commentary-toggle" onchange="toggleGoCommentary(this.checked)"/>
         <span class="tslider"></span>
       </label>
     </div>
@@ -784,75 +797,79 @@
   <div class="gomoku-wrap">
     <div class="gomoku-info-bar">
       <div class="gomoku-player">
-        <span id="xq-player-piece" style="font-size:18px">♟</span>
-        <span id="xq-player-label">你（红方）</span>
+        <div class="gmk-stone-indicator black" id="go-player-piece"></div>
+        <span>你（黑子）<br><small id="go-player-caps" style="color:var(--text3)">提0子</small></span>
       </div>
-      <div class="gomoku-status" id="xiangqi-status">等待开始…</div>
+      <div class="gomoku-status" id="go-status">等待开始…</div>
       <div class="gomoku-player">
-        <span id="xq-ai-piece" style="font-size:18px">♟</span>
-        <span id="xiangqi-ai-name">AI（黑方）</span>
+        <div class="gmk-stone-indicator white" id="go-ai-piece"></div>
+        <span id="go-ai-name">AI（白子）</span><br><small id="go-ai-caps" style="color:var(--text3)">提0子</small>
       </div>
     </div>
-    <div class="gomoku-ai-say" id="xiangqi-comment"></div>
-    <div class="xq-selected-info" id="xq-selected-info" style="font-size:11px;color:var(--accent);min-height:16px;text-align:center"></div>
+    <div class="gomoku-ai-say" id="go-comment"></div>
+    <div style="display:flex;justify-content:center;padding:6px 0">
+      <button class="btn-s" id="go-pass-btn" onclick="goPass()" style="font-size:12px;padding:5px 16px">虚手（Pass）</button>
+    </div>
     <div class="gomoku-board-scroll">
-      <div class="xq-board xq-board-classic" id="xiangqi-board"></div>
+      <div class="go-board gmk-board-wood" id="go-board"></div>
     </div>
   </div>
 </div>
 
-<!-- ── INTERNATIONAL CHESS PAGE ── -->
-<div class="page" id="intchess-page">
-  <div class="page-header" style="flex-wrap:wrap;gap:6px">
+<!-- ── FLY SETUP PAGE ── -->
+<div class="page" id="fly-setup-page">
+  <div class="page-header">
     <button class="page-back-btn" onclick="switchPage('chess-page')">‹ 返回</button>
-    <h2>♛ 国际象棋</h2>
-    <div style="display:flex;gap:5px;margin-left:auto;flex-shrink:0">
-      <button class="btn-s" style="font-size:11px;padding:4px 9px" onclick="openIntChessRecords()" title="对战记录">📊 战绩</button>
-      <button class="btn-s" style="font-size:11px;padding:4px 9px" onclick="toggleIntChessSettings()" title="棋盘设置">⚙️ 设置</button>
-      <button class="btn-s" style="font-size:11px;padding:4px 9px" onclick="initIntChess()">🔄 重开</button>
+    <h2>✈️ 飞行棋</h2>
+  </div>
+  <div style="flex:1;overflow-y:auto;padding:16px">
+    <div class="fly-setup-wrap">
+      <div class="fly-setup-section">
+        <div class="fly-setup-title">🎮 选择人数</div>
+        <div class="fly-count-row">
+          <button class="fly-count-btn active" onclick="setFlyPlayerCount(2,this)">2人</button>
+          <button class="fly-count-btn" onclick="setFlyPlayerCount(3,this)">3人</button>
+          <button class="fly-count-btn" onclick="setFlyPlayerCount(4,this)">4人</button>
+        </div>
+      </div>
+      <div class="fly-setup-section">
+        <div class="fly-setup-title">✏️ 玩家名称</div>
+        <div id="fly-setup-players"></div>
+      </div>
+      <div class="fly-setup-section fly-rules-box">
+        <div class="fly-setup-title">📋 游戏规则</div>
+        <div class="fly-rules-text">
+          🎲 掷骰子决定步数，第一个走到终点的玩家获胜！<br>
+          💗 粉心格触发浪漫事件<br>
+          ⭐ 事件格触发随机问答<br>
+          ↑+3/+5 前进额外格数<br>
+          ↓-3 后退格数<br>
+          💤 跳过下一回合<br>
+          🎲 幸运格再掷一次<br>
+          ⭕ 安全格不受负面影响
+        </div>
+      </div>
+      <button class="btn-p" style="width:100%;padding:14px;font-size:16px;margin-top:8px" onclick="startFlyGame()">🚀 开始游戏</button>
     </div>
   </div>
-  <!-- Settings Panel -->
-  <div class="ic-settings-panel" id="intchess-settings" style="display:none">
-    <div class="gmk-settings-section">
-      <div class="gmk-settings-label">选择对手</div>
-      <div class="gmk-ai-selector" id="ic-ai-selector"></div>
-    </div>
-    <div class="gmk-settings-section">
-      <div class="gmk-settings-label">棋盘颜色</div>
-      <div class="gmk-color-row" id="ic-color-row">
-        <div class="gmk-color-swatch active" data-color="classic" style="background:#f0d9b5" title="传统" onclick="setIntChessBoard('classic',this)"></div>
-        <div class="gmk-color-swatch" data-color="pink" style="background:#f5b8cc" title="樱粉" onclick="setIntChessBoard('pink',this)"></div>
-        <div class="gmk-color-swatch" data-color="purple" style="background:#c8b8f5" title="薰衣草" onclick="setIntChessBoard('purple',this)"></div>
-        <div class="gmk-color-swatch" data-color="green" style="background:#4a7c59" title="绿色" onclick="setIntChessBoard('green',this)"></div>
-        <div class="gmk-color-swatch" data-color="blue" style="background:#4a6fa5" title="蓝色" onclick="setIntChessBoard('blue',this)"></div>
-      </div>
-    </div>
-    <div class="gmk-settings-section" style="flex-direction:row;align-items:center;justify-content:space-between">
-      <div class="gmk-settings-label" style="margin-bottom:0">游戏过程中AI评论</div>
-      <label class="toggle" style="flex-shrink:0">
-        <input type="checkbox" id="ic-commentary-toggle" onchange="toggleIntChessCommentary(this.checked)"/>
-        <span class="tslider"></span>
-      </label>
-    </div>
+</div>
+
+<!-- ── FLY GAME PAGE ── -->
+<div class="page" id="fly-page">
+  <div class="page-header">
+    <button class="page-back-btn" onclick="confirmFlyQuit()">‹ 返回</button>
+    <h2>✈️ 飞行棋</h2>
+    <button class="btn-s" style="font-size:11px;padding:4px 9px;margin-left:auto" onclick="confirmFlyQuit();setTimeout(()=>{switchPage('fly-setup-page');initFlySetup();},100)">🔄 重开</button>
   </div>
-  <div class="gomoku-wrap">
-    <div class="gomoku-info-bar">
-      <div class="gomoku-player">
-        <span id="ic-player-piece" style="font-size:18px">♙</span>
-        <span id="ic-player-label">你（白方）</span>
-      </div>
-      <div class="gomoku-status" id="intchess-status">等待开始…</div>
-      <div class="gomoku-player">
-        <span id="ic-ai-piece" style="font-size:18px">♟</span>
-        <span id="intchess-ai-name">AI（黑方）</span>
-      </div>
-    </div>
-    <div class="gomoku-ai-say" id="intchess-comment"></div>
-    <div class="xq-selected-info" id="ic-selected-info" style="font-size:11px;color:var(--accent);min-height:16px;text-align:center"></div>
-    <div class="gomoku-board-scroll">
-      <div class="ic-board ic-board-classic" id="intchess-board"></div>
-    </div>
+  <div id="fly-player-bar" class="fly-player-bar"></div>
+  <div class="fly-dice-area">
+    <div id="fly-turn-info" class="fly-turn-info">轮到玩家行动</div>
+    <button id="fly-dice-btn" class="fly-dice-btn" onclick="flyRollDice()">🎲 掷骰子</button>
+  </div>
+  <div class="fly-map-scroll" id="fly-map-scroll">
+    <div class="fly-map-deco">☁️ <span style="font-size:11px;color:var(--text3)">欢乐飞行棋</span> ⭐ 🌸 ☁️</div>
+    <div class="fly-map" id="fly-map"></div>
+    <div class="fly-map-deco">🌸 🌟 ☁️ <span style="font-size:11px;color:var(--text3)">加油！</span> 🌸</div>
   </div>
 </div>
 
@@ -899,84 +916,72 @@
   </div>
 </div>
 
-<!-- ── XIANGQI RESULT MODAL ── -->
-<div class="overlay" id="xiangqi-result-overlay">
+<!-- ── GO RESULT MODAL ── -->
+<div class="overlay" id="go-result-overlay">
   <div class="gmk-result-card">
-    <div class="gmk-result-confetti" id="xq-confetti"></div>
-    <div class="gmk-result-cat" id="xq-result-cat"></div>
-    <div class="gmk-result-title" id="xq-result-title">游戏结束</div>
+    <div class="gmk-result-confetti" id="go-confetti"></div>
+    <div class="gmk-result-cat" id="go-result-cat"></div>
+    <div class="gmk-result-title" id="go-result-title">游戏结束</div>
     <div class="gmk-result-vs">
       <div class="gmk-result-player">
-        <div class="gmk-result-avatar" id="xq-result-player-av">😊</div>
+        <div class="gmk-result-avatar" id="go-result-player-av">😊</div>
         <div class="gmk-result-name">你</div>
-        <div class="gmk-result-badge" id="xq-result-player-badge"></div>
+        <div class="gmk-result-badge" id="go-result-player-badge"></div>
       </div>
       <div class="gmk-result-vstext">VS</div>
       <div class="gmk-result-player">
-        <div class="gmk-result-avatar" id="xq-result-ai-av">🤖</div>
-        <div class="gmk-result-name" id="xq-result-ai-name">AI</div>
-        <div class="gmk-result-badge" id="xq-result-ai-badge"></div>
+        <div class="gmk-result-avatar" id="go-result-ai-av">🤖</div>
+        <div class="gmk-result-name" id="go-result-ai-name">AI</div>
+        <div class="gmk-result-badge" id="go-result-ai-badge"></div>
       </div>
     </div>
-    <div class="gmk-result-stats" id="xq-result-stats"></div>
+    <div class="gmk-result-stats" id="go-result-stats"></div>
     <div class="gmk-result-btns">
-      <button class="btn-s" onclick="closeXiangqiResult();switchPage('chess-page')">返回</button>
-      <button class="btn-p" onclick="closeXiangqiResult();initXiangqi()">再来一局</button>
-      <button class="btn-s" onclick="xiangqiShareToMoments()">发朋友圈</button>
+      <button class="btn-s" onclick="closeGoResult();switchPage('chess-page')">返回</button>
+      <button class="btn-p" onclick="closeGoResult();initGo()">再来一局</button>
     </div>
   </div>
 </div>
 
-<!-- ── XIANGQI RECORDS MODAL ── -->
-<div class="overlay" id="xiangqi-records-modal">
+<!-- ── GO RECORDS MODAL ── -->
+<div class="overlay" id="go-records-modal">
   <div class="modal" style="max-width:420px;max-height:80vh;display:flex;flex-direction:column">
-    <h2>📊 象棋战绩 <button class="mclose" onclick="closeModal('xiangqi-records-modal')">✕</button></h2>
-    <div id="xq-records-summary" style="display:flex;gap:12px;margin-bottom:12px;padding:10px;background:var(--hover);border-radius:12px;text-align:center"></div>
-    <div id="xq-records-list" style="flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:8px"></div>
+    <h2>📊 围棋战绩 <button class="mclose" onclick="closeModal('go-records-modal')">✕</button></h2>
+    <div id="go-records-summary" style="display:flex;gap:12px;margin-bottom:12px;padding:10px;background:var(--hover);border-radius:12px;text-align:center"></div>
+    <div id="go-records-list" style="flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:8px"></div>
     <div class="mbtns" style="margin-top:10px">
-      <button class="btn-s" style="color:#e74c3c;font-size:11px" onclick="clearXiangqiRecords()">清空记录</button>
-      <button class="btn-p" onclick="closeModal('xiangqi-records-modal')">关闭</button>
+      <button class="btn-s" style="color:#e74c3c;font-size:11px" onclick="clearGoRecords()">清空记录</button>
+      <button class="btn-p" onclick="closeModal('go-records-modal')">关闭</button>
     </div>
   </div>
 </div>
 
-<!-- ── INTCHESS RESULT MODAL ── -->
-<div class="overlay" id="intchess-result-overlay">
-  <div class="gmk-result-card">
-    <div class="gmk-result-confetti" id="ic-confetti"></div>
-    <div class="gmk-result-cat" id="ic-result-cat"></div>
-    <div class="gmk-result-title" id="ic-result-title">游戏结束</div>
-    <div class="gmk-result-vs">
-      <div class="gmk-result-player">
-        <div class="gmk-result-avatar" id="ic-result-player-av">😊</div>
-        <div class="gmk-result-name">你</div>
-        <div class="gmk-result-badge" id="ic-result-player-badge"></div>
-      </div>
-      <div class="gmk-result-vstext">VS</div>
-      <div class="gmk-result-player">
-        <div class="gmk-result-avatar" id="ic-result-ai-av">🤖</div>
-        <div class="gmk-result-name" id="ic-result-ai-name">AI</div>
-        <div class="gmk-result-badge" id="ic-result-ai-badge"></div>
-      </div>
-    </div>
-    <div class="gmk-result-stats" id="ic-result-stats"></div>
-    <div class="gmk-result-btns">
-      <button class="btn-s" onclick="closeIntChessResult();switchPage('chess-page')">返回</button>
-      <button class="btn-p" onclick="closeIntChessResult();initIntChess()">再来一局</button>
-      <button class="btn-s" onclick="intChessShareToMoments()">发朋友圈</button>
-    </div>
+<!-- ── FLY DICE ANIMATION OVERLAY ── -->
+<div id="fly-dice-overlay" style="display:none">
+  <div class="fly-dice-anim" id="fly-dice-anim">🎲</div>
+</div>
+
+<!-- ── FLY EVENT OVERLAY ── -->
+<div id="fly-event-overlay" style="display:none" onclick="">
+  <div class="fly-event-card" id="fly-event-card">
+    <div class="fly-event-type" id="fly-event-type">💗 浪漫事件</div>
+    <div class="fly-event-player" id="fly-event-player">玩家触发</div>
+    <div class="fly-event-text" id="fly-event-text"></div>
+    <button class="btn-p" style="width:100%;margin-top:12px" onclick="flyEventDone()">✓ 完成！前进</button>
   </div>
 </div>
 
-<!-- ── INTCHESS RECORDS MODAL ── -->
-<div class="overlay" id="intchess-records-modal">
-  <div class="modal" style="max-width:420px;max-height:80vh;display:flex;flex-direction:column">
-    <h2>📊 国际象棋战绩 <button class="mclose" onclick="closeModal('intchess-records-modal')">✕</button></h2>
-    <div id="ic-records-summary" style="display:flex;gap:12px;margin-bottom:12px;padding:10px;background:var(--hover);border-radius:12px;text-align:center"></div>
-    <div id="ic-records-list" style="flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:8px"></div>
-    <div class="mbtns" style="margin-top:10px">
-      <button class="btn-s" style="color:#e74c3c;font-size:11px" onclick="clearIntChessRecords()">清空记录</button>
-      <button class="btn-p" onclick="closeModal('intchess-records-modal')">关闭</button>
+<!-- ── FLY RESULT OVERLAY ── -->
+<div id="fly-result-overlay" style="display:none">
+  <div class="fly-result-card">
+    <div class="gmk-result-confetti" id="fly-confetti"></div>
+    <div class="fly-result-trophy">🏆</div>
+    <div class="fly-result-title" id="fly-result-title">游戏结束！</div>
+    <div class="fly-result-winner" id="fly-result-winner"></div>
+    <div class="fly-result-podium" id="fly-result-podium"></div>
+    <div class="gmk-result-btns" style="margin-top:16px">
+      <button class="btn-s" onclick="$i('fly-result-overlay').style.display='none';switchPage('chess-page')">返回</button>
+      <button class="btn-p" onclick="$i('fly-result-overlay').style.display='none';switchPage('fly-setup-page');initFlySetup()">再来一局</button>
     </div>
   </div>
 </div>

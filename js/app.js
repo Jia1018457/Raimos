@@ -3729,6 +3729,7 @@ function onInputTyping() {
 }
 function toast(msg,dur=2000){const t=$i('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),dur);}
 function closeModal(id){$i(id).classList.remove('show');}
+function openModal(id){$i(id).classList.add('show');}
 
 // ★ 修复表情按钮：outsideClick 不干扰 btn-emoji 本身的点击
 function outsideClick(e) {

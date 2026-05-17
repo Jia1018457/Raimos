@@ -937,7 +937,8 @@ function makeBubble(msg) {
     }
   } else if (msg.type === 'image') {
     b.className = 'bubble img-bub';
-    b.innerHTML = `<img src="${msg.url || ''}" alt="图片" onclick="openLB('${msg.url || ''}')" loading="lazy">`;
+    const _imgSrc = msg.imageData || msg.url || '';
+    b.innerHTML = `<img src="${_imgSrc}" alt="图片" onclick="openLB('${_imgSrc}')" loading="lazy">`;
   } else if (msg.type === 'sticker') {
     if (msg.isImg) { b.className = 'bubble img-bub'; b.style.maxWidth = '110px'; b.innerHTML = `<img src="${msg.url}" alt="表情包" onclick="openLB('${msg.url}')" loading="lazy">`; }
     else { b.className = 'bubble emoji-only'; b.textContent = msg.content; }
@@ -1031,7 +1032,8 @@ async function callAI(chatId) {
   const useKey = contact?.apiKey || s.apiKey;
   const useUrl = contact?.apiUrl || s.apiUrl || 'https://openrouter.ai/api/v1/chat/completions';
   if (!useKey) { toast('请先填写 API Key！'); return; }
-S.isStreaming = true; showTyping(); startHapticStream();
+  S._abortCtrl = new AbortController();
+  S.isStreaming = true; S._lockScroll = false; showTyping(); startHapticStream(); showStopBtn();
 const t0 = Date.now();
 try {
     const mems = await getRelevantMems(chatId, contact?.id || null);
@@ -1044,6 +1046,7 @@ try {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${useKey}`, 'Content-Type': 'application/json', 'HTTP-Referer': 'https://raimos.app', 'X-Title': 'Raimos' },
       body: JSON.stringify(body),
+      signal: S._abortCtrl.signal,
     });
     if (!res.ok) { const e = await res.json().catch(() => ({error:{message:'Error'}})); throw new Error(e.error?.message || res.statusText); }
     removeTyping();
@@ -1068,10 +1071,26 @@ try {
     autoMemCheck(chatId, contact?.id || null);
   } catch(e) {
     removeTyping();
-    await addMsg(chatId, { role:'ai', type:'text', content:`❌ 出错了：${e.message}` });
-    await renderMsgs(); scrollTo_(false);
+    if (e.name !== 'AbortError') {
+      await addMsg(chatId, { role:'ai', type:'text', content:`❌ 出错了：${e.message}` });
+      await renderMsgs(); scrollTo_(false);
+    }
   }
-  S.isStreaming = false; stopHapticStream();
+  S.isStreaming = false; S._lockScroll = false; S._abortCtrl = null; stopHapticStream(); hideStopBtn();
+}
+
+function stopGeneration() {
+  if (S._abortCtrl) { S._abortCtrl.abort(); removeTyping(); }
+}
+function showStopBtn() {
+  const b = $i('btn-stop'); if (b) b.style.display = 'flex';
+  const v = $i('btn-voice'); if (v) v.style.display = 'none';
+  const s = $i('btn-send'); if (s) s.style.display = 'none';
+}
+function hideStopBtn() {
+  const b = $i('btn-stop'); if (b) b.style.display = 'none';
+  const v = $i('btn-voice'); if (v) v.style.display = '';
+  const s = $i('btn-send'); if (s) s.style.display = '';
 }
 
 async function maybeAiSendImage(chatId, contact, context) {
@@ -1156,7 +1175,8 @@ async function buildMsgs(chat, contact, mems) {
   allMsgs.sort((a,b) => a.ts - b.ts);
   const recent = allMsgs.slice(-parseInt(cs(contact?.xCtx, S.settings.ctx))||20);
   for (const m of recent) {
-    if (m.type === 'image' && m.imageData) msgs.push({ role: m.role==='user'?'user':'assistant', content: [{type:'image_url',image_url:{url:m.imageData}},{type:'text',text:'（图片）'}] });
+    if (m.type === 'image' && m.imageData && m.role === 'user') msgs.push({ role:'user', content: [{type:'image_url',image_url:{url:m.imageData}},{type:'text',text:'（图片）'}] });
+    else if (m.type === 'image' && m.role !== 'user') msgs.push({ role:'assistant', content: m.content || '[图片]' });
     else if (m.type === 'voice' && m.transcript) msgs.push({ role: m.role==='user'?'user':'assistant', content:`[语音] ${m.transcript}` });
     else if (m.type === 'file') msgs.push({ role: m.role==='user'?'user':'assistant', content:`[文件: ${m.fileName}]` });
     else if (m.content) msgs.push({ role: m.role==='user'?'user':'assistant', content:m.content });
@@ -2361,31 +2381,35 @@ async function editAlbumLabel(photoId) {
   renderAlbum();
 }
 
-/** Pick best-matching album photo by keyword/context label matching */
+/** Pick best-matching album photo by keyword/context label matching — only returns if a label actually matches */
 async function pickAlbumPhoto(keywords) {
   const photos = await dbGetAll('album');
   if (!photos.length) return null;
   const kws = (keywords||'').toLowerCase().split(/[\s,，]+/).filter(Boolean);
+  if (!kws.length) return null;
   const scored = photos.map(p => {
     const lbl = (p.label||'').toLowerCase();
     const score = kws.reduce((s,k) => s + (lbl.includes(k)?1:0), 0);
     return {p, score};
   });
-  scored.sort((a,b) => b.score - a.score || Math.random() - 0.5);
-  return scored[0]?.p?.url || null;
+  scored.sort((a,b) => b.score - a.score);
+  if (!scored[0] || scored[0].score === 0) return null;
+  return scored[0].p.url || null;
 }
 
-/** Pick best-matching sticker by label */
+/** Pick best-matching sticker by label — only returns if a label actually matches */
 function pickSticker(keywords) {
   if (!S._stickers?.length) return null;
   const kws = (keywords||'').toLowerCase().split(/[\s,，]+/).filter(Boolean);
+  if (!kws.length) return null;
   const scored = S._stickers.filter(s=>s.isImg).map(s => {
     const lbl = (s.label||s.content||'').toLowerCase();
     const score = kws.reduce((acc,k)=>acc+(lbl.includes(k)?1:0),0);
     return {s, score};
   });
-  scored.sort((a,b) => b.score - a.score || Math.random() - 0.5);
-  return scored[0]?.s || null;
+  scored.sort((a,b) => b.score - a.score);
+  if (!scored[0] || scored[0].score === 0) return null;
+  return scored[0].s || null;
 }
 
 // ══════════════════════════════════════════════════════
@@ -2578,7 +2602,7 @@ async function addTextSticker(){const t=window.prompt('输入文字/emoji表情�
 // ══════════════════════════════
 //  MSG ACTIONS
 // ══════════════════════════════
-async function copyMsg(id){const msgs=await dbGetAll('messages','chatId',S.currentChat);const msg=msgs.find(m=>m.id===id);if(!msg)return;const txt=(msg.altVersions?.length&&msg.altIdx!=null)?msg.altVersions[msg.altIdx]?.content:msg.content;if(!txt)return;try{await navigator.clipboard.writeText(txt);haptic([5,3,5]);toast('✓ 已复制');}catch(e){const ta=document.createElement('textarea');ta.value=txt;ta.style.cssText='position:fixed;top:-9999px;left:-9999px;opacity:0';document.body.appendChild(ta);ta.focus();ta.select();try{document.execCommand('copy');haptic([5,3,5]);toast('✓ 已复制');}catch(e2){toast('❌ 复制失败，请长按手动复制');}finally{document.body.removeChild(ta);}}}
+async function copyMsg(id){const msgs=await dbGetAll('messages','chatId',S.currentChat);const msg=msgs.find(m=>m.id===id);if(!msg)return;const txt=(msg.altVersions?.length&&msg.altIdx!=null)?msg.altVersions[msg.altIdx]?.content:msg.content;if(!txt)return;try{await navigator.clipboard.writeText(txt);haptic([5,3,5]);toast('✓ 已复制');}catch(e){const ta=document.createElement('textarea');ta.value=txt;ta.setAttribute('readonly','');ta.style.cssText='position:fixed;top:0;left:0;width:1px;height:1px;opacity:0;pointer-events:none';document.body.appendChild(ta);ta.focus({preventScroll:true});ta.setSelectionRange(0,txt.length);try{const ok=document.execCommand('copy');haptic([5,3,5]);toast(ok?'✓ 已复制':'❌ 复制失败，请长按手动复制');}catch(e2){toast('❌ 复制失败，请长按手动复制');}finally{document.body.removeChild(ta);}}}
 async function deleteMsg(id){if(!confirm('删除这条消息？（不影响上下文其他内容）'))return;await dbDel('messages',id);fbDel('messages',id);haptic(15);await renderMsgs();}
 async function replyMsg(id){const msgs=await dbGetAll('messages','chatId',S.currentChat);const msg=msgs.find(m=>m.id===id);if(!msg)return;S.replyTo=msg;$i('reply-bar-txt').textContent=(msg.content||'[媒体]').slice(0,50);$i('reply-bar').classList.add('show');$i('msg-input').focus();}
 function cancelReply(){S.replyTo=null;$i('reply-bar').classList.remove('show');}
@@ -2654,7 +2678,8 @@ async function buildMsgsUpTo(chat, contact, mems, beforeMsgId) {
   const contextMsgs = cutIdx > 0 ? allMsgs.slice(0, cutIdx) : allMsgs.slice(0, -1);
   const recent = contextMsgs.slice(-parseInt(cs(contact?.xCtx, S.settings.ctx))||20);
   for (const m of recent) {
-    if (m.type==='image' && m.imageData) msgs.push({role:m.role==='user'?'user':'assistant',content:[{type:'image_url',image_url:{url:m.imageData}},{type:'text',text:'（图片）'}]});
+    if (m.type==='image' && m.imageData && m.role==='user') msgs.push({role:'user',content:[{type:'image_url',image_url:{url:m.imageData}},{type:'text',text:'（图片）'}]});
+    else if (m.type==='image' && m.role!=='user') msgs.push({role:'assistant',content:m.content||'[图片]'});
     else if (m.type==='voice' && m.transcript) msgs.push({role:m.role==='user'?'user':'assistant',content:`[语音] ${m.transcript}`});
     else if (m.type==='file') msgs.push({role:m.role==='user'?'user':'assistant',content:`[文件: ${m.fileName}]`});
     else if (m.content) msgs.push({role:m.role==='user'?'user':'assistant',content:m.content});
@@ -2706,9 +2731,11 @@ function initScrollObs(){
     $i('fab-top').classList.toggle('vis',!atTop);
     $i('fab-bottom').classList.toggle('vis',!atBot);
     updateMinimapViewport();
+    if (S.isStreaming && !atBot) S._lockScroll = true;
+    if (atBot) S._lockScroll = false;
   });
 }
-function scrollTo_(top,instant){const ca=$i('chat-area');ca.scrollTo({top:top?0:ca.scrollHeight,behavior:instant?'auto':'smooth'});}
+function scrollTo_(top,instant){if(!top && S._lockScroll)return;const ca=$i('chat-area');ca.scrollTo({top:top?0:ca.scrollHeight,behavior:instant?'auto':'smooth'});}
 
 // ══════════════════════════════
 //  MINIMAP
@@ -4815,17 +4842,6 @@ function companionStart() {
       S._companion._statTick = 0;
       const cid = S.currentChat ? S._chats[S.currentChat]?.contactId : null;
       void _updateCompanionStats({ sessDelta: 60, contactId: cid });
-      // Periodically log minutes to linked check-in goal (every 5 min)
-      const linkedId = S.settings.companionLinkedGoalId;
-      if (linkedId && S._companion.sessionRealStart) {
-        const totalElapsed = Math.floor((Date.now() - S._companion.sessionRealStart) / 1000);
-        const totalMins = Math.floor(totalElapsed / 60);
-        const newMins = totalMins - (S._companion._ckMinutesLogged || 0);
-        if (newMins >= 5 && typeof ckAddCompanionMinutes === 'function') {
-          S._companion._ckMinutesLogged = totalMins;
-          void ckAddCompanionMinutes(linkedId, newMins);
-        }
-      }
     }
   }, 1000);
   companionSetupSpeechTimer();
@@ -5074,12 +5090,18 @@ function _companionFsChange() {
 function companionExitImmersive() {
   S._companion.immersive = false;
   document.body.classList.remove('comp-immersive');
+  const bar = $i('comp-imm-bar'); if (bar) bar.classList.remove('imm-hidden');
   updateCompanionStartBtn();
   companionExitImmersiveOrientation();
   if (document.exitFullscreen && document.fullscreenElement) document.exitFullscreen();
   else if (document.webkitExitFullscreen && document.webkitFullscreenElement) document.webkitExitFullscreen();
   document.removeEventListener('fullscreenchange', _companionFsChange);
   document.removeEventListener('webkitfullscreenchange', _companionFsChange);
+}
+function toggleImmBar() {
+  const bar = $i('comp-imm-bar'); if (!bar) return;
+  const hidden = bar.classList.toggle('imm-hidden');
+  const btn = $i('comp-imm-toggle'); if (btn) btn.textContent = hidden ? '⋯' : '✕';
 }
 
 // ── Picture-in-Picture (Document PiP) ──

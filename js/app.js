@@ -6091,7 +6091,7 @@ function setXiangqiBoard(color, el) {
   XIANGQI.prefs.boardColor = color;
   document.querySelectorAll('#xq-color-row .gmk-color-swatch').forEach(s=>s.classList.remove('active'));
   el.classList.add('active');
-  const board = $i('xiangqi-board');
+  const board = $i('xq-board');
   if (board) board.className = 'xq-board ' + (XQ_BOARD_COLORS[color]||'xq-board-classic');
   saveXiangqiPrefs();
 }
@@ -6131,7 +6131,7 @@ function xqGetContact() {
 function updateXiangqiAiDisplay() {
   const contact = xqGetContact();
   const aiName = contact?.name || 'AI';
-  const el = $i('xiangqi-ai-name');
+  const el = $i('xq-ai-name');
   if (el) el.textContent = `${aiName}（黑方）`;
 }
 
@@ -6145,7 +6145,7 @@ function initXiangqi() {
   XIANGQI.startTime = Date.now();
   if (!XIANGQI.contactId) XIANGQI.contactId = S.currentContact || Object.keys(S._contacts)[0] || null;
   loadXiangqiPrefs().then(() => {
-    const board = $i('xiangqi-board');
+    const board = $i('xq-board');
     if (board) board.className = 'xq-board ' + (XQ_BOARD_COLORS[XIANGQI.prefs.boardColor]||'xq-board-classic');
   });
   updateXiangqiAiDisplay();
@@ -6159,7 +6159,7 @@ function initXiangqi() {
 }
 
 function renderXiangqiBoard() {
-  const el = $i('xiangqi-board');
+  const el = $i('xq-board');
   if (!el) return;
   el.innerHTML = '';
   el.className = 'xq-board ' + (XQ_BOARD_COLORS[XIANGQI.prefs.boardColor]||'xq-board-classic');
@@ -6276,9 +6276,9 @@ async function xqAiMove() {
   if (xqIsInCheck(XIANGQI.board,'red')) { xqSetStatus('⚠️ 你被将军了！'); } else { xqSetStatus('轮到你了！'); }
 }
 
-function xqSetStatus(msg) { const el=$i('xiangqi-status'); if(el)el.textContent=msg; }
+function xqSetStatus(msg) { const el=$i('xq-status'); if(el)el.textContent=msg; }
 function xqSay(text) {
-  const el=$i('xiangqi-comment'); if(!el||!text)return;
+  const el=$i('xq-comment'); if(!el||!text)return;
   el.textContent=text; el.style.opacity='1'; clearTimeout(el._t);
   el._t=setTimeout(()=>{if(el)el.style.opacity='0';},5500);
 }
@@ -6519,7 +6519,7 @@ async function saveIntChessPrefs(){await saveSetting('intChessPrefs',INTCHESS.pr
 function setIntChessBoard(color,el){
   INTCHESS.prefs.boardColor=color;
   document.querySelectorAll('#ic-color-row .gmk-color-swatch').forEach(s=>s.classList.remove('active'));el.classList.add('active');
-  const board=$i('intchess-board');if(board)board.className='ic-board '+(IC_BOARD_COLORS[color]||'ic-board-classic');
+  const board=$i('ic-board');if(board)board.className='ic-board '+(IC_BOARD_COLORS[color]||'ic-board-classic');
   saveIntChessPrefs();
 }
 function toggleIntChessCommentary(val){INTCHESS.prefs.commentary=val;saveIntChessPrefs();}
@@ -6541,12 +6541,12 @@ function renderIntChessAiSelector(){
   });
 }
 function icGetContact(){return(INTCHESS.contactId?S._contacts[INTCHESS.contactId]:null)||(S.currentContact?S._contacts[S.currentContact]:null)||Object.values(S._contacts)[0]||null;}
-function updateIntChessAiDisplay(){const contact=icGetContact();const el=$i('intchess-ai-name');if(el)el.textContent=`${contact?.name||'AI'}（黑方）`;}
+function updateIntChessAiDisplay(){const contact=icGetContact();const el=$i('ic-ai-name');if(el)el.textContent=`${contact?.name||'AI'}（黑方）`;}
 
 function initIntChess(){
   INTCHESS.board=icInitBoard();INTCHESS.turn='w';INTCHESS.over=false;INTCHESS.selected=null;INTCHESS.moves=[];INTCHESS.moveCount=0;INTCHESS.startTime=Date.now();INTCHESS.enPassant=null;INTCHESS.castling={wK:true,wQR:true,bK:true,bQR:true};
   if(!INTCHESS.contactId)INTCHESS.contactId=S.currentContact||Object.keys(S._contacts)[0]||null;
-  loadIntChessPrefs().then(()=>{const board=$i('intchess-board');if(board)board.className='ic-board '+(IC_BOARD_COLORS[INTCHESS.prefs.boardColor]||'ic-board-classic');});
+  loadIntChessPrefs().then(()=>{const board=$i('ic-board');if(board)board.className='ic-board '+(IC_BOARD_COLORS[INTCHESS.prefs.boardColor]||'ic-board-classic');});
   updateIntChessAiDisplay();renderIntChessBoard();
   icSetStatus('你先行棋（白方）！');
   const contact=icGetContact();const aiName=contact?.name||'AI';
@@ -6555,7 +6555,7 @@ function initIntChess(){
 }
 
 function renderIntChessBoard(){
-  const el=$i('intchess-board');if(!el)return;el.innerHTML='';
+  const el=$i('ic-board');if(!el)return;el.innerHTML='';
   el.className='ic-board '+(IC_BOARD_COLORS[INTCHESS.prefs.boardColor]||'ic-board-classic');
   const movableSet=new Set(INTCHESS.moves.map(([r,c])=>r+','+c));
   for(let r=0;r<8;r++) for(let c=0;c<8;c++) {
@@ -6655,8 +6655,8 @@ async function icAiMove(){
   if(icIsInCheck(INTCHESS.board,'w')){icSetStatus('⚠️ 你被将军了！');}else{icSetStatus('轮到你了！');}
 }
 
-function icSetStatus(msg){const el=$i('intchess-status');if(el)el.textContent=msg;}
-function icSay(text){const el=$i('intchess-comment');if(!el||!text)return;el.textContent=text;el.style.opacity='1';clearTimeout(el._t);el._t=setTimeout(()=>{if(el)el.style.opacity='0';},5500);}
+function icSetStatus(msg){const el=$i('ic-status');if(el)el.textContent=msg;}
+function icSay(text){const el=$i('ic-comment');if(!el||!text)return;el.textContent=text;el.style.opacity='1';clearTimeout(el._t);el._t=setTimeout(()=>{if(el)el.style.opacity='0';},5500);}
 
 async function icFinish(result){
   const contact=icGetContact();const elapsed=Math.round((Date.now()-INTCHESS.startTime)/1000);

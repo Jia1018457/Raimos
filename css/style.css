@@ -1304,7 +1304,7 @@ body.comp-immersive #comp-panel{display:none;}
   transition: opacity .5s; display: flex; align-items: center; justify-content: center;
   font-style: italic; flex-shrink: 0; opacity: 0;
 }
-.gomoku-board-scroll { overflow: auto; -webkit-overflow-scrolling: touch; width: 100%; display: flex; justify-content: safe center; flex: 1; min-height: 0; }
+.gomoku-board-scroll { overflow: auto; -webkit-overflow-scrolling: touch; width: 100%; display: flex; justify-content: center; align-items: flex-start; flex: 1; min-height: 0; }
 .gomoku-board {
   display: grid; grid-template-columns: repeat(15, 1fr); grid-template-rows: repeat(15, 1fr);
   background: #c8a05e; border-radius: 8px;
@@ -1742,10 +1742,8 @@ button, a, .nav-tab, .nav-logo, .chat-item, .ibtn, .hbtn, .act-btn,
 #go-page .page-back-btn,
 #fly-page .page-back-btn,
 #fly-setup-page .page-back-btn,
-#xq-page .page-back-btn,
-#xq-setup-page .page-back-btn,
-#ic-page .page-back-btn,
-#ic-setup-page .page-back-btn {
+#xiangqi-page .page-back-btn,
+#intchess-page .page-back-btn {
   display: flex;
   align-items: center;
   gap: 4px;
@@ -2020,6 +2018,15 @@ button, a, .nav-tab, .nav-logo, .chat-item, .ibtn, .hbtn, .act-btn,
 }
 .fly-player-ai-select { flex: 1; background: transparent; border: none; outline: none; font-size: 13px; color: var(--text); font-family: inherit; cursor: pointer; }
 
+.fly-type-btn {
+  font-size: 11px; padding: 3px 8px; border-radius: 20px;
+  border: 1.5px solid var(--border); background: none;
+  color: var(--text3); cursor: pointer; font-family: inherit;
+  transition: all .15s;
+}
+.fly-type-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.fly-type-btn:hover:not(.active) { border-color: var(--accent); color: var(--accent); }
+
 .fly-rules-box { background: linear-gradient(135deg, #fff5fb, #f0f4ff); }
 .fly-rules-text { font-size: 12.5px; color: var(--text2); line-height: 2; }
 
@@ -2112,7 +2119,7 @@ button, a, .nav-tab, .nav-logo, .chat-item, .ibtn, .hbtn, .act-btn,
 }
 
 .fly-map {
-  --fc: clamp(30px, 8.8vw, 42px);
+  --fc: clamp(34px, 8.8vw, 52px);
   display: grid;
   grid-template-columns: repeat(10, var(--fc));
   grid-template-rows: repeat(8, var(--fc));

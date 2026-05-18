@@ -5517,6 +5517,8 @@ function toggleGomokuSettings() {
   if (show) {
     renderGomokuAiSelector();
     loadGomokuPrefs();
+    const tok = $i('gmk-show-token-toggle');
+    if (tok) tok.checked = !!S.settings?.showGameToken;
   }
 }
 
@@ -6299,7 +6301,11 @@ function toggleXiangqiSettings() {
   if (!panel) return;
   const show = panel.style.display === 'none';
   panel.style.display = show ? '' : 'none';
-  if (show) { renderXiangqiAiSelector(); loadXiangqiPrefs(); }
+  if (show) {
+    renderXiangqiAiSelector(); loadXiangqiPrefs();
+    const tok = $i('xq-show-token-toggle');
+    if (tok) tok.checked = !!S.settings?.showGameToken;
+  }
 }
 
 function renderXiangqiAiSelector() {
@@ -6741,7 +6747,10 @@ function setIntChessCommentFreq(val){INTCHESS.prefs.commentFreq=val;saveIntChess
 function toggleIntChessSettings(){
   const panel=$i('intchess-settings');if(!panel)return;
   const show=panel.style.display==='none';panel.style.display=show?'':'none';
-  if(show){renderIntChessAiSelector();loadIntChessPrefs();}
+  if(show){
+    renderIntChessAiSelector();loadIntChessPrefs();
+    const tok=$i('ic-show-token-toggle');if(tok)tok.checked=!!S.settings?.showGameToken;
+  }
 }
 function renderIntChessAiSelector(){
   const el=$i('ic-ai-selector');if(!el)return;el.innerHTML='';
@@ -7014,7 +7023,11 @@ function toggleGoSettings() {
   if (!s) return;
   const show = s.style.display === 'none';
   s.style.display = show ? '' : 'none';
-  if (show) { renderGoAiSelector(); loadGoPrefs(); }
+  if (show) {
+    renderGoAiSelector(); loadGoPrefs();
+    const tok = $i('go-show-token-toggle');
+    if (tok) tok.checked = !!S.settings?.showGameToken;
+  }
 }
 
 // ── AI Selector ──
@@ -7625,29 +7638,29 @@ const FLY_PLAYER_EMOJIS = ['🔴', '🔵', '🟡', '🟢'];
 const FLY_PIECE_OPTIONS = ['🐱','🦊','🐻','🐼','🐨','🐰','🐸','🦁','🐯','🐮','🐷','🐹','🦄','🦋','🌸','⭐','🌙','🎀','🍓','🍭','💎','🔮','🎭','🧸','🌺','🍀','🎃','🦖','🐧','🦜'];
 const DICE_FACES = ['⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
 
-// No forward3+3=back3 pairs (would cause infinite loops); more events
+// ~80% event cells for high interactivity; no forward+back infinite loops
 const FLY_SPACE_LAYOUT = [
-  'start',                                            // 1
-  'normal','event','normal','heart',                  // 2-5
-  'skip','normal','checkpoint','normal','back3',      // 6-10  (back3@10; 10-3=7=normal)
-  'normal','event','heart','normal','forward3',       // 11-15 (forward3@15; 15+3=18=normal)
-  'normal','checkpoint','normal','event','back3',     // 16-20 (back3@20; 20-3=17=normal; 15+3=18≠20)
-  'normal','heart','event','normal','forward5',       // 21-25 (forward5@25; 25+5=30=back3 ok, not loop)
-  'normal','checkpoint','normal','event','back3',     // 26-30 (back3@30; 30-3=27=checkpoint)
-  'normal','event','heart','again','checkpoint',      // 31-35
-  'forward3','normal','normal','event','heart',       // 36-40 (forward3@36; 36+3=39=event)
-  'skip','normal','checkpoint','event','normal',      // 41-45
-  'back3','normal','heart','event','checkpoint',      // 46-50 (back3@46; 46-3=43=checkpoint; 36+3=39≠46)
-  'normal','forward3','event','normal','again',       // 51-55 (forward3@52; 52+3=55=again)
-  'back3','heart','checkpoint','normal','event',      // 56-60 (back3@56; 56-3=53=event; 52+3=55≠56)
-  'normal','forward3','normal','heart','event',       // 61-65 (forward3@62; 62+3=65=event)
-  'checkpoint','event','skip','normal','back3',       // 66-70 (back3@70; 70-3=67=event; 62+3=65≠70)
-  'forward5','normal','heart','event','normal',       // 71-75 (forward5@71; 71+5=76=normal)
-  'normal','event','heart','checkpoint','finish'      // 76-80
+  'start',                                                    // 1
+  'couple','event','heart','couple',                          // 2-5
+  'skip','couple','heart','event','couple',                   // 6-10
+  'back3','couple','event','heart','couple',                  // 11-15
+  'couple','checkpoint','heart','couple','event',             // 16-20
+  'forward3','couple','heart','couple','event',               // 21-25
+  'couple','heart','back3','couple','event',                  // 26-30
+  'couple','again','heart','couple','event',                  // 31-35
+  'couple','heart','event','forward3','couple',               // 36-40
+  'skip','couple','heart','event','couple',                   // 41-45
+  'couple','back3','heart','couple','event',                  // 46-50
+  'couple','event','heart','checkpoint','couple',             // 51-55
+  'forward5','couple','heart','event','couple',               // 56-60
+  'couple','heart','event','couple','again',                  // 61-65
+  'couple','back3','heart','event','couple',                  // 66-70
+  'couple','heart','forward3','couple','event',               // 71-75
+  'couple','heart','event','couple','finish'                  // 76-80
 ];
 
 const FLY_SPACE_ICONS = {
-  start: '🚀', finish: '🏆', normal: '', event: '⭐', heart: '💗',
+  start: '🚀', finish: '🏆', normal: '', event: '⭐', heart: '💗', couple: '💑',
   forward3: '🌈', forward5: '⚡', back3: '🌀', skip: '💤',
   again: '🎲', checkpoint: '🌟',
 };
@@ -7824,6 +7837,112 @@ const FLY_CHALLENGE_EVENTS = [
   '连续说出5个同一类别的东西（如5种花、5种鱼），前进3格🌺',
 ];
 
+// Couple-specific events: together challenges, individual-for-partner, sweet moments, promises, memories, etc.
+const FLY_COUPLE_EVENTS = [
+  // 一起做的挑战
+  '【一起】两人同时闭上眼睛，各自想象10年后的生活，睁眼分享一个细节💑',
+  '【一起】两人背靠背坐着，各自说出"我们之间最珍贵的一件事"，然后转身对比💕',
+  '【一起】两人一起数数，从1数到20，任何人笑了就重新开始，成功前进3格🌸',
+  '【一起】两人同时比划"心"的手势，保持3秒，拍一张照留念，前进3格📸',
+  '【一起】两人各说一个字，合起来造一个词，看看是什么词，前进2格🎵',
+  '【一起】两人对视10秒不眨眼，谁先眨眼谁退2格，坚持的前进2格👁️',
+  '【一起】两人同时在心里想一个数字1-10，同时说出，猜中对方的前进4格🔢',
+  '【一起】两人手拉手，用1分钟讲完一个你们一起经历的小故事💞',
+  '【一起】两人各写下对方最可爱的一个小习惯，对比后都猜中的前进4格✍️',
+  '【一起】两人互相按摩肩膀1分钟，结束后说谢谢，前进3格🤲',
+  '【一起】两人同时说出"如果明天是最后一天，我最想……"，对比答案💭',
+  '【一起】两人面对面站立，同步做3个一样的动作（不提前约定），默契满分前进4格🎭',
+  '【一起】两人各画一个对方的样子（限时30秒），互相欣赏，前进2格🎨',
+  '【一起】两人各选一首歌，哼出前几秒让对方猜，猜中前进3格🎶',
+  '【一起】两人讨论1分钟：如果搬去一个陌生城市生活，你们会怎么安排？🌆',
+
+  // 为对方做的挑战
+  '【为对方】认真看着对方的眼睛，说出你觉得他/她最美丽/帅气的一个瞬间💫',
+  '【为对方】给对方发一条消息："你不知道的是，我每次……都会想到你"，填空💌',
+  '【为对方】认真说出3件对方做过的、让你感动或感激的小事❤️',
+  '【为对方】假装你是对方的粉丝，写一句"致偶像"的心里话，念给他/她听🌟',
+  '【为对方】想一个下次可以为对方做的惊喜，现在就透露一个小提示💝',
+  '【为对方】说出一件你一直想为对方做但还没做到的事，并约定什么时候做🌸',
+  '【为对方】给对方一个你愿意随时兑现的承诺，让他/她选一个💍',
+  '【为对方】说出你觉得对方最值得被爱的三个理由💗',
+  '【为对方】用10秒内想出对方最喜欢的5样东西（食物/活动/任何），说出来🎁',
+  '【为对方】帮对方回忆：说出你们认识多久，第一次见面时对方穿了什么😄',
+
+  // 答应条件的挑战
+  '【答应我】对方说出一个小要求，你需要认真答应并加一个附加条件🤝',
+  '【答应我】抽牌决定：现在答应对方一件他/她提出的任何合理请求（限时2分钟想）🃏',
+  '【答应我】对方说"在我最难过的时候，你能……"，你来填空并郑重承诺💪',
+  '【答应我】两人各说一个"希望对方改变/保持"的小习惯，友好商量是否答应🌿',
+  '【答应我】说出一件你愿意为对方坚持30天的事，对方来监督你📅',
+  '【答应我】对方提出一个"约定"，你决定要不要接受，无论结果都不能生气🌈',
+  '【答应我】两人各写一个"心愿"，对方来答应帮实现，越具体越好✨',
+
+  // 亲密挑战
+  '【亲密】给对方一个"爱心抱抱"，时间不少于10秒，感受一下对方的心跳🤗',
+  '【亲密】用你的手覆盖对方的手背30秒，感受一下温度，说一句话💞',
+  '【亲密】轻轻整理一下对方的头发或衣领，然后说"你很好看"💕',
+  '【亲密】用手指轻轻敲出一个心形在对方手心，让他/她感受❤️',
+  '【亲密】鼻尖轻碰对方鼻尖，保持3秒，谁先笑谁退1格，两人都坚持前进2格😊',
+  '【亲密】手拉手，闭上眼睛，感受30秒，然后说出你脑海中浮现的第一个词🌙',
+  '【亲密】给对方额头一个轻吻，或者做一个你们两人专属的亲密手势💋',
+  '【亲密】靠着对方的肩膀坐30秒，保持安静，感受这种氛围🌸',
+  '【亲密】凑近轻声说出一句甜蜜的悄悄话，只让对方听到，前进3格🤫',
+  '【亲密】握住对方的手，认真告诉他/她一件平时不好意思说的话💝',
+
+  // 感动时刻
+  '【感动】说出你们在一起以来，让你最感动的一个瞬间，越具体越好😢',
+  '【感动】说出一件你做过的、觉得对方一定不知道的"默默爱你"的小事💌',
+  '【感动】描述你第一次意识到"我真的很喜欢/爱他/她"的那个瞬间✨',
+  '【感动】说出一件对方做的、让你忍不住微笑的小细节，前进3格🌸',
+  '【感动】如果要给对方留一封"随时可能读到的信"，第一句话写什么？📝',
+  '【感动】说出一次你们之间的误会或争吵之后，让你感动的那个和好时刻💕',
+  '【感动】说出你觉得对方"特别不容易、特别努力"的一件事，并说谢谢🙏',
+  '【感动】告诉对方：有你陪着，你最庆幸的是什么？前进4格💖',
+
+  // 回忆挑战
+  '【回忆】说出你们第一次约会/见面的地点和你当时的心情，越详细越好🌅',
+  '【回忆】说出你们在一起以来最搞笑/难忘的一个意外，让大家都笑起来😂',
+  '【回忆】还记得对方说过的哪句话让你印象最深刻？重复一遍💬',
+  '【回忆】说出一件"以前觉得很普通，现在想起来很珍贵"的共同记忆🌟',
+  '【回忆】对方做的什么事/说的什么话，让你第一次心动或确认心意？❤️',
+  '【回忆】你们一起经历过的最糟糕的事情是什么？现在回想起来是什么感觉？🌈',
+  '【回忆】说出对方送给你的或者为你做的最让你开心的礼物/惊喜🎁',
+  '【回忆】还记得你们第一张合照是在哪里拍的吗？场景、心情都描述一遍📸',
+  '【回忆】说出一个你觉得"要永远记住这个瞬间"的两人时刻，前进4格💞',
+
+  // 说话挑战
+  '【说话】用5句话讲完你们认识的故事，每句话不能超过10个字💌',
+  '【说话】现在假装你是对方，模仿他/她最常说的一句话，看对方反应如何😄',
+  '【说话】用3个词来形容你们的关系，对方猜你会说什么，猜中前进3格🌸',
+  '【说话】给对方讲一件你从来没有告诉过他/她的事，可以是任何事🤫',
+  '【说话】假设你要向朋友介绍你的另一半，用30秒说出你最骄傲的几点💪',
+  '【说话】你们关系中有没有一个"暗语"或者"默契"？说出来分享一下💑',
+  '【说话】你最喜欢和对方说什么话题？聊天时让你最快乐的是什么？🌟',
+  '【说话】用甜蜜的声音读出以下这句话："其实我一直都很喜欢你。"💕',
+
+  // 冒险挑战
+  '【冒险】真心话：你有没有因为对方的某个举动而嫉妒过？说出来！🌶️',
+  '【冒险】大冒险：现在打开手机，把最近发出去的一条消息念给对方听📱',
+  '【冒险】真心话：你有没有对对方隐瞒过什么小秘密？（可以说一个无伤大雅的）🤫',
+  '【冒险】大冒险：现在给你最好的朋友发一条消息"我正在认真恋爱中"📨',
+  '【冒险】真心话：你有没有担心过两人关系会出现问题？是什么让你担心的？💭',
+  '【冒险】大冒险：做一个对方要求的动作，不能拒绝（仅限合理范围）🎯',
+  '【冒险】真心话：你觉得你和对方谁更喜欢对方多一点？为什么这么觉得？💗',
+  '【冒险】大冒险：在社交媒体上发一条关于今天游戏的动态（截图分享）📸',
+  '【冒险】真心话：你最担心对方不喜欢你的哪一面？说出来，对方回应💌',
+  '【冒险】真心话：在你最低落的时候，你是否希望对方以某种方式陪着你？怎么陪？🌙',
+
+  // 单独挑战（自己完成）
+  '【单独】花30秒时间，用手机快速找出你们最喜欢的一张合照，说说为什么喜欢📸',
+  '【单独】想一个你从未告诉对方的"今后想和他/她一起做的事"，现在说出来🌈',
+  '【单独】闭上眼睛想象：5年后你们在做什么？睁眼说出最清晰的一个画面🌅',
+  '【单独】给对方录一条5秒的语音，用平时不常说的方式表达"我喜欢你"🎤',
+  '【单独】用一个动物来比喻你和对方的相处方式，解释为什么🦁',
+  '【单独】写下你觉得"对方最不了解你的一面"，读给他/她听💭',
+  '【单独】用5秒时间，说出你们相处中你最享受的3个小细节，越快越好⚡',
+  '【单独】现在拿出手机，找到你们聊天记录里最喜欢的一句话，读出来💌',
+];
+
 const FLY = {
   playerCount: 2,
   players: [],
@@ -7852,6 +7971,8 @@ function initFlySetup() {
     btn.classList.toggle('active', i === 0); // 2人 is index 0
   });
   renderFlyAiSelector();
+  const tok = $i('fly-show-token-toggle');
+  if (tok) tok.checked = !!S.settings?.showGameToken;
 }
 
 function setFlyPlayerCount(n, el) {
@@ -8212,6 +8333,11 @@ function flyTriggerSpace(playerIdx) {
       flyShowEvent(ev, evType, playerIdx);
       break;
     }
+    case 'couple': {
+      const ev = FLY_COUPLE_EVENTS[Math.floor(Math.random() * FLY_COUPLE_EVENTS.length)];
+      flyShowEvent(ev, 'couple', playerIdx);
+      break;
+    }
     case 'heart': {
       const ev = FLY_ROMANCE_EVENTS[Math.floor(Math.random() * FLY_ROMANCE_EVENTS.length)];
       flyShowEvent(ev, 'romance', playerIdx);
@@ -8266,6 +8392,7 @@ function flyShowEvent(eventText, type, playerIdx) {
     deep:    { label: '💭 深度问答', class: 'deep' },
     daily:   { label: '☀️ 日常挑战', class: 'daily' },
     challenge: { label: '🎯 趣味挑战', class: 'challenge' },
+    couple:  { label: '💑 情侣挑战', class: 'romance' },
   };
   const info = typeInfo[type] || typeInfo.romance;
 
@@ -8440,9 +8567,6 @@ async function flyAiAutoAnswer(playerIdx) {
   if (aiResponseText) aiResponseText.textContent = reply;
   if (aiResponse) aiResponse.className = 'fly-ai-response visible';
   if (continueBtn) continueBtn.style.display = 'block';
-
-  // Auto-continue after 4 seconds (more time to read full response)
-  setTimeout(flyEventDone, 4000);
 }
 
 function flyNextTurn() {

@@ -195,6 +195,7 @@ body{font-family:'Nunito','Noto Sans SC',sans-serif;background:var(--bg);color:v
 .thinking-block summary::before{content:'🧠';}
 .token-row{font-size:9.5px;color:var(--text3);padding:1px 5px;display:flex;align-items:center;gap:3px;cursor:pointer;margin-top:1px;}
 .token-row:hover{color:var(--accent);}
+.game-token-badge { font-size: 10px; color: var(--text3); text-align: center; padding: 2px 0 4px; letter-spacing: 0.3px; }
 .token-detail{display:none;background:var(--bg3);border:1px solid var(--border);border-radius:7px;padding:5px 9px;font-size:10px;color:var(--text2);margin-top:2px;line-height:1.8;}
 .token-detail.show{display:block;}
 .reply-quote{border-left:3px solid var(--accent2);padding:3px 7px;margin-bottom:5px;border-radius:3px;font-size:11px;opacity:.75;background:rgba(0,0,0,.04);}

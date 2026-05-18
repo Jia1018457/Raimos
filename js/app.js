@@ -32,7 +32,7 @@ let S = {
     model:'', systemPrompt:'',
     ttsMode:'browser', browserVoice:'', ttsUrl:'', ttsKey:'', ttsVoice:'cove',
     voiceReplyMode:'text', autoTts:false,
-    stream:true, showToken:false, showThink:true,
+    stream:true, showToken:false, showGameToken:false, showThink:true,
     temp:0.85, ctx:20, imgSize:800, sumThresh:40,
     proactive:false, proMax:3, proStart:8, proEnd:22,
     momentsEnabled:false, autoPost:false, momentFreqMode:'perWeek', momentFreqCount:3,
@@ -3158,6 +3158,7 @@ function buildSettingsUI() {
     <div class="s-section" hidden><h3>🤖 对话参数</h3>
       <div class="s-row"><label>流式输出</label><label class="toggle"><input type="checkbox" id="s-stream" ${s.stream!==false?'checked':''}><span class="tslider"></span></label></div>
       <div class="s-row"><label>显示Token用量</label><label class="toggle"><input type="checkbox" id="s-show-token" ${s.showToken?'checked':''}><span class="tslider"></span></label></div>
+      <div class="s-row"><label>游戏AI Token用量</label><label class="toggle"><input type="checkbox" id="s-show-game-token" ${s.showGameToken?'checked':''}><span class="tslider"></span></label></div>
       <div class="s-row"><label>显示思考过程</label><label class="toggle"><input type="checkbox" id="s-show-think" ${s.showThink!==false?'checked':''}><span class="tslider"></span></label></div>
       <div class="s-row"><label>Temperature</label><input type="range" id="s-temp" min="0" max="2" step="0.05" value="${s.temp||0.85}" oninput="$i('s-temp-v').textContent=this.value"><span class="rval" id="s-temp-v">${s.temp||0.85}</span></div>
       <div class="s-row"><label>上下文消息数</label><input type="number" id="s-ctx" value="${s.ctx||20}" min="2" max="1000" style="max-width:80px"/><span style="font-size:11px;color:var(--text3)">条 (最高1000)</span></div>
@@ -3369,7 +3370,7 @@ async function saveAllSettings(){
   s.ttsMode=get('s-tts-mode','browser');s.browserVoice=get('s-bvoice');
   s.ttsUrl=get('s-tts-url');s.ttsKey=get('s-tts-key');s.ttsVoice=get('s-tts-voice','cove');
   s.voiceReplyMode=get('s-voice-reply','text');s.autoTts=getB('s-auto-tts');
-  s.stream=getB('s-stream');s.showToken=getB('s-show-token');s.showThink=getB('s-show-think');
+  s.stream=getB('s-stream');s.showToken=getB('s-show-token');s.showGameToken=getB('s-show-game-token');s.showThink=getB('s-show-think');
   s.hapticEnabled=getB('s-haptic-enabled');
   s.hapticOnAiReply=getB('s-haptic-ai-reply');
   s.typingAnimEnabled=getB('s-typing-anim');
@@ -5589,11 +5590,25 @@ function gomokuSetStatus(msg) {
   if (el) el.textContent = msg;
 }
 
+function showGameTokenBadge(badgeId, usage) {
+  const badge = $i(badgeId);
+  if (!badge) return;
+  if (S.settings.showGameToken && usage) {
+    const t = usage.total_tokens || 0, p = usage.prompt_tokens || 0, c = usage.completion_tokens || 0;
+    badge.textContent = `⚡ ${t} tokens (↑${p} ↓${c})`;
+    badge.style.display = '';
+  } else {
+    badge.style.display = 'none';
+  }
+}
+
 function gomokuSay(text) {
   const el = $i('gomoku-comment');
   if (!el || !text) return;
   el.textContent = text;
   el.style.opacity = '1';
+  showGameTokenBadge('gomoku-token-badge', GOMOKU._lastUsage || null);
+  GOMOKU._lastUsage = null;
   clearTimeout(el._t);
   el._t = setTimeout(() => { if (el) el.style.opacity = '0'; }, 5500);
 }
@@ -5697,6 +5712,7 @@ async function gomokuAiMove() {
         body:JSON.stringify({model,max_tokens:80,stream:false,temperature:0.9,messages:[{role:'user',content:prompt}]}),
       });
       const data = await res.json();
+      GOMOKU._lastUsage = data.usage || null;
       const txt = data.choices?.[0]?.message?.content || '';
       const m = txt.match(/\{[\s\S]*?\}/);
       if (m) {
@@ -5734,6 +5750,7 @@ async function gomokuAiMove() {
           body:JSON.stringify({model,max_tokens:60,stream:false,temperature:0.8,messages:[{role:'user',content:prompt}]}),
         });
         const data = await res.json();
+        GOMOKU._lastUsage = data.usage || null;
         const txt = data.choices?.[0]?.message?.content || '';
         const mm = txt.match(/\{[\s\S]*?\}/);
         if (mm) comment = JSON.parse(mm[0]).comment || '';
@@ -5870,7 +5887,7 @@ async function gomokuFinish(result) {
       const resultDesc = result==='player_win'?'你输了':result==='ai_win'?'你赢了':'平局';
       const prompt = `你是${aiName}，性格：${personality||'可爱温柔'}。五子棋结束，${resultDesc}。用1句符合性格的话回应。只返回JSON：{"comment":"话"}`;
       const res = await fetch(contact?.apiUrl||'https://openrouter.ai/api/v1/chat/completions',{method:'POST',headers:{'Authorization':`Bearer ${useKey}`,'Content-Type':'application/json','HTTP-Referer':'https://raimos.app','X-Title':'Raimos'},body:JSON.stringify({model:contact?.model||'openai/gpt-4o-mini',max_tokens:60,stream:false,messages:[{role:'user',content:prompt}]})});
-      const data=await res.json();const txt=data.choices?.[0]?.message?.content||'';const m=txt.match(/\{[\s\S]*?\}/);
+      const data=await res.json();GOMOKU._lastUsage = data.usage || null;const txt=data.choices?.[0]?.message?.content||'';const m=txt.match(/\{[\s\S]*?\}/);
       if (m) aiComment=JSON.parse(m[0]).comment||'';
     } catch(e){}
   }
@@ -6430,7 +6447,7 @@ async function xqAiMove() {
       const movesStr = legalMoves.slice(0,20).map(m=>`(${m.fromR},${m.fromC})→(${m.toR},${m.toC})`).join(' ');
       const prompt = `你是${aiName}，和用户下中国象棋。你执黑方，用户执红方。棋盘10行9列，行0-9，列0-8，黑方从第0行开始。\n当前棋子：${piecesStr.join(' ')}\n合法移动（前20个）：${movesStr}\n性格：${personality||'聪明好胜'}\n阶段：第${XIANGQI.moveCount}手，${phase}局。\n根据性格灵活决策：温柔型可能偶尔让步，强势型全力争胜。\n从合法移动中选一步，用1句话回应。只返回JSON：{"fromR":数字,"fromC":数字,"toR":数字,"toC":数字,"comment":"话"}`;
       const res = await fetch(contact?.apiUrl||'https://openrouter.ai/api/v1/chat/completions',{method:'POST',headers:{'Authorization':`Bearer ${useKey}`,'Content-Type':'application/json','HTTP-Referer':'https://raimos.app','X-Title':'Raimos'},body:JSON.stringify({model,max_tokens:100,stream:false,temperature:0.7,messages:[{role:'user',content:prompt}]})});
-      const data=await res.json();const txt=data.choices?.[0]?.message?.content||'';const m=txt.match(/\{[\s\S]*?\}/);
+      const data=await res.json();XIANGQI._lastUsage = data.usage || null;const txt=data.choices?.[0]?.message?.content||'';const m=txt.match(/\{[\s\S]*?\}/);
       if (m) { const p=JSON.parse(m[0]); const lm=xqAllLegalMoves(XIANGQI.board,'black'); if(lm.some(mv=>mv.fromR===p.fromR&&mv.fromC===p.fromC&&mv.toR===p.toR&&mv.toC===p.toC)){move=p;comment=p.comment;} }
     } catch(e){}
   }
@@ -6460,7 +6477,10 @@ async function xqAiMove() {
 function xqSetStatus(msg) { const el=$i('xq-status'); if(el)el.textContent=msg; }
 function xqSay(text) {
   const el=$i('xq-comment'); if(!el||!text)return;
-  el.textContent=text; el.style.opacity='1'; clearTimeout(el._t);
+  el.textContent=text; el.style.opacity='1';
+  showGameTokenBadge('xq-token-badge', XIANGQI._lastUsage || null);
+  XIANGQI._lastUsage = null;
+  clearTimeout(el._t);
   el._t=setTimeout(()=>{if(el)el.style.opacity='0';},5500);
 }
 
@@ -6476,7 +6496,7 @@ async function xqFinish(result) {
       const resultDesc=result==='player_win'?'你输了':result==='ai_win'?'你赢了':'平局';
       const prompt=`你是${aiName}，性格：${personality||'聪明好胜'}。象棋结束，${resultDesc}。用1句符合性格的话回应。只返回JSON：{"comment":"话"}`;
       const res=await fetch(contact?.apiUrl||'https://openrouter.ai/api/v1/chat/completions',{method:'POST',headers:{'Authorization':`Bearer ${useKey}`,'Content-Type':'application/json','HTTP-Referer':'https://raimos.app','X-Title':'Raimos'},body:JSON.stringify({model:contact?.model||'openai/gpt-4o-mini',max_tokens:60,stream:false,messages:[{role:'user',content:prompt}]})});
-      const data=await res.json();const txt=data.choices?.[0]?.message?.content||'';const m=txt.match(/\{[\s\S]*?\}/);
+      const data=await res.json();XIANGQI._lastUsage = data.usage || null;const txt=data.choices?.[0]?.message?.content||'';const m=txt.match(/\{[\s\S]*?\}/);
       if(m)aiComment=JSON.parse(m[0]).comment||'';
     } catch(e){}
   }
@@ -6825,7 +6845,7 @@ async function icAiMove(){
       const aiName=contact?.name||'AI',personality=(contact?.system||'').slice(0,120),model=contact?.model||'openai/gpt-4o-mini';
       const prompt=`你是${aiName}，和用户下国际象棋。你执黑方，用户执白方。棋盘8×8，行0-7（0为黑方底），列0-7。\n当前棋子：${boardStr.join(' ')}\n合法移动（前15个）：${movesStr}\n性格：${personality||'聪明好胜'}\n阶段：第${INTCHESS.moveCount}步，${phase}。\n根据性格灵活决策：温柔型可能偶尔让步，强势型全力争胜。\n从合法移动中选一步，用1句话回应。只返回JSON：{"fromR":数字,"fromC":数字,"toR":数字,"toC":数字,"comment":"话"}`;
       const res=await fetch(contact?.apiUrl||'https://openrouter.ai/api/v1/chat/completions',{method:'POST',headers:{'Authorization':`Bearer ${useKey}`,'Content-Type':'application/json','HTTP-Referer':'https://raimos.app','X-Title':'Raimos'},body:JSON.stringify({model,max_tokens:100,stream:false,temperature:0.7,messages:[{role:'user',content:prompt}]})});
-      const data=await res.json();const txt=data.choices?.[0]?.message?.content||'';const m=txt.match(/\{[\s\S]*?\}/);
+      const data=await res.json();INTCHESS._lastUsage=data.usage||null;const txt=data.choices?.[0]?.message?.content||'';const m=txt.match(/\{[\s\S]*?\}/);
       if(m){const p=JSON.parse(m[0]);const lm=icAllLegalMoves(INTCHESS.board,'b',INTCHESS.enPassant,INTCHESS.castling);if(lm.some(mv=>mv.fromR===p.fromR&&mv.fromC===p.fromC&&mv.toR===p.toR&&mv.toC===p.toC)){move=p;comment=p.comment;}}
     }catch(e){}
   }
@@ -6853,13 +6873,13 @@ async function icAiMove(){
 }
 
 function icSetStatus(msg){const el=$i('ic-status');if(el)el.textContent=msg;}
-function icSay(text){const el=$i('ic-comment');if(!el||!text)return;el.textContent=text;el.style.opacity='1';clearTimeout(el._t);el._t=setTimeout(()=>{if(el)el.style.opacity='0';},5500);}
+function icSay(text){const el=$i('ic-comment');if(!el||!text)return;el.textContent=text;el.style.opacity='1';showGameTokenBadge('ic-token-badge',INTCHESS._lastUsage||null);INTCHESS._lastUsage=null;clearTimeout(el._t);el._t=setTimeout(()=>{if(el)el.style.opacity='0';},5500);}
 
 async function icFinish(result){
   const contact=icGetContact();const elapsed=Math.round((Date.now()-INTCHESS.startTime)/1000);
   await saveIntChessRecord({result,moves:INTCHESS.moveCount,elapsed,aiName:contact?.name||'AI',aiContactId:INTCHESS.contactId,date:Date.now()});
   let aiComment='';const useKey=contact?.apiKey||S.settings.apiKey;
-  if(useKey){try{const aiName=contact?.name||'AI',personality=(contact?.system||'').slice(0,100);const resultDesc=result==='player_win'?'你输了':result==='ai_win'?'你赢了':'平局';const prompt=`你是${aiName}，性格：${personality||'聪明好胜'}。国际象棋结束，${resultDesc}。用1句符合性格的话回应。只返回JSON：{"comment":"话"}`;const res=await fetch(contact?.apiUrl||'https://openrouter.ai/api/v1/chat/completions',{method:'POST',headers:{'Authorization':`Bearer ${useKey}`,'Content-Type':'application/json','HTTP-Referer':'https://raimos.app','X-Title':'Raimos'},body:JSON.stringify({model:contact?.model||'openai/gpt-4o-mini',max_tokens:60,stream:false,messages:[{role:'user',content:prompt}]})});const data=await res.json();const txt=data.choices?.[0]?.message?.content||'';const m=txt.match(/\{[\s\S]*?\}/);if(m)aiComment=JSON.parse(m[0]).comment||'';}catch(e){}}
+  if(useKey){try{const aiName=contact?.name||'AI',personality=(contact?.system||'').slice(0,100);const resultDesc=result==='player_win'?'你输了':result==='ai_win'?'你赢了':'平局';const prompt=`你是${aiName}，性格：${personality||'聪明好胜'}。国际象棋结束，${resultDesc}。用1句符合性格的话回应。只返回JSON：{"comment":"话"}`;const res=await fetch(contact?.apiUrl||'https://openrouter.ai/api/v1/chat/completions',{method:'POST',headers:{'Authorization':`Bearer ${useKey}`,'Content-Type':'application/json','HTTP-Referer':'https://raimos.app','X-Title':'Raimos'},body:JSON.stringify({model:contact?.model||'openai/gpt-4o-mini',max_tokens:60,stream:false,messages:[{role:'user',content:prompt}]})});const data=await res.json();INTCHESS._lastUsage=data.usage||null;const txt=data.choices?.[0]?.message?.content||'';const m=txt.match(/\{[\s\S]*?\}/);if(m)aiComment=JSON.parse(m[0]).comment||'';}catch(e){}}
   if(!aiComment)aiComment=result==='player_win'?'你赢了，下次再来较量！':result==='ai_win'?'我赢了！再来一局吧～':'旗鼓相当，平局！';
   icSay(aiComment);setTimeout(()=>showIntChessResult(result,elapsed,aiComment,contact),800);
 }
@@ -7081,6 +7101,8 @@ function goUpdateCaptures() {
 function goSay(msg) {
   const el = $i('go-comment');
   if (el) { el.textContent = msg; el.style.display = msg ? '' : 'none'; }
+  showGameTokenBadge('go-token-badge', GO._lastUsage || null);
+  GO._lastUsage = null;
 }
 
 // ── Board Render ──
@@ -7376,6 +7398,7 @@ async function goCallAI(contact, apiKey) {
     }),
   });
   const data = await res.json();
+  GO._lastUsage = data.usage || null;
   const txt = data.choices?.[0]?.message?.content || '';
   const m = txt.match(/\{[\s\S]*?\}/);
   if (!m) return null;
@@ -8296,6 +8319,7 @@ async function flySubmitAnswer() {
         body: JSON.stringify({ model: contact?.model || 'openai/gpt-4o-mini', stream: false, temperature: 0.9, messages })
       });
       const data = await res.json();
+      showGameTokenBadge('fly-token-badge', data.usage || null);
       const txt = data.choices?.[0]?.message?.content || '';
       const m = txt.match(/\{[\s\S]*?\}/);
       if (m) aiReply = JSON.parse(m[0]).reply || '';
@@ -8343,6 +8367,7 @@ async function flyAiAutoAnswer(playerIdx) {
         body: JSON.stringify({ model: contact?.model || 'openai/gpt-4o-mini', stream: false, temperature: 0.9, messages })
       });
       const data = await res.json();
+      showGameTokenBadge('fly-token-badge', data.usage || null);
       const txt = data.choices?.[0]?.message?.content || '';
       const m = txt.match(/\{[\s\S]*?\}/);
       if (m) reply = JSON.parse(m[0]).a || '';

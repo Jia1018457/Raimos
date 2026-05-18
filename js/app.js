@@ -7599,6 +7599,7 @@ async function clearGoRecords() {
 // ══ Flying Chess (飞行棋) ══════════════════════
 const FLY_PLAYER_COLORS = ['#ff6b6b', '#4d9fff', '#ffd93d', '#6bcb77'];
 const FLY_PLAYER_EMOJIS = ['🔴', '🔵', '🟡', '🟢'];
+const FLY_PIECE_OPTIONS = ['🐱','🦊','🐻','🐼','🐨','🐰','🐸','🦁','🐯','🐮','🐷','🐹','🦄','🦋','🌸','⭐','🌙','🎀','🍓','🍭','💎','🔮','🎭','🧸','🌺','🍀','🎃','🦖','🐧','🦜'];
 const DICE_FACES = ['⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
 
 const FLY_SPACE_LAYOUT = [
@@ -7781,7 +7782,9 @@ const FLY = {
   over: false,
   lastDice: 0,
   spaceTypes: [],
-  aiContactIds: [null, null, null, null], // null = human, contactId string = AI player
+  aiContactIds: [null, null, null, null],
+  _setupPieces: ['🐱', '🦊', '🐻', '🐼'], // piece per player slot, configurable in setup
+  _gameLog: [], // {emoji, player, q, a, isAI} - all Q&A this session for AI context
 };
 
 // ── Setup ──
@@ -7811,47 +7814,96 @@ function renderFlyPlayerInputs() {
   if (!container) return;
   container.innerHTML = '';
   const contacts = Object.values(S._contacts);
+
   for (let i = 0; i < FLY.playerCount; i++) {
+    // Auto-init AI piece from contact avatar if not yet set
+    if (i > 0 && !FLY._setupPieces[i]) {
+      const cid = FLY.aiContactIds[i] || contacts[i-1]?.id || contacts[0]?.id;
+      const c = cid ? S._contacts[cid] : null;
+      const av = c?.avatar || '';
+      FLY._setupPieces[i] = (!av.startsWith('data:') && !av.startsWith('http') && av) ? av : FLY_PIECE_OPTIONS[i] || '🤖';
+    }
+
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'margin-bottom:8px';
+
+    // Main row
     const row = document.createElement('div');
     row.className = 'fly-player-input-row';
+    const piece = FLY._setupPieces[i] || FLY_PIECE_OPTIONS[i];
+
     if (i === 0) {
-      // Human player
       row.innerHTML = `
-        <span class="fly-player-emoji">${FLY_PLAYER_EMOJIS[0]}</span>
+        <span style="font-size:22px;cursor:pointer" title="棋子" id="fly-piece-preview-0">${piece}</span>
         <span class="fly-player-color-dot" style="background:${FLY_PLAYER_COLORS[0]}"></span>
         <input class="fly-player-input" id="fly-player-name-0" type="text" placeholder="你的名字" value="我" maxlength="8">
         <span style="font-size:11px;color:var(--text3);flex-shrink:0">真人</span>
       `;
     } else {
-      // AI player - show contact picker
-      const curId = FLY.aiContactIds[i] || (contacts[i-1]?.id) || contacts[0]?.id || null;
+      const curId = FLY.aiContactIds[i] || contacts[i-1]?.id || contacts[0]?.id || null;
       if (!FLY.aiContactIds[i] && curId) FLY.aiContactIds[i] = curId;
       const opts = contacts.map(c => {
         const av = c.avatar?.startsWith('data:') ? '' : (c.avatar || '🤖');
         return `<option value="${esc(c.id)}" ${FLY.aiContactIds[i]===c.id?'selected':''}>${av} ${esc(c.name)}</option>`;
       }).join('');
       row.innerHTML = `
-        <span class="fly-player-emoji">${FLY_PLAYER_EMOJIS[i]}</span>
+        <span style="font-size:22px" id="fly-piece-preview-${i}">${piece}</span>
         <span class="fly-player-color-dot" style="background:${FLY_PLAYER_COLORS[i]}"></span>
-        <select class="fly-player-ai-select" id="fly-ai-select-${i}" onchange="FLY.aiContactIds[${i}]=this.value||null" style="flex:1;background:transparent;border:none;outline:none;font-size:13px;color:var(--text);font-family:inherit">
+        <select class="fly-player-ai-select" id="fly-ai-select-${i}" onchange="flyAiContactChanged(${i},this.value)" style="flex:1;background:transparent;border:none;outline:none;font-size:13px;color:var(--text);font-family:inherit">
           ${contacts.length ? opts : '<option value="">无AI助手</option>'}
         </select>
         <span style="font-size:11px;color:var(--text3);flex-shrink:0">AI</span>
       `;
     }
-    container.appendChild(row);
+    wrap.appendChild(row);
+
+    // Piece picker strip
+    const picker = document.createElement('div');
+    picker.className = 'fly-piece-picker';
+    picker.id = `fly-piece-picker-${i}`;
+    FLY_PIECE_OPTIONS.forEach(p => {
+      const btn = document.createElement('button');
+      btn.className = 'fly-piece-option' + (FLY._setupPieces[i] === p ? ' active' : '');
+      btn.textContent = p;
+      btn.onclick = () => flySetPiece(i, p);
+      picker.appendChild(btn);
+    });
+    wrap.appendChild(picker);
+    container.appendChild(wrap);
   }
+}
+
+function flyAiContactChanged(i, cid) {
+  FLY.aiContactIds[i] = cid || null;
+  // Auto-update piece from new contact's avatar
+  const c = cid ? S._contacts[cid] : null;
+  const av = c?.avatar || '';
+  if (av && !av.startsWith('data:') && !av.startsWith('http')) {
+    flySetPiece(i, av);
+  }
+}
+
+function flySetPiece(i, piece) {
+  FLY._setupPieces[i] = piece;
+  const preview = $i(`fly-piece-preview-${i}`);
+  if (preview) preview.textContent = piece;
+  const picker = $i(`fly-piece-picker-${i}`);
+  if (picker) picker.querySelectorAll('.fly-piece-option').forEach(btn => {
+    btn.classList.toggle('active', btn.textContent === piece);
+  });
 }
 
 function startFlyGame() {
   const contacts = Object.values(S._contacts);
   const players = [];
   for (let i = 0; i < FLY.playerCount; i++) {
+    const piece = FLY._setupPieces[i] || FLY_PIECE_OPTIONS[i] || FLY_PLAYER_EMOJIS[i];
     if (i === 0) {
       const nameEl = $i('fly-player-name-0');
       players.push({
         name: nameEl?.value.trim() || '我',
         emoji: FLY_PLAYER_EMOJIS[0],
+        piece,
         color: FLY_PLAYER_COLORS[0],
         pos: 0, status: 'active', skipped: false, finishRank: 0,
         isAI: false, aiContactId: null,
@@ -7862,12 +7914,14 @@ function startFlyGame() {
       players.push({
         name: contact?.name || `AI${i}`,
         emoji: FLY_PLAYER_EMOJIS[i],
+        piece,
         color: FLY_PLAYER_COLORS[i],
         pos: 0, status: 'active', skipped: false, finishRank: 0,
         isAI: true, aiContactId: contact?.id || null,
       });
     }
   }
+  FLY._gameLog = [];
   FLY.players = players;
   FLY.currentPlayer = 0;
   FLY.rolling = false;
@@ -7928,15 +7982,14 @@ function renderFlyMap() {
 }
 
 function flyUpdateMapTokens() {
-  // Clear all token containers
   document.querySelectorAll('[id^="fly-tokens-"]').forEach(el => el.innerHTML = '');
-  FLY.players.forEach((p, idx) => {
+  FLY.players.forEach((p) => {
     if (p.pos > 0) {
       const container = $i(`fly-tokens-${p.pos}`);
       if (container) {
         const token = document.createElement('div');
         token.className = 'fly-token';
-        token.style.background = p.color;
+        token.textContent = p.piece || p.emoji;
         token.title = p.name;
         container.appendChild(token);
       }
@@ -7954,7 +8007,7 @@ function renderFlyPlayerBar() {
     const isActive = idx === FLY.currentPlayer && !FLY.over;
     card.className = 'fly-player-card' + (isActive ? ' active' : '') + (p.status === 'finished' ? ' finished' : '') + (p.skipped ? ' skipped' : '');
     const posText = p.status === 'finished' ? `🏆第${p.finishRank}名` : p.skipped ? '💤跳过' : p.pos === 0 ? '未出发' : `第${p.pos}格`;
-    card.innerHTML = `<div class="fly-player-card-emoji">${p.emoji}</div><div class="fly-player-card-name">${esc(p.name)}</div><div class="fly-player-card-pos">${posText}</div>`;
+    card.innerHTML = `<div class="fly-player-card-emoji">${p.piece || p.emoji}</div><div class="fly-player-card-name">${esc(p.name)}</div><div class="fly-player-card-pos">${posText}</div>`;
     bar.appendChild(card);
   });
 }
@@ -8185,6 +8238,23 @@ function flyEventDone() {
   setTimeout(flyNextTurn, 300);
 }
 
+// Build game context string from session log for AI prompts
+function flyBuildGameContext() {
+  if (!FLY._gameLog?.length) return '';
+  return '[本局游戏对话]\n' + FLY._gameLog.slice(-8).map(e =>
+    `${e.piece||e.emoji} ${e.player}（问题：「${e.q}」→ 回答：${e.a}）`
+  ).join('\n');
+}
+
+// Build system message: contact's system prompt + relevant memories
+function flyBuildSysMsg(contact) {
+  const sys = contact?.system || '';
+  const mems = S._memories
+    .filter(m => !m.contactId || m.contactId === contact?.id)
+    .slice(-8).map(m => m.text).join('\n');
+  return [sys, mems ? `[记忆]\n${mems}` : ''].filter(Boolean).join('\n\n');
+}
+
 async function flySubmitAnswer() {
   const answerInput = $i('fly-answer-input');
   const submitBtn = $i('fly-submit-btn');
@@ -8199,24 +8269,31 @@ async function flySubmitAnswer() {
   if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'AI思考中…'; }
   if (answerInput) answerInput.disabled = true;
 
-  const contact = Object.values(S._contacts)[0];
+  // Prefer the first AI player's contact as the "game host" AI responder
+  const aiPlayer = FLY.players.find(p => p.isAI);
+  const contact = aiPlayer?.aiContactId ? S._contacts[aiPlayer.aiContactId] : Object.values(S._contacts)[0];
   const aiName = contact?.name || 'AI';
   const useKey = contact?.apiKey || S.settings?.apiKey;
+  if (aiResponseLabel) aiResponseLabel.textContent = `${aiPlayer?.piece || '🤖'} ${aiName}：`;
 
-  if (aiResponseLabel) aiResponseLabel.textContent = `🤖 ${aiName} 的回应：`;
+  // Record human's answer to game log
+  const humanPlayer = FLY.players[FLY._pendingEventPlayer];
+  FLY._gameLog.push({ emoji: humanPlayer?.emoji, piece: humanPlayer?.piece, player: humanPlayer?.name || '我', q: FLY._pendingEventText, a: answer, isAI: false });
 
   let aiReply = '';
   if (useKey) {
     try {
-      const p = FLY.players[FLY._pendingEventPlayer];
-      const prompt = `你是${aiName}，正在和用户玩飞行棋情侣互动游戏。
-问题：${FLY._pendingEventText}
-${p?.name || '玩家'}的回答：${answer}
-请用温柔、有互动感的语气回应他们的回答，可以追问、分享你的看法、或给予鼓励。回应要自然、亲密、有温度，2-3句话即可。只返回JSON：{"reply":"回应内容"}`;
+      const sysMsg = flyBuildSysMsg(contact);
+      const gameCtx = flyBuildGameContext();
+      const userMsg = `${gameCtx ? gameCtx + '\n\n' : ''}你正在和大家玩飞行棋互动游戏。\n现在${humanPlayer?.name || '玩家'}触发了问题：「${FLY._pendingEventText}」\n${humanPlayer?.name || '玩家'}的回答：「${answer}」\n请用符合你性格的方式回应这个回答，可以联系之前的对话内容，有情感、有温度，2-3句话。只返回JSON：{"reply":"回应内容"}`;
+      const messages = [
+        ...(sysMsg ? [{ role: 'system', content: sysMsg }] : []),
+        { role: 'user', content: userMsg }
+      ];
       const res = await fetch(contact?.apiUrl || 'https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${useKey}`, 'Content-Type': 'application/json', 'HTTP-Referer': 'https://raimos.app', 'X-Title': 'Raimos' },
-        body: JSON.stringify({ model: contact?.model || 'openai/gpt-4o-mini', max_tokens: 150, stream: false, temperature: 0.85, messages: [{ role: 'user', content: prompt }] })
+        body: JSON.stringify({ model: contact?.model || 'openai/gpt-4o-mini', max_tokens: 200, stream: false, temperature: 0.9, messages })
       });
       const data = await res.json();
       const txt = data.choices?.[0]?.message?.content || '';
@@ -8248,17 +8325,22 @@ async function flyAiAutoAnswer(playerIdx) {
   const contact = p?.aiContactId ? S._contacts[p.aiContactId] : null;
   const aiName = contact?.name || p?.name || 'AI';
   const useKey = contact?.apiKey || S.settings?.apiKey;
-
-  if (aiResponseLabel) aiResponseLabel.textContent = `${p?.emoji || '🤖'} ${aiName}：`;
+  if (aiResponseLabel) aiResponseLabel.textContent = `${p?.piece || p?.emoji || '🤖'} ${aiName}：`;
 
   let reply = '';
   if (useKey && FLY._pendingEventText) {
     try {
-      const prompt = `你是${aiName}。飞行棋问题：「${FLY._pendingEventText}」用一句话回答。只返回JSON：{"a":"回答"}`;
+      const sysMsg = flyBuildSysMsg(contact);
+      const gameCtx = flyBuildGameContext();
+      const userMsg = `${gameCtx ? gameCtx + '\n\n' : ''}你正在和大家玩飞行棋互动游戏，现在轮到你（${aiName}）回答问题。\n问题：「${FLY._pendingEventText}」\n请用符合你性格的方式作答，可以联系之前的对话，自然真实，2-3句话。只返回JSON：{"a":"回答"}`;
+      const messages = [
+        ...(sysMsg ? [{ role: 'system', content: sysMsg }] : []),
+        { role: 'user', content: userMsg }
+      ];
       const res = await fetch(contact?.apiUrl || 'https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${useKey}`, 'Content-Type': 'application/json', 'HTTP-Referer': 'https://raimos.app', 'X-Title': 'Raimos' },
-        body: JSON.stringify({ model: contact?.model || 'openai/gpt-4o-mini', max_tokens: 50, stream: false, temperature: 0.9, messages: [{ role: 'user', content: prompt }] })
+        body: JSON.stringify({ model: contact?.model || 'openai/gpt-4o-mini', max_tokens: 200, stream: false, temperature: 0.9, messages })
       });
       const data = await res.json();
       const txt = data.choices?.[0]?.message?.content || '';
@@ -8269,12 +8351,15 @@ async function flyAiAutoAnswer(playerIdx) {
   const defaults = ['嗯，我觉得还不错！', '这个问题我也想过～', '哈哈，有意思！', '我也同意这个观点！'];
   if (!reply) reply = defaults[Math.floor(Math.random() * defaults.length)];
 
+  // Record AI's answer to game log
+  FLY._gameLog.push({ emoji: p?.emoji, piece: p?.piece, player: aiName, q: FLY._pendingEventText, a: reply, isAI: true });
+
   if (aiResponseText) aiResponseText.textContent = reply;
   if (aiResponse) aiResponse.className = 'fly-ai-response visible';
   if (continueBtn) continueBtn.style.display = 'block';
 
-  // Auto-continue after 3 seconds
-  setTimeout(flyEventDone, 3000);
+  // Auto-continue after 4 seconds (more time to read full response)
+  setTimeout(flyEventDone, 4000);
 }
 
 function flyNextTurn() {

@@ -7781,31 +7781,11 @@ const FLY = {
   over: false,
   lastDice: 0,
   spaceTypes: [],
-  contactId: null,
-  _aiName: null,
+  aiContactIds: [null, null, null, null], // null = human, contactId string = AI player
 };
 
 // ── Setup ──
-function renderFlyAiSelector() {
-  const el = $i('fly-ai-selector');
-  if (!el) return;
-  el.innerHTML = '';
-  const contacts = Object.values(S._contacts);
-  if (!contacts.length) {
-    el.innerHTML = '<span style="font-size:12px;color:var(--text3)">还没有AI助手，先去添加～</span>';
-    return;
-  }
-  contacts.forEach(c => {
-    const btn = document.createElement('button');
-    btn.className = 'fly-ai-selector-btn' + (FLY.contactId === c.id ? ' active' : '');
-    const av = c.avatar?.startsWith('data:') ? `<img src="${c.avatar}" style="width:22px;height:22px;border-radius:50%;object-fit:cover">` : `<span style="font-size:18px">${c.avatar||'🤖'}</span>`;
-    btn.innerHTML = `${av}<span>${esc(c.name)}</span>`;
-    btn.onclick = () => { FLY.contactId = c.id; renderFlyAiSelector(); };
-    el.appendChild(btn);
-  });
-  // Auto-select first if none selected
-  if (!FLY.contactId && contacts.length) FLY.contactId = contacts[0].id;
-}
+function renderFlyAiSelector() { /* merged into renderFlyPlayerInputs */ }
 
 function initFlySetup() {
   FLY.playerCount = 2;
@@ -7830,31 +7810,63 @@ function renderFlyPlayerInputs() {
   const container = $i('fly-setup-players');
   if (!container) return;
   container.innerHTML = '';
+  const contacts = Object.values(S._contacts);
   for (let i = 0; i < FLY.playerCount; i++) {
     const row = document.createElement('div');
     row.className = 'fly-player-input-row';
-    row.innerHTML = `
-      <span class="fly-player-emoji">${FLY_PLAYER_EMOJIS[i]}</span>
-      <span class="fly-player-color-dot" style="background:${FLY_PLAYER_COLORS[i]}"></span>
-      <input class="fly-player-input" id="fly-player-name-${i}" type="text" placeholder="玩家${i + 1}" value="玩家${i + 1}" maxlength="8">
-    `;
+    if (i === 0) {
+      // Human player
+      row.innerHTML = `
+        <span class="fly-player-emoji">${FLY_PLAYER_EMOJIS[0]}</span>
+        <span class="fly-player-color-dot" style="background:${FLY_PLAYER_COLORS[0]}"></span>
+        <input class="fly-player-input" id="fly-player-name-0" type="text" placeholder="你的名字" value="我" maxlength="8">
+        <span style="font-size:11px;color:var(--text3);flex-shrink:0">真人</span>
+      `;
+    } else {
+      // AI player - show contact picker
+      const curId = FLY.aiContactIds[i] || (contacts[i-1]?.id) || contacts[0]?.id || null;
+      if (!FLY.aiContactIds[i] && curId) FLY.aiContactIds[i] = curId;
+      const opts = contacts.map(c => {
+        const av = c.avatar?.startsWith('data:') ? '' : (c.avatar || '🤖');
+        return `<option value="${esc(c.id)}" ${FLY.aiContactIds[i]===c.id?'selected':''}>${av} ${esc(c.name)}</option>`;
+      }).join('');
+      row.innerHTML = `
+        <span class="fly-player-emoji">${FLY_PLAYER_EMOJIS[i]}</span>
+        <span class="fly-player-color-dot" style="background:${FLY_PLAYER_COLORS[i]}"></span>
+        <select class="fly-player-ai-select" id="fly-ai-select-${i}" onchange="FLY.aiContactIds[${i}]=this.value||null" style="flex:1;background:transparent;border:none;outline:none;font-size:13px;color:var(--text);font-family:inherit">
+          ${contacts.length ? opts : '<option value="">无AI助手</option>'}
+        </select>
+        <span style="font-size:11px;color:var(--text3);flex-shrink:0">AI</span>
+      `;
+    }
     container.appendChild(row);
   }
 }
 
 function startFlyGame() {
+  const contacts = Object.values(S._contacts);
   const players = [];
   for (let i = 0; i < FLY.playerCount; i++) {
-    const nameEl = $i(`fly-player-name-${i}`);
-    players.push({
-      name: nameEl?.value.trim() || `玩家${i + 1}`,
-      emoji: FLY_PLAYER_EMOJIS[i],
-      color: FLY_PLAYER_COLORS[i],
-      pos: 0,  // 0 = not yet on board, 1-80 = space number
-      status: 'active',  // 'active', 'finished', 'skipped'
-      skipped: false,
-      finishRank: 0,
-    });
+    if (i === 0) {
+      const nameEl = $i('fly-player-name-0');
+      players.push({
+        name: nameEl?.value.trim() || '我',
+        emoji: FLY_PLAYER_EMOJIS[0],
+        color: FLY_PLAYER_COLORS[0],
+        pos: 0, status: 'active', skipped: false, finishRank: 0,
+        isAI: false, aiContactId: null,
+      });
+    } else {
+      const cid = FLY.aiContactIds[i];
+      const contact = cid ? S._contacts[cid] : (contacts[i-1] || contacts[0]);
+      players.push({
+        name: contact?.name || `AI${i}`,
+        emoji: FLY_PLAYER_EMOJIS[i],
+        color: FLY_PLAYER_COLORS[i],
+        pos: 0, status: 'active', skipped: false, finishRank: 0,
+        isAI: true, aiContactId: contact?.id || null,
+      });
+    }
   }
   FLY.players = players;
   FLY.currentPlayer = 0;
@@ -7953,12 +7965,16 @@ function flyUpdateTurnInfo() {
   if (FLY.over) { el.textContent = '游戏结束！'; return; }
   const p = FLY.players[FLY.currentPlayer];
   if (!p) return;
-  el.innerHTML = `${p.emoji} <strong>${esc(p.name)}</strong> 的回合`;
+  el.textContent = p.isAI ? `${p.emoji} ${p.name} (AI) 思考中…` : `${p.emoji} 轮到你了！`;
 }
 
 function flyEnableDice(enabled) {
   const btn = $i('fly-dice-btn');
-  if (btn) btn.disabled = !enabled;
+  if (!btn) return;
+  const p = FLY.players[FLY.currentPlayer];
+  const isAiTurn = p?.isAI;
+  btn.disabled = !enabled || isAiTurn;
+  btn.style.opacity = (!enabled || isAiTurn) ? '0.5' : '1';
 }
 
 // ── Dice Roll ──
@@ -8027,16 +8043,21 @@ async function flyMovePlayer(playerIdx, steps) {
   }
 
   // Animate step by step
-  for (let pos = oldPos + 1; pos <= newPos; pos++) {
-    p.pos = pos;
-    flyUpdateMapTokens();
-    await flyDelay(120);
-    // Highlight current space
-    const spaceEl = $i(`fly-space-${pos}`);
-    if (spaceEl) {
-      spaceEl.classList.add('highlight');
-      await flyDelay(100);
-      spaceEl.classList.remove('highlight');
+  if (steps > 0) {
+    for (let pos = oldPos + 1; pos <= newPos; pos++) {
+      p.pos = pos;
+      flyUpdateMapTokens();
+      await flyDelay(120);
+      const spaceEl = $i(`fly-space-${pos}`);
+      if (spaceEl) { spaceEl.classList.add('highlight'); await flyDelay(100); spaceEl.classList.remove('highlight'); }
+    }
+  } else {
+    for (let pos = oldPos - 1; pos >= newPos; pos--) {
+      p.pos = pos;
+      flyUpdateMapTokens();
+      await flyDelay(120);
+      const spaceEl = $i(`fly-space-${pos}`);
+      if (spaceEl) { spaceEl.classList.add('highlight'); await flyDelay(100); spaceEl.classList.remove('highlight'); }
     }
   }
 
@@ -8141,6 +8162,14 @@ function flyShowEvent(eventText, type, playerIdx) {
   FLY._pendingEventPlayer = playerIdx;
   FLY._pendingEventText = eventText;
   FLY._pendingEventType = type;
+
+  // If AI player triggered the event, auto-respond with minimal LLM call
+  const triggerPlayer = FLY.players[playerIdx];
+  if (triggerPlayer?.isAI) {
+    const answerSection = $i('fly-answer-section');
+    if (answerSection) answerSection.style.display = 'none';
+    setTimeout(() => flyAiAutoAnswer(playerIdx), 800);
+  }
 }
 
 function flyEventDone() {
@@ -8148,6 +8177,11 @@ function flyEventDone() {
   if (overlay) overlay.style.display = 'none';
   const answerInput = $i('fly-answer-input');
   if (answerInput) answerInput.value = '';
+  // Restore answer section for human players
+  const answerSection = $i('fly-answer-section');
+  if (answerSection) answerSection.style.display = '';
+  const submitBtn = $i('fly-submit-btn');
+  if (submitBtn) { submitBtn.style.display = ''; submitBtn.disabled = false; submitBtn.textContent = '📤 提交给AI'; }
   setTimeout(flyNextTurn, 300);
 }
 
@@ -8165,7 +8199,7 @@ async function flySubmitAnswer() {
   if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'AI思考中…'; }
   if (answerInput) answerInput.disabled = true;
 
-  const contact = FLY.contactId ? S._contacts[FLY.contactId] : Object.values(S._contacts)[0];
+  const contact = Object.values(S._contacts)[0];
   const aiName = contact?.name || 'AI';
   const useKey = contact?.apiKey || S.settings?.apiKey;
 
@@ -8201,6 +8235,48 @@ ${p?.name || '玩家'}的回答：${answer}
   if (continueBtn) continueBtn.style.display = 'block';
 }
 
+async function flyAiAutoAnswer(playerIdx) {
+  const p = FLY.players[playerIdx];
+  const aiResponseText = $i('fly-ai-response-text');
+  const aiResponse = $i('fly-ai-response');
+  const aiResponseLabel = $i('fly-ai-response-label');
+  const continueBtn = $i('fly-continue-btn');
+  const submitBtn = $i('fly-submit-btn');
+
+  if (submitBtn) submitBtn.style.display = 'none';
+
+  const contact = p?.aiContactId ? S._contacts[p.aiContactId] : null;
+  const aiName = contact?.name || p?.name || 'AI';
+  const useKey = contact?.apiKey || S.settings?.apiKey;
+
+  if (aiResponseLabel) aiResponseLabel.textContent = `${p?.emoji || '🤖'} ${aiName}：`;
+
+  let reply = '';
+  if (useKey && FLY._pendingEventText) {
+    try {
+      const prompt = `你是${aiName}。飞行棋问题：「${FLY._pendingEventText}」用一句话回答。只返回JSON：{"a":"回答"}`;
+      const res = await fetch(contact?.apiUrl || 'https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${useKey}`, 'Content-Type': 'application/json', 'HTTP-Referer': 'https://raimos.app', 'X-Title': 'Raimos' },
+        body: JSON.stringify({ model: contact?.model || 'openai/gpt-4o-mini', max_tokens: 50, stream: false, temperature: 0.9, messages: [{ role: 'user', content: prompt }] })
+      });
+      const data = await res.json();
+      const txt = data.choices?.[0]?.message?.content || '';
+      const m = txt.match(/\{[\s\S]*?\}/);
+      if (m) reply = JSON.parse(m[0]).a || '';
+    } catch(e) {}
+  }
+  const defaults = ['嗯，我觉得还不错！', '这个问题我也想过～', '哈哈，有意思！', '我也同意这个观点！'];
+  if (!reply) reply = defaults[Math.floor(Math.random() * defaults.length)];
+
+  if (aiResponseText) aiResponseText.textContent = reply;
+  if (aiResponse) aiResponse.className = 'fly-ai-response visible';
+  if (continueBtn) continueBtn.style.display = 'block';
+
+  // Auto-continue after 3 seconds
+  setTimeout(flyEventDone, 3000);
+}
+
 function flyNextTurn() {
   if (FLY.over) return;
 
@@ -8219,6 +8295,17 @@ function flyNextTurn() {
   renderFlyPlayerBar();
   flyUpdateTurnInfo();
   flyEnableDice(true);
+
+  // If next player is AI, auto-play after delay
+  const nextP = FLY.players[FLY.currentPlayer];
+  if (nextP?.isAI) setTimeout(flyAiAutoTurn, 1300);
+}
+
+function flyAiAutoTurn() {
+  if (FLY.over) return;
+  const p = FLY.players[FLY.currentPlayer];
+  if (!p?.isAI) return;
+  flyRollDice();
 }
 
 function flyWin(playerIdx) {

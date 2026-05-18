@@ -2010,6 +2010,7 @@ button, a, .nav-tab, .nav-logo, .chat-item, .ibtn, .hbtn, .act-btn,
   color: var(--text);
   font-family: inherit;
 }
+.fly-player-ai-select { flex: 1; background: transparent; border: none; outline: none; font-size: 13px; color: var(--text); font-family: inherit; cursor: pointer; }
 
 .fly-rules-box { background: linear-gradient(135deg, #fff5fb, #f0f4ff); }
 .fly-rules-text { font-size: 12.5px; color: var(--text2); line-height: 2; }

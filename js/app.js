@@ -32,7 +32,7 @@ let S = {
     model:'', systemPrompt:'',
     ttsMode:'browser', browserVoice:'', ttsUrl:'', ttsKey:'', ttsVoice:'cove',
     voiceReplyMode:'text', autoTts:false,
-    stream:true, showToken:false, showThink:true,
+    stream:true, showToken:false, showGameToken:false, showThink:true,
     temp:0.85, ctx:20, imgSize:800, sumThresh:40,
     proactive:false, proMax:3, proStart:8, proEnd:22,
     momentsEnabled:false, autoPost:false, momentFreqMode:'perWeek', momentFreqCount:3,
@@ -2292,8 +2292,8 @@ async function sendSticker(sk){
   $i('emoji-picker').classList.remove('show');
   const stickerModal=$i('sticker-modal');if(stickerModal)stickerModal.classList.remove('show');
   if(sk.isImg){
-    // Real image → send as type:'image' so AI can see it
-    await addMsg(S.currentChat,{role:'user',type:'image',imageData:sk.url,url:sk.url,content:'[图片]'});
+    // Send as sticker so AI only sees the label name, not the actual image data
+    await addMsg(S.currentChat,{role:'user',type:'sticker',content:sk.content||sk.label||'[图片]',url:sk.url,isImg:true});
     await renderMsgs();scrollTo_(false);
     await callAI(S.currentChat);
   } else {
@@ -3158,6 +3158,7 @@ function buildSettingsUI() {
     <div class="s-section" hidden><h3>🤖 对话参数</h3>
       <div class="s-row"><label>流式输出</label><label class="toggle"><input type="checkbox" id="s-stream" ${s.stream!==false?'checked':''}><span class="tslider"></span></label></div>
       <div class="s-row"><label>显示Token用量</label><label class="toggle"><input type="checkbox" id="s-show-token" ${s.showToken?'checked':''}><span class="tslider"></span></label></div>
+      <div class="s-row"><label>游戏AI Token用量</label><label class="toggle"><input type="checkbox" id="s-show-game-token" ${s.showGameToken?'checked':''}><span class="tslider"></span></label></div>
       <div class="s-row"><label>显示思考过程</label><label class="toggle"><input type="checkbox" id="s-show-think" ${s.showThink!==false?'checked':''}><span class="tslider"></span></label></div>
       <div class="s-row"><label>Temperature</label><input type="range" id="s-temp" min="0" max="2" step="0.05" value="${s.temp||0.85}" oninput="$i('s-temp-v').textContent=this.value"><span class="rval" id="s-temp-v">${s.temp||0.85}</span></div>
       <div class="s-row"><label>上下文消息数</label><input type="number" id="s-ctx" value="${s.ctx||20}" min="2" max="1000" style="max-width:80px"/><span style="font-size:11px;color:var(--text3)">条 (最高1000)</span></div>
@@ -3369,7 +3370,7 @@ async function saveAllSettings(){
   s.ttsMode=get('s-tts-mode','browser');s.browserVoice=get('s-bvoice');
   s.ttsUrl=get('s-tts-url');s.ttsKey=get('s-tts-key');s.ttsVoice=get('s-tts-voice','cove');
   s.voiceReplyMode=get('s-voice-reply','text');s.autoTts=getB('s-auto-tts');
-  s.stream=getB('s-stream');s.showToken=getB('s-show-token');s.showThink=getB('s-show-think');
+  s.stream=getB('s-stream');s.showToken=getB('s-show-token');s.showGameToken=getB('s-show-game-token');s.showThink=getB('s-show-think');
   s.hapticEnabled=getB('s-haptic-enabled');
   s.hapticOnAiReply=getB('s-haptic-ai-reply');
   s.typingAnimEnabled=getB('s-typing-anim');
@@ -5589,11 +5590,25 @@ function gomokuSetStatus(msg) {
   if (el) el.textContent = msg;
 }
 
+function showGameTokenBadge(badgeId, usage) {
+  const badge = $i(badgeId);
+  if (!badge) return;
+  if (S.settings.showGameToken && usage) {
+    const t = usage.total_tokens || 0, p = usage.prompt_tokens || 0, c = usage.completion_tokens || 0;
+    badge.textContent = `⚡ ${t} tokens (↑${p} ↓${c})`;
+    badge.style.display = '';
+  } else {
+    badge.style.display = 'none';
+  }
+}
+
 function gomokuSay(text) {
   const el = $i('gomoku-comment');
   if (!el || !text) return;
   el.textContent = text;
   el.style.opacity = '1';
+  showGameTokenBadge('gomoku-token-badge', GOMOKU._lastUsage || null);
+  GOMOKU._lastUsage = null;
   clearTimeout(el._t);
   el._t = setTimeout(() => { if (el) el.style.opacity = '0'; }, 5500);
 }
@@ -5670,54 +5685,82 @@ async function gomokuAiMove() {
   const contact = gomokuGetContact();
   const useKey = contact?.apiKey || S.settings.apiKey;
   const useUrl = contact?.apiUrl || 'https://openrouter.ai/api/v1/chat/completions';
-  let row, col, comment;
+  const diff = GOMOKU.prefs.difficulty || 'normal';
   GOMOKU.moveCount++;
 
-  // Determine game phase
-  const phase = GOMOKU.moveCount <= 6 ? 'early' : GOMOKU.moveCount <= 20 ? 'mid' : 'late';
-  const phaseHint = phase==='early'?'开局阶段，可以随意发挥':phase==='mid'?'中局关键期，要认真思考':'终局阶段，胜负即将揭晓';
+  // Algorithm always finds the best move first
+  let { r: row, c: col } = gomokuHeuristic();
+  let comment = '';
 
-  // Check if player has a threatening line (for commentary)
-  const playerLastR = GOMOKU.lastMove?.[0], playerLastC = GOMOKU.lastMove?.[1];
-  const playerThreat = (playerLastR!=null) ? gomokuMaxLine(playerLastR, playerLastC, 1) : 0;
+  // Check if the best move is an immediate win
+  GOMOKU.board[row][col] = 2;
+  const wouldWin = gomokuCheckWin(row, col, 2);
+  GOMOKU.board[row][col] = 0;
 
-  if (useKey) {
-    const blacks = [], whites = [];
-    for (let r=0;r<15;r++) for (let c=0;c<15;c++) {
-      if (GOMOKU.board[r][c]===1) blacks.push(`(${r},${c})`);
-      else if (GOMOKU.board[r][c]===2) whites.push(`(${r},${c})`);
-    }
-    const boardTxt = `黑子(对手)：${blacks.join('')||'无'}  白子(你)：${whites.join('')||'无'}`;
+  // ── Decisive moment: LLM decides whether to take the win ──
+  // Only triggers when AI can win, has a key, and difficulty is not easy
+  if (wouldWin && useKey && diff !== 'easy') {
     const aiName = contact?.name || 'AI';
-    const personality = (contact?.system || '你是可爱温柔的AI助手').slice(0, 130);
+    const personality = (contact?.system || '你是可爱温柔的AI助手').slice(0, 150);
     const model = contact?.model || 'openai/gpt-4o-mini';
-    // Commentary hint: if player is threatening, AI may warn/tease; if early game, be casual
-    const commentHint = playerThreat >= 4
-      ? '对手刚连了4子，你需要反应！评论可以紧张/惊讶/挑衅'
-      : playerThreat >= 3
-      ? '对手有威胁，评论可以提示/安慰/警告'
-      : GOMOKU.prefs.commentary && GOMOKU.moveCount%4===0
-      ? '过程评论，可以说游戏感受/小技巧/鼓励/调侃'
-      : '';
-    const prompt = `你是${aiName}，和用户下五子棋。你执白子，用户执黑子，棋盘15×15（行列0-14）。\n${boardTxt}\n性格：${personality}\n阶段：第${GOMOKU.moveCount}步，${phaseHint}。\n策略要求：根据性格和阶段灵活决策。温柔性格不代表一直让，可能开始认真、局势好时才礼让一步；强势性格会全力争胜；总之要有真实的游戏节奏感，避免机械。${commentHint ? '\n评论方向：'+commentHint : ''}\n在空位落子并用1句符合性格的话回应（${commentHint?'按方向':'可以是棋局感受'}）。\n只返回JSON：{"row":数字,"col":数字,"comment":"一句话"}`;
+    const moveLabel = diff === 'hard' ? '专业难度，你一直认真博弈' : '普通难度，你时而认真时而温柔';
+    const prompt = `你是${aiName}，性格：${personality}。你在和用户下五子棋（${moveLabel}，第${GOMOKU.moveCount}步）。现在你可以立刻落子赢棋了。根据你此刻的性格、心情和对用户的感情，你要赢下这局吗？还是故意让一步让对方多玩一会儿？自由决定，用1句符合性格的话表达你的决定。只返回JSON：{"take_win":true或false,"comment":"一句话"}`;
     try {
       const res = await fetch(useUrl, {
         method:'POST',
         headers:{'Authorization':`Bearer ${useKey}`,'Content-Type':'application/json','HTTP-Referer':'https://raimos.app','X-Title':'Raimos'},
-        body:JSON.stringify({model,max_tokens:90,stream:false,temperature:0.8,messages:[{role:'user',content:prompt}]}),
+        body:JSON.stringify({model,max_tokens:80,stream:false,temperature:0.9,messages:[{role:'user',content:prompt}]}),
       });
       const data = await res.json();
+      GOMOKU._lastUsage = data.usage || null;
       const txt = data.choices?.[0]?.message?.content || '';
       const m = txt.match(/\{[\s\S]*?\}/);
-      if (m) { const p = JSON.parse(m[0]); row=p.row; col=p.col; comment=p.comment; }
+      if (m) {
+        const p = JSON.parse(m[0]);
+        comment = p.comment || '';
+        if (p.take_win === false) {
+          // LLM chose to yield — find best non-winning move
+          const alt = gomokuYieldMove();
+          row = alt.r; col = alt.c;
+        }
+      }
     } catch(e) {}
+    if (!comment) comment = wouldWin ? '就决定是你了！' : '';
   }
 
-  // Validate / heuristic fallback
-  if (typeof row!=='number'||typeof col!=='number'||row<0||row>=15||col<0||col>=15||GOMOKU.board[row][col]!==0) {
-    const h = gomokuHeuristic();
-    row=h.r; col=h.c;
-    if (!comment) comment = playerThreat>=4 ? '好险，我得拦住你！' : '嗯，就这里！';
+  // Regular commentary (only when no decisive-moment comment)
+  if (!comment && useKey && GOMOKU.prefs.commentary) {
+    const playerLastR = GOMOKU.lastMove?.[0], playerLastC = GOMOKU.lastMove?.[1];
+    const playerThreat = (playerLastR != null) ? gomokuMaxLine(playerLastR, playerLastC, 1) : 0;
+    const commentHint = playerThreat >= 4
+      ? '对手刚连了4子被你拦住，可以紧张/得意/挑衅'
+      : playerThreat >= 3 ? '对手有威胁，可以警惕/调侃'
+      : GOMOKU.moveCount % 4 === 0 ? '聊聊游戏感受/鼓励/调侃'
+      : '';
+    if (commentHint) {
+      const phase = GOMOKU.moveCount <= 6 ? '开局' : GOMOKU.moveCount <= 20 ? '中局' : '终局';
+      const aiName = contact?.name || 'AI';
+      const personality = (contact?.system || '你是可爱温柔的AI助手').slice(0, 130);
+      const model = contact?.model || 'openai/gpt-4o-mini';
+      const prompt = `你是${aiName}，性格：${personality}。正在和用户下五子棋${phase}第${GOMOKU.moveCount}步。${commentHint}。用1句符合性格的话回应。只返回JSON：{"comment":"一句话"}`;
+      try {
+        const res = await fetch(useUrl, {
+          method:'POST',
+          headers:{'Authorization':`Bearer ${useKey}`,'Content-Type':'application/json','HTTP-Referer':'https://raimos.app','X-Title':'Raimos'},
+          body:JSON.stringify({model,max_tokens:60,stream:false,temperature:0.8,messages:[{role:'user',content:prompt}]}),
+        });
+        const data = await res.json();
+        GOMOKU._lastUsage = data.usage || null;
+        const txt = data.choices?.[0]?.message?.content || '';
+        const mm = txt.match(/\{[\s\S]*?\}/);
+        if (mm) comment = JSON.parse(mm[0]).comment || '';
+      } catch(e) {}
+    }
+    if (!comment) {
+      const playerLastR2 = GOMOKU.lastMove?.[0], playerLastC2 = GOMOKU.lastMove?.[1];
+      const pt = (playerLastR2 != null) ? gomokuMaxLine(playerLastR2, playerLastC2, 1) : 0;
+      comment = pt >= 4 ? '好险，我得拦住你！' : pt >= 3 ? '嗯，得小心一点～' : '';
+    }
   }
 
   GOMOKU.board[row][col] = 2;
@@ -5742,30 +5785,91 @@ async function gomokuAiMove() {
   gomokuSetStatus('轮到你了！');
 }
 
-// Heuristic: win > block > weighted proximity + center bias
-function gomokuHeuristic() {
-  for (let r=0;r<15;r++) for (let c=0;c<15;c++) {
-    if (GOMOKU.board[r][c]!==0) continue;
-    GOMOKU.board[r][c]=2; const w=gomokuCheckWin(r,c,2); GOMOKU.board[r][c]=0;
-    if (w) return {r,c};
-  }
-  for (let r=0;r<15;r++) for (let c=0;c<15;c++) {
-    if (GOMOKU.board[r][c]!==0) continue;
-    GOMOKU.board[r][c]=1; const w=gomokuCheckWin(r,c,1); GOMOKU.board[r][c]=0;
-    if (w) return {r,c};
-  }
-  let best=null, bestScore=-1;
-  for (let r=0;r<15;r++) for (let c=0;c<15;c++) {
-    if (GOMOKU.board[r][c]!==0) continue;
-    let score=0;
+// Yield move: best strategic move that does NOT immediately win (for LLM let-go moments)
+function gomokuYieldMove() {
+  const diff = GOMOKU.prefs.difficulty || 'normal';
+  const N = 15;
+  const seen = new Set();
+  for (let r=0;r<N;r++) for (let c=0;c<N;c++) {
+    if (!GOMOKU.board[r][c]) continue;
     for (let dr=-2;dr<=2;dr++) for (let dc=-2;dc<=2;dc++) {
       const nr=r+dr,nc=c+dc;
-      if (nr>=0&&nr<15&&nc>=0&&nc<15&&GOMOKU.board[nr][nc]!==0) score+=2;
+      if (nr>=0&&nr<N&&nc>=0&&nc<N&&!GOMOKU.board[nr][nc]) seen.add(nr*N+nc);
     }
-    score += 8/(1+Math.abs(r-7)+Math.abs(c-7));
+  }
+  const cells = [...seen].map(k=>({r:Math.floor(k/N),c:k%N}));
+  // Still block player's win — yielding doesn't mean letting player win instantly
+  for (const {r,c} of cells){GOMOKU.board[r][c]=1;const w=gomokuCheckWin(r,c,1);GOMOKU.board[r][c]=0;if(w)return{r,c};}
+  // Score-based but skip any move that would win immediately
+  const defWeight = diff === 'hard' ? 1.3 : 1.1;
+  let best=null, bestScore=-Infinity;
+  for (const {r,c} of cells) {
+    GOMOKU.board[r][c]=2; const wins=gomokuCheckWin(r,c,2); GOMOKU.board[r][c]=0;
+    if (wins) continue; // skip winning moves
+    const score = gomokuScore(r,c,2) + gomokuScore(r,c,1)*defWeight;
     if (score>bestScore){bestScore=score;best={r,c};}
   }
-  return best||{r:7,c:7};
+  return best || cells[0] || {r:7,c:7};
+}
+
+// Score a position for a player: higher = more dangerous / more valuable
+function gomokuScore(r, c, player) {
+  const N = 15;
+  const dirs = [[0,1],[1,0],[1,1],[1,-1]];
+  let total = 0;
+  for (const [dr, dc] of dirs) {
+    let cnt = 1, opens = 0;
+    for (let d=1;d<5;d++){const nr=r+dr*d,nc=c+dc*d;if(nr<0||nr>=N||nc<0||nc>=N)break;if(GOMOKU.board[nr][nc]===player)cnt++;else{if(GOMOKU.board[nr][nc]===0)opens++;break;}}
+    for (let d=1;d<5;d++){const nr=r-dr*d,nc=c-dc*d;if(nr<0||nr>=N||nc<0||nc>=N)break;if(GOMOKU.board[nr][nc]===player)cnt++;else{if(GOMOKU.board[nr][nc]===0)opens++;break;}}
+    if      (cnt>=5)              total += 100000;
+    else if (cnt===4&&opens>=2)   total +=  50000; // 活四
+    else if (cnt===4&&opens>=1)   total +=  10000; // 冲四
+    else if (cnt===3&&opens>=2)   total +=   2000; // 活三
+    else if (cnt===3&&opens>=1)   total +=    300; // 眠三
+    else if (cnt===2&&opens>=2)   total +=    100;
+    else if (cnt===2&&opens>=1)   total +=     20;
+  }
+  return total;
+}
+
+// Heuristic: always correct (win > block 5 > block 4 > score-based)
+function gomokuHeuristic() {
+  const diff = GOMOKU.prefs.difficulty || 'normal';
+  const N = 15;
+  // Collect candidate cells within 2 of any piece
+  const seen = new Set();
+  let hasAny = false;
+  for (let r=0;r<N;r++) for (let c=0;c<N;c++) {
+    if (!GOMOKU.board[r][c]) continue;
+    hasAny = true;
+    for (let dr=-2;dr<=2;dr++) for (let dc=-2;dc<=2;dc++) {
+      const nr=r+dr,nc=c+dc;
+      if (nr>=0&&nr<N&&nc>=0&&nc<N&&!GOMOKU.board[nr][nc]) seen.add(nr*N+nc);
+    }
+  }
+  if (!hasAny) return {r:7,c:7};
+  const cells = [...seen].map(k=>({r:Math.floor(k/N),c:k%N}));
+
+  // All difficulties: win immediately
+  for (const {r,c} of cells){GOMOKU.board[r][c]=2;const w=gomokuCheckWin(r,c,2);GOMOKU.board[r][c]=0;if(w)return{r,c};}
+  // All difficulties: block player's 5-in-a-row
+  for (const {r,c} of cells){GOMOKU.board[r][c]=1;const w=gomokuCheckWin(r,c,1);GOMOKU.board[r][c]=0;if(w)return{r,c};}
+
+  if (diff === 'easy') {
+    // Easy: no threat detection, mostly random near existing pieces
+    const shuffled = cells.slice().sort(()=>Math.random()-0.5);
+    return shuffled[0]||{r:7,c:7};
+  }
+
+  // Normal / Hard: score-based, defense outweighs offense to ensure blocking
+  const defWeight = diff === 'hard' ? 1.3 : 1.1;
+  const noise     = diff === 'hard' ? 0   : 60;  // normal has slight randomness
+  let best=null, bestScore=-Infinity;
+  for (const {r,c} of cells) {
+    const score = gomokuScore(r,c,2) + gomokuScore(r,c,1)*defWeight + Math.random()*noise;
+    if (score>bestScore){bestScore=score;best={r,c};}
+  }
+  return best||cells[0]||{r:7,c:7};
 }
 
 // ── Game End ──
@@ -5783,7 +5887,7 @@ async function gomokuFinish(result) {
       const resultDesc = result==='player_win'?'你输了':result==='ai_win'?'你赢了':'平局';
       const prompt = `你是${aiName}，性格：${personality||'可爱温柔'}。五子棋结束，${resultDesc}。用1句符合性格的话回应。只返回JSON：{"comment":"话"}`;
       const res = await fetch(contact?.apiUrl||'https://openrouter.ai/api/v1/chat/completions',{method:'POST',headers:{'Authorization':`Bearer ${useKey}`,'Content-Type':'application/json','HTTP-Referer':'https://raimos.app','X-Title':'Raimos'},body:JSON.stringify({model:contact?.model||'openai/gpt-4o-mini',max_tokens:60,stream:false,messages:[{role:'user',content:prompt}]})});
-      const data=await res.json();const txt=data.choices?.[0]?.message?.content||'';const m=txt.match(/\{[\s\S]*?\}/);
+      const data=await res.json();GOMOKU._lastUsage = data.usage || null;const txt=data.choices?.[0]?.message?.content||'';const m=txt.match(/\{[\s\S]*?\}/);
       if (m) aiComment=JSON.parse(m[0]).comment||'';
     } catch(e){}
   }
@@ -6343,7 +6447,7 @@ async function xqAiMove() {
       const movesStr = legalMoves.slice(0,20).map(m=>`(${m.fromR},${m.fromC})→(${m.toR},${m.toC})`).join(' ');
       const prompt = `你是${aiName}，和用户下中国象棋。你执黑方，用户执红方。棋盘10行9列，行0-9，列0-8，黑方从第0行开始。\n当前棋子：${piecesStr.join(' ')}\n合法移动（前20个）：${movesStr}\n性格：${personality||'聪明好胜'}\n阶段：第${XIANGQI.moveCount}手，${phase}局。\n根据性格灵活决策：温柔型可能偶尔让步，强势型全力争胜。\n从合法移动中选一步，用1句话回应。只返回JSON：{"fromR":数字,"fromC":数字,"toR":数字,"toC":数字,"comment":"话"}`;
       const res = await fetch(contact?.apiUrl||'https://openrouter.ai/api/v1/chat/completions',{method:'POST',headers:{'Authorization':`Bearer ${useKey}`,'Content-Type':'application/json','HTTP-Referer':'https://raimos.app','X-Title':'Raimos'},body:JSON.stringify({model,max_tokens:100,stream:false,temperature:0.7,messages:[{role:'user',content:prompt}]})});
-      const data=await res.json();const txt=data.choices?.[0]?.message?.content||'';const m=txt.match(/\{[\s\S]*?\}/);
+      const data=await res.json();XIANGQI._lastUsage = data.usage || null;const txt=data.choices?.[0]?.message?.content||'';const m=txt.match(/\{[\s\S]*?\}/);
       if (m) { const p=JSON.parse(m[0]); const lm=xqAllLegalMoves(XIANGQI.board,'black'); if(lm.some(mv=>mv.fromR===p.fromR&&mv.fromC===p.fromC&&mv.toR===p.toR&&mv.toC===p.toC)){move=p;comment=p.comment;} }
     } catch(e){}
   }
@@ -6373,7 +6477,10 @@ async function xqAiMove() {
 function xqSetStatus(msg) { const el=$i('xq-status'); if(el)el.textContent=msg; }
 function xqSay(text) {
   const el=$i('xq-comment'); if(!el||!text)return;
-  el.textContent=text; el.style.opacity='1'; clearTimeout(el._t);
+  el.textContent=text; el.style.opacity='1';
+  showGameTokenBadge('xq-token-badge', XIANGQI._lastUsage || null);
+  XIANGQI._lastUsage = null;
+  clearTimeout(el._t);
   el._t=setTimeout(()=>{if(el)el.style.opacity='0';},5500);
 }
 
@@ -6389,7 +6496,7 @@ async function xqFinish(result) {
       const resultDesc=result==='player_win'?'你输了':result==='ai_win'?'你赢了':'平局';
       const prompt=`你是${aiName}，性格：${personality||'聪明好胜'}。象棋结束，${resultDesc}。用1句符合性格的话回应。只返回JSON：{"comment":"话"}`;
       const res=await fetch(contact?.apiUrl||'https://openrouter.ai/api/v1/chat/completions',{method:'POST',headers:{'Authorization':`Bearer ${useKey}`,'Content-Type':'application/json','HTTP-Referer':'https://raimos.app','X-Title':'Raimos'},body:JSON.stringify({model:contact?.model||'openai/gpt-4o-mini',max_tokens:60,stream:false,messages:[{role:'user',content:prompt}]})});
-      const data=await res.json();const txt=data.choices?.[0]?.message?.content||'';const m=txt.match(/\{[\s\S]*?\}/);
+      const data=await res.json();XIANGQI._lastUsage = data.usage || null;const txt=data.choices?.[0]?.message?.content||'';const m=txt.match(/\{[\s\S]*?\}/);
       if(m)aiComment=JSON.parse(m[0]).comment||'';
     } catch(e){}
   }
@@ -6738,7 +6845,7 @@ async function icAiMove(){
       const aiName=contact?.name||'AI',personality=(contact?.system||'').slice(0,120),model=contact?.model||'openai/gpt-4o-mini';
       const prompt=`你是${aiName}，和用户下国际象棋。你执黑方，用户执白方。棋盘8×8，行0-7（0为黑方底），列0-7。\n当前棋子：${boardStr.join(' ')}\n合法移动（前15个）：${movesStr}\n性格：${personality||'聪明好胜'}\n阶段：第${INTCHESS.moveCount}步，${phase}。\n根据性格灵活决策：温柔型可能偶尔让步，强势型全力争胜。\n从合法移动中选一步，用1句话回应。只返回JSON：{"fromR":数字,"fromC":数字,"toR":数字,"toC":数字,"comment":"话"}`;
       const res=await fetch(contact?.apiUrl||'https://openrouter.ai/api/v1/chat/completions',{method:'POST',headers:{'Authorization':`Bearer ${useKey}`,'Content-Type':'application/json','HTTP-Referer':'https://raimos.app','X-Title':'Raimos'},body:JSON.stringify({model,max_tokens:100,stream:false,temperature:0.7,messages:[{role:'user',content:prompt}]})});
-      const data=await res.json();const txt=data.choices?.[0]?.message?.content||'';const m=txt.match(/\{[\s\S]*?\}/);
+      const data=await res.json();INTCHESS._lastUsage=data.usage||null;const txt=data.choices?.[0]?.message?.content||'';const m=txt.match(/\{[\s\S]*?\}/);
       if(m){const p=JSON.parse(m[0]);const lm=icAllLegalMoves(INTCHESS.board,'b',INTCHESS.enPassant,INTCHESS.castling);if(lm.some(mv=>mv.fromR===p.fromR&&mv.fromC===p.fromC&&mv.toR===p.toR&&mv.toC===p.toC)){move=p;comment=p.comment;}}
     }catch(e){}
   }
@@ -6766,13 +6873,13 @@ async function icAiMove(){
 }
 
 function icSetStatus(msg){const el=$i('ic-status');if(el)el.textContent=msg;}
-function icSay(text){const el=$i('ic-comment');if(!el||!text)return;el.textContent=text;el.style.opacity='1';clearTimeout(el._t);el._t=setTimeout(()=>{if(el)el.style.opacity='0';},5500);}
+function icSay(text){const el=$i('ic-comment');if(!el||!text)return;el.textContent=text;el.style.opacity='1';showGameTokenBadge('ic-token-badge',INTCHESS._lastUsage||null);INTCHESS._lastUsage=null;clearTimeout(el._t);el._t=setTimeout(()=>{if(el)el.style.opacity='0';},5500);}
 
 async function icFinish(result){
   const contact=icGetContact();const elapsed=Math.round((Date.now()-INTCHESS.startTime)/1000);
   await saveIntChessRecord({result,moves:INTCHESS.moveCount,elapsed,aiName:contact?.name||'AI',aiContactId:INTCHESS.contactId,date:Date.now()});
   let aiComment='';const useKey=contact?.apiKey||S.settings.apiKey;
-  if(useKey){try{const aiName=contact?.name||'AI',personality=(contact?.system||'').slice(0,100);const resultDesc=result==='player_win'?'你输了':result==='ai_win'?'你赢了':'平局';const prompt=`你是${aiName}，性格：${personality||'聪明好胜'}。国际象棋结束，${resultDesc}。用1句符合性格的话回应。只返回JSON：{"comment":"话"}`;const res=await fetch(contact?.apiUrl||'https://openrouter.ai/api/v1/chat/completions',{method:'POST',headers:{'Authorization':`Bearer ${useKey}`,'Content-Type':'application/json','HTTP-Referer':'https://raimos.app','X-Title':'Raimos'},body:JSON.stringify({model:contact?.model||'openai/gpt-4o-mini',max_tokens:60,stream:false,messages:[{role:'user',content:prompt}]})});const data=await res.json();const txt=data.choices?.[0]?.message?.content||'';const m=txt.match(/\{[\s\S]*?\}/);if(m)aiComment=JSON.parse(m[0]).comment||'';}catch(e){}}
+  if(useKey){try{const aiName=contact?.name||'AI',personality=(contact?.system||'').slice(0,100);const resultDesc=result==='player_win'?'你输了':result==='ai_win'?'你赢了':'平局';const prompt=`你是${aiName}，性格：${personality||'聪明好胜'}。国际象棋结束，${resultDesc}。用1句符合性格的话回应。只返回JSON：{"comment":"话"}`;const res=await fetch(contact?.apiUrl||'https://openrouter.ai/api/v1/chat/completions',{method:'POST',headers:{'Authorization':`Bearer ${useKey}`,'Content-Type':'application/json','HTTP-Referer':'https://raimos.app','X-Title':'Raimos'},body:JSON.stringify({model:contact?.model||'openai/gpt-4o-mini',max_tokens:60,stream:false,messages:[{role:'user',content:prompt}]})});const data=await res.json();INTCHESS._lastUsage=data.usage||null;const txt=data.choices?.[0]?.message?.content||'';const m=txt.match(/\{[\s\S]*?\}/);if(m)aiComment=JSON.parse(m[0]).comment||'';}catch(e){}}
   if(!aiComment)aiComment=result==='player_win'?'你赢了，下次再来较量！':result==='ai_win'?'我赢了！再来一局吧～':'旗鼓相当，平局！';
   icSay(aiComment);setTimeout(()=>showIntChessResult(result,elapsed,aiComment,contact),800);
 }
@@ -6994,6 +7101,8 @@ function goUpdateCaptures() {
 function goSay(msg) {
   const el = $i('go-comment');
   if (el) { el.textContent = msg; el.style.display = msg ? '' : 'none'; }
+  showGameTokenBadge('go-token-badge', GO._lastUsage || null);
+  GO._lastUsage = null;
 }
 
 // ── Board Render ──
@@ -7289,6 +7398,7 @@ async function goCallAI(contact, apiKey) {
     }),
   });
   const data = await res.json();
+  GO._lastUsage = data.usage || null;
   const txt = data.choices?.[0]?.message?.content || '';
   const m = txt.match(/\{[\s\S]*?\}/);
   if (!m) return null;
@@ -7512,6 +7622,7 @@ async function clearGoRecords() {
 // ══ Flying Chess (飞行棋) ══════════════════════
 const FLY_PLAYER_COLORS = ['#ff6b6b', '#4d9fff', '#ffd93d', '#6bcb77'];
 const FLY_PLAYER_EMOJIS = ['🔴', '🔵', '🟡', '🟢'];
+const FLY_PIECE_OPTIONS = ['🐱','🦊','🐻','🐼','🐨','🐰','🐸','🦁','🐯','🐮','🐷','🐹','🦄','🦋','🌸','⭐','🌙','🎀','🍓','🍭','💎','🔮','🎭','🧸','🌺','🍀','🎃','🦖','🐧','🦜'];
 const DICE_FACES = ['⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
 
 const FLY_SPACE_LAYOUT = [
@@ -7536,9 +7647,35 @@ const FLY_SPACE_LAYOUT = [
 
 const FLY_SPACE_ICONS = {
   start: '🚀', finish: '🏆', normal: '', event: '⭐', heart: '💗',
-  forward3: '↑+3', forward5: '↑+5', back3: '↓-3', skip: '💤',
-  again: '🎲', checkpoint: '⭕',
+  forward3: '🌈', forward5: '⚡', back3: '🌀', skip: '💤',
+  again: '🎲', checkpoint: '🌟',
 };
+
+// Spiral grid positions: 80 spaces on a 10×8 CSS grid (0-indexed row, col)
+// Four concentric rings spiraling inward: outer→inner
+const FLY_GRID_POS = (() => {
+  const p = [];
+  // Ring 1 (outer, 32 cells): perimeter of 10×8
+  for (let c = 0; c <= 9; c++) p.push([0, c]);          // top L→R   (1–10)
+  for (let r = 1; r <= 6; r++) p.push([r, 9]);          // right T→B (11–16)
+  for (let c = 9; c >= 0; c--) p.push([7, c]);          // bottom R→L (17–26)
+  for (let r = 6; r >= 1; r--) p.push([r, 0]);          // left B→T  (27–32)
+  // Ring 2 (24 cells): rows 1–6, cols 1–8
+  for (let c = 1; c <= 8; c++) p.push([1, c]);          // top L→R   (33–40)
+  for (let r = 2; r <= 5; r++) p.push([r, 8]);          // right T→B (41–44)
+  for (let c = 8; c >= 1; c--) p.push([6, c]);          // bottom R→L (45–52)
+  for (let r = 5; r >= 2; r--) p.push([r, 1]);          // left B→T  (53–56)
+  // Ring 3 (16 cells): rows 2–5, cols 2–7
+  for (let c = 2; c <= 7; c++) p.push([2, c]);          // top L→R   (57–62)
+  for (let r = 3; r <= 4; r++) p.push([r, 7]);          // right T→B (63–64)
+  for (let c = 7; c >= 2; c--) p.push([5, c]);          // bottom R→L (65–70)
+  for (let r = 4; r >= 3; r--) p.push([r, 2]);          // left B→T  (71–72)
+  // Ring 4 (8 cells): rows 3–4, cols 3–6 — innermost home stretch
+  for (let c = 3; c <= 6; c++) p.push([3, c]);          // top L→R   (73–76)
+  p.push([4, 6]);                                         // right (77)
+  for (let c = 5; c >= 3; c--) p.push([4, c]);          // bottom R→L (78–80)
+  return p;
+})();
 
 const FLY_ROMANCE_EVENTS = [
   '说出你觉得最浪漫的表白方式，然后前进3格🌹',
@@ -7694,31 +7831,13 @@ const FLY = {
   over: false,
   lastDice: 0,
   spaceTypes: [],
-  contactId: null,
-  _aiName: null,
+  aiContactIds: [null, null, null, null],
+  _setupPieces: ['🐱', '🦊', '🐻', '🐼'], // piece per player slot, configurable in setup
+  _gameLog: [], // {emoji, player, q, a, isAI} - all Q&A this session for AI context
 };
 
 // ── Setup ──
-function renderFlyAiSelector() {
-  const el = $i('fly-ai-selector');
-  if (!el) return;
-  el.innerHTML = '';
-  const contacts = Object.values(S._contacts);
-  if (!contacts.length) {
-    el.innerHTML = '<span style="font-size:12px;color:var(--text3)">还没有AI助手，先去添加～</span>';
-    return;
-  }
-  contacts.forEach(c => {
-    const btn = document.createElement('button');
-    btn.className = 'fly-ai-selector-btn' + (FLY.contactId === c.id ? ' active' : '');
-    const av = c.avatar?.startsWith('data:') ? `<img src="${c.avatar}" style="width:22px;height:22px;border-radius:50%;object-fit:cover">` : `<span style="font-size:18px">${c.avatar||'🤖'}</span>`;
-    btn.innerHTML = `${av}<span>${esc(c.name)}</span>`;
-    btn.onclick = () => { FLY.contactId = c.id; renderFlyAiSelector(); };
-    el.appendChild(btn);
-  });
-  // Auto-select first if none selected
-  if (!FLY.contactId && contacts.length) FLY.contactId = contacts[0].id;
-}
+function renderFlyAiSelector() { /* merged into renderFlyPlayerInputs */ }
 
 function initFlySetup() {
   FLY.playerCount = 2;
@@ -7743,32 +7862,115 @@ function renderFlyPlayerInputs() {
   const container = $i('fly-setup-players');
   if (!container) return;
   container.innerHTML = '';
+  const contacts = Object.values(S._contacts);
+
   for (let i = 0; i < FLY.playerCount; i++) {
+    // Auto-init AI piece from contact avatar if not yet set
+    if (i > 0 && !FLY._setupPieces[i]) {
+      const cid = FLY.aiContactIds[i] || contacts[i-1]?.id || contacts[0]?.id;
+      const c = cid ? S._contacts[cid] : null;
+      const av = c?.avatar || '';
+      FLY._setupPieces[i] = (!av.startsWith('data:') && !av.startsWith('http') && av) ? av : FLY_PIECE_OPTIONS[i] || '🤖';
+    }
+
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'margin-bottom:8px';
+
+    // Main row
     const row = document.createElement('div');
     row.className = 'fly-player-input-row';
-    row.innerHTML = `
-      <span class="fly-player-emoji">${FLY_PLAYER_EMOJIS[i]}</span>
-      <span class="fly-player-color-dot" style="background:${FLY_PLAYER_COLORS[i]}"></span>
-      <input class="fly-player-input" id="fly-player-name-${i}" type="text" placeholder="玩家${i + 1}" value="玩家${i + 1}" maxlength="8">
-    `;
-    container.appendChild(row);
+    const piece = FLY._setupPieces[i] || FLY_PIECE_OPTIONS[i];
+
+    if (i === 0) {
+      row.innerHTML = `
+        <span style="font-size:22px;cursor:pointer" title="棋子" id="fly-piece-preview-0">${piece}</span>
+        <span class="fly-player-color-dot" style="background:${FLY_PLAYER_COLORS[0]}"></span>
+        <input class="fly-player-input" id="fly-player-name-0" type="text" placeholder="你的名字" value="我" maxlength="8">
+        <span style="font-size:11px;color:var(--text3);flex-shrink:0">真人</span>
+      `;
+    } else {
+      const curId = FLY.aiContactIds[i] || contacts[i-1]?.id || contacts[0]?.id || null;
+      if (!FLY.aiContactIds[i] && curId) FLY.aiContactIds[i] = curId;
+      const opts = contacts.map(c => {
+        const av = c.avatar?.startsWith('data:') ? '' : (c.avatar || '🤖');
+        return `<option value="${esc(c.id)}" ${FLY.aiContactIds[i]===c.id?'selected':''}>${av} ${esc(c.name)}</option>`;
+      }).join('');
+      row.innerHTML = `
+        <span style="font-size:22px" id="fly-piece-preview-${i}">${piece}</span>
+        <span class="fly-player-color-dot" style="background:${FLY_PLAYER_COLORS[i]}"></span>
+        <select class="fly-player-ai-select" id="fly-ai-select-${i}" onchange="flyAiContactChanged(${i},this.value)" style="flex:1;background:transparent;border:none;outline:none;font-size:13px;color:var(--text);font-family:inherit">
+          ${contacts.length ? opts : '<option value="">无AI助手</option>'}
+        </select>
+        <span style="font-size:11px;color:var(--text3);flex-shrink:0">AI</span>
+      `;
+    }
+    wrap.appendChild(row);
+
+    // Piece picker strip
+    const picker = document.createElement('div');
+    picker.className = 'fly-piece-picker';
+    picker.id = `fly-piece-picker-${i}`;
+    FLY_PIECE_OPTIONS.forEach(p => {
+      const btn = document.createElement('button');
+      btn.className = 'fly-piece-option' + (FLY._setupPieces[i] === p ? ' active' : '');
+      btn.textContent = p;
+      btn.onclick = () => flySetPiece(i, p);
+      picker.appendChild(btn);
+    });
+    wrap.appendChild(picker);
+    container.appendChild(wrap);
   }
 }
 
+function flyAiContactChanged(i, cid) {
+  FLY.aiContactIds[i] = cid || null;
+  // Auto-update piece from new contact's avatar
+  const c = cid ? S._contacts[cid] : null;
+  const av = c?.avatar || '';
+  if (av && !av.startsWith('data:') && !av.startsWith('http')) {
+    flySetPiece(i, av);
+  }
+}
+
+function flySetPiece(i, piece) {
+  FLY._setupPieces[i] = piece;
+  const preview = $i(`fly-piece-preview-${i}`);
+  if (preview) preview.textContent = piece;
+  const picker = $i(`fly-piece-picker-${i}`);
+  if (picker) picker.querySelectorAll('.fly-piece-option').forEach(btn => {
+    btn.classList.toggle('active', btn.textContent === piece);
+  });
+}
+
 function startFlyGame() {
+  const contacts = Object.values(S._contacts);
   const players = [];
   for (let i = 0; i < FLY.playerCount; i++) {
-    const nameEl = $i(`fly-player-name-${i}`);
-    players.push({
-      name: nameEl?.value.trim() || `玩家${i + 1}`,
-      emoji: FLY_PLAYER_EMOJIS[i],
-      color: FLY_PLAYER_COLORS[i],
-      pos: 0,  // 0 = not yet on board, 1-80 = space number
-      status: 'active',  // 'active', 'finished', 'skipped'
-      skipped: false,
-      finishRank: 0,
-    });
+    const piece = FLY._setupPieces[i] || FLY_PIECE_OPTIONS[i] || FLY_PLAYER_EMOJIS[i];
+    if (i === 0) {
+      const nameEl = $i('fly-player-name-0');
+      players.push({
+        name: nameEl?.value.trim() || '我',
+        emoji: FLY_PLAYER_EMOJIS[0],
+        piece,
+        color: FLY_PLAYER_COLORS[0],
+        pos: 0, status: 'active', skipped: false, finishRank: 0,
+        isAI: false, aiContactId: null,
+      });
+    } else {
+      const cid = FLY.aiContactIds[i];
+      const contact = cid ? S._contacts[cid] : (contacts[i-1] || contacts[0]);
+      players.push({
+        name: contact?.name || `AI${i}`,
+        emoji: FLY_PLAYER_EMOJIS[i],
+        piece,
+        color: FLY_PLAYER_COLORS[i],
+        pos: 0, status: 'active', skipped: false, finishRank: 0,
+        isAI: true, aiContactId: contact?.id || null,
+      });
+    }
   }
+  FLY._gameLog = [];
   FLY.players = players;
   FLY.currentPlayer = 0;
   FLY.rolling = false;
@@ -7790,54 +7992,40 @@ function renderFlyMap() {
   if (!mapEl) return;
   mapEl.innerHTML = '';
 
-  // 8 rows of 10 spaces each
-  // Row 1: spaces 1-10 (left to right)
-  // Row 2: spaces 11-20 (right to left, reversed)
-  // ...
-  for (let row = 0; row < 8; row++) {
-    const startSpace = row * 10 + 1;
-    const spaces = [];
-    for (let i = 0; i < 10; i++) {
-      spaces.push(startSpace + i);
-    }
+  // Compute exit-direction for each space (used for arrow indicator)
+  const dirs = [];
+  for (let i = 0; i < 80; i++) {
+    if (i >= 79) { dirs.push(''); continue; }
+    const [r0, c0] = FLY_GRID_POS[i], [r1, c1] = FLY_GRID_POS[i + 1];
+    dirs.push(r0 === r1 && c1 > c0 ? 'fdr' : r0 === r1 && c1 < c0 ? 'fdl' : r1 > r0 ? 'fdd' : 'fdu');
+  }
 
-    const rowEl = document.createElement('div');
-    rowEl.className = 'fly-map-row' + (row % 2 === 1 ? ' reverse' : '');
-
-    spaces.forEach(spaceNum => {
-      const type = FLY_SPACE_LAYOUT[spaceNum - 1] || 'normal';
-      const icon = FLY_SPACE_ICONS[type] || '';
-      const cell = document.createElement('div');
-      cell.className = `fly-space ${type}`;
-      cell.id = `fly-space-${spaceNum}`;
-      cell.innerHTML = `<span class="fly-space-num">${spaceNum}</span><span class="fly-space-icon">${icon}</span><div class="fly-tokens-wrap" id="fly-tokens-${spaceNum}"></div>`;
-      rowEl.appendChild(cell);
-    });
-
-    mapEl.appendChild(rowEl);
-
-    // Add connector arrow between rows (except last)
-    if (row < 7) {
-      const connector = document.createElement('div');
-      connector.className = 'fly-map-connector' + (row % 2 === 0 ? '' : ' left');
-      connector.textContent = '↓';
-      mapEl.appendChild(connector);
-    }
+  for (let i = 0; i < 80; i++) {
+    const [row, col] = FLY_GRID_POS[i];
+    const type = FLY_SPACE_LAYOUT[i] || 'normal';
+    const icon = FLY_SPACE_ICONS[type] || '';
+    // ring class for visual layering: r1=outer … r4=innermost
+    const ring = i < 32 ? 'r1' : i < 56 ? 'r2' : i < 72 ? 'r3' : 'r4';
+    const cell = document.createElement('div');
+    cell.className = `fly-space ${type} ${ring} ${dirs[i]}`;
+    cell.id = `fly-space-${i + 1}`;
+    cell.style.cssText = `grid-row:${row + 1};grid-column:${col + 1}`;
+    cell.innerHTML = `<span class="fly-space-num">${i + 1}</span><span class="fly-space-icon">${icon}</span><div class="fly-tokens-wrap" id="fly-tokens-${i + 1}"></div>`;
+    mapEl.appendChild(cell);
   }
 
   flyUpdateMapTokens();
 }
 
 function flyUpdateMapTokens() {
-  // Clear all token containers
   document.querySelectorAll('[id^="fly-tokens-"]').forEach(el => el.innerHTML = '');
-  FLY.players.forEach((p, idx) => {
+  FLY.players.forEach((p) => {
     if (p.pos > 0) {
       const container = $i(`fly-tokens-${p.pos}`);
       if (container) {
         const token = document.createElement('div');
         token.className = 'fly-token';
-        token.style.background = p.color;
+        token.textContent = p.piece || p.emoji;
         token.title = p.name;
         container.appendChild(token);
       }
@@ -7855,7 +8043,7 @@ function renderFlyPlayerBar() {
     const isActive = idx === FLY.currentPlayer && !FLY.over;
     card.className = 'fly-player-card' + (isActive ? ' active' : '') + (p.status === 'finished' ? ' finished' : '') + (p.skipped ? ' skipped' : '');
     const posText = p.status === 'finished' ? `🏆第${p.finishRank}名` : p.skipped ? '💤跳过' : p.pos === 0 ? '未出发' : `第${p.pos}格`;
-    card.innerHTML = `<div class="fly-player-card-emoji">${p.emoji}</div><div class="fly-player-card-name">${esc(p.name)}</div><div class="fly-player-card-pos">${posText}</div>`;
+    card.innerHTML = `<div class="fly-player-card-emoji">${p.piece || p.emoji}</div><div class="fly-player-card-name">${esc(p.name)}</div><div class="fly-player-card-pos">${posText}</div>`;
     bar.appendChild(card);
   });
 }
@@ -7866,12 +8054,16 @@ function flyUpdateTurnInfo() {
   if (FLY.over) { el.textContent = '游戏结束！'; return; }
   const p = FLY.players[FLY.currentPlayer];
   if (!p) return;
-  el.innerHTML = `${p.emoji} <strong>${esc(p.name)}</strong> 的回合`;
+  el.textContent = p.isAI ? `${p.emoji} ${p.name} (AI) 思考中…` : `${p.emoji} 轮到你了！`;
 }
 
 function flyEnableDice(enabled) {
   const btn = $i('fly-dice-btn');
-  if (btn) btn.disabled = !enabled;
+  if (!btn) return;
+  const p = FLY.players[FLY.currentPlayer];
+  const isAiTurn = p?.isAI;
+  btn.disabled = !enabled || isAiTurn;
+  btn.style.opacity = (!enabled || isAiTurn) ? '0.5' : '1';
 }
 
 // ── Dice Roll ──
@@ -7940,16 +8132,21 @@ async function flyMovePlayer(playerIdx, steps) {
   }
 
   // Animate step by step
-  for (let pos = oldPos + 1; pos <= newPos; pos++) {
-    p.pos = pos;
-    flyUpdateMapTokens();
-    await flyDelay(120);
-    // Highlight current space
-    const spaceEl = $i(`fly-space-${pos}`);
-    if (spaceEl) {
-      spaceEl.classList.add('highlight');
-      await flyDelay(100);
-      spaceEl.classList.remove('highlight');
+  if (steps > 0) {
+    for (let pos = oldPos + 1; pos <= newPos; pos++) {
+      p.pos = pos;
+      flyUpdateMapTokens();
+      await flyDelay(120);
+      const spaceEl = $i(`fly-space-${pos}`);
+      if (spaceEl) { spaceEl.classList.add('highlight'); await flyDelay(100); spaceEl.classList.remove('highlight'); }
+    }
+  } else {
+    for (let pos = oldPos - 1; pos >= newPos; pos--) {
+      p.pos = pos;
+      flyUpdateMapTokens();
+      await flyDelay(120);
+      const spaceEl = $i(`fly-space-${pos}`);
+      if (spaceEl) { spaceEl.classList.add('highlight'); await flyDelay(100); spaceEl.classList.remove('highlight'); }
     }
   }
 
@@ -8054,6 +8251,14 @@ function flyShowEvent(eventText, type, playerIdx) {
   FLY._pendingEventPlayer = playerIdx;
   FLY._pendingEventText = eventText;
   FLY._pendingEventType = type;
+
+  // If AI player triggered the event, auto-respond with minimal LLM call
+  const triggerPlayer = FLY.players[playerIdx];
+  if (triggerPlayer?.isAI) {
+    const answerSection = $i('fly-answer-section');
+    if (answerSection) answerSection.style.display = 'none';
+    setTimeout(() => flyAiAutoAnswer(playerIdx), 800);
+  }
 }
 
 function flyEventDone() {
@@ -8061,7 +8266,29 @@ function flyEventDone() {
   if (overlay) overlay.style.display = 'none';
   const answerInput = $i('fly-answer-input');
   if (answerInput) answerInput.value = '';
+  // Restore answer section for human players
+  const answerSection = $i('fly-answer-section');
+  if (answerSection) answerSection.style.display = '';
+  const submitBtn = $i('fly-submit-btn');
+  if (submitBtn) { submitBtn.style.display = ''; submitBtn.disabled = false; submitBtn.textContent = '📤 提交给AI'; }
   setTimeout(flyNextTurn, 300);
+}
+
+// Build game context string from session log for AI prompts (full log)
+function flyBuildGameContext() {
+  if (!FLY._gameLog?.length) return '';
+  return '[本局游戏对话记录]\n' + FLY._gameLog.map(e =>
+    `${e.piece||e.emoji} ${e.player}（问题：「${e.q}」→ 回答：${e.a}）`
+  ).join('\n');
+}
+
+// Build system message: contact's full system prompt + all relevant memories
+function flyBuildSysMsg(contact) {
+  const sys = contact?.system || '';
+  const mems = S._memories
+    .filter(m => !m.contactId || m.contactId === contact?.id)
+    .map(m => m.text).join('\n');
+  return [sys, mems ? `[记忆]\n${mems}` : ''].filter(Boolean).join('\n\n');
 }
 
 async function flySubmitAnswer() {
@@ -8078,26 +8305,34 @@ async function flySubmitAnswer() {
   if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'AI思考中…'; }
   if (answerInput) answerInput.disabled = true;
 
-  const contact = FLY.contactId ? S._contacts[FLY.contactId] : Object.values(S._contacts)[0];
+  // Prefer the first AI player's contact as the "game host" AI responder
+  const aiPlayer = FLY.players.find(p => p.isAI);
+  const contact = aiPlayer?.aiContactId ? S._contacts[aiPlayer.aiContactId] : Object.values(S._contacts)[0];
   const aiName = contact?.name || 'AI';
   const useKey = contact?.apiKey || S.settings?.apiKey;
+  if (aiResponseLabel) aiResponseLabel.textContent = `${aiPlayer?.piece || '🤖'} ${aiName}：`;
 
-  if (aiResponseLabel) aiResponseLabel.textContent = `🤖 ${aiName} 的回应：`;
+  // Record human's answer to game log
+  const humanPlayer = FLY.players[FLY._pendingEventPlayer];
+  FLY._gameLog.push({ emoji: humanPlayer?.emoji, piece: humanPlayer?.piece, player: humanPlayer?.name || '我', q: FLY._pendingEventText, a: answer, isAI: false });
 
   let aiReply = '';
   if (useKey) {
     try {
-      const p = FLY.players[FLY._pendingEventPlayer];
-      const prompt = `你是${aiName}，正在和用户玩飞行棋情侣互动游戏。
-问题：${FLY._pendingEventText}
-${p?.name || '玩家'}的回答：${answer}
-请用温柔、有互动感的语气回应他们的回答，可以追问、分享你的看法、或给予鼓励。回应要自然、亲密、有温度，2-3句话即可。只返回JSON：{"reply":"回应内容"}`;
+      const sysMsg = flyBuildSysMsg(contact);
+      const gameCtx = flyBuildGameContext();
+      const userMsg = `${gameCtx ? gameCtx + '\n\n' : ''}你正在和大家玩飞行棋互动游戏。\n现在${humanPlayer?.name || '玩家'}触发了问题：「${FLY._pendingEventText}」\n${humanPlayer?.name || '玩家'}的回答：「${answer}」\n请用符合你性格的方式自由回应，可以根据之前的游戏对话记录来决定是否联系、如何联系，随心而发。只返回JSON：{"reply":"回应"}`;
+      const messages = [
+        ...(sysMsg ? [{ role: 'system', content: sysMsg }] : []),
+        { role: 'user', content: userMsg }
+      ];
       const res = await fetch(contact?.apiUrl || 'https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${useKey}`, 'Content-Type': 'application/json', 'HTTP-Referer': 'https://raimos.app', 'X-Title': 'Raimos' },
-        body: JSON.stringify({ model: contact?.model || 'openai/gpt-4o-mini', max_tokens: 150, stream: false, temperature: 0.85, messages: [{ role: 'user', content: prompt }] })
+        body: JSON.stringify({ model: contact?.model || 'openai/gpt-4o-mini', stream: false, temperature: 0.9, messages })
       });
       const data = await res.json();
+      showGameTokenBadge('fly-token-badge', data.usage || null);
       const txt = data.choices?.[0]?.message?.content || '';
       const m = txt.match(/\{[\s\S]*?\}/);
       if (m) aiReply = JSON.parse(m[0]).reply || '';
@@ -8112,6 +8347,57 @@ ${p?.name || '玩家'}的回答：${answer}
   if (aiResponse) aiResponse.className = 'fly-ai-response visible';
   if (submitBtn) submitBtn.style.display = 'none';
   if (continueBtn) continueBtn.style.display = 'block';
+}
+
+async function flyAiAutoAnswer(playerIdx) {
+  const p = FLY.players[playerIdx];
+  const aiResponseText = $i('fly-ai-response-text');
+  const aiResponse = $i('fly-ai-response');
+  const aiResponseLabel = $i('fly-ai-response-label');
+  const continueBtn = $i('fly-continue-btn');
+  const submitBtn = $i('fly-submit-btn');
+
+  if (submitBtn) submitBtn.style.display = 'none';
+
+  const contact = p?.aiContactId ? S._contacts[p.aiContactId] : null;
+  const aiName = contact?.name || p?.name || 'AI';
+  const useKey = contact?.apiKey || S.settings?.apiKey;
+  if (aiResponseLabel) aiResponseLabel.textContent = `${p?.piece || p?.emoji || '🤖'} ${aiName}：`;
+
+  let reply = '';
+  if (useKey && FLY._pendingEventText) {
+    try {
+      const sysMsg = flyBuildSysMsg(contact);
+      const gameCtx = flyBuildGameContext();
+      const userMsg = `${gameCtx ? gameCtx + '\n\n' : ''}你正在和大家玩飞行棋互动游戏，现在轮到你（${aiName}）回答问题。\n问题：「${FLY._pendingEventText}」\n请完全按你自己的性格自由作答，可以根据之前的游戏对话记录自行决定是否参考、参考多少，想说多少说多少。只返回JSON：{"a":"回答"}`;
+      const messages = [
+        ...(sysMsg ? [{ role: 'system', content: sysMsg }] : []),
+        { role: 'user', content: userMsg }
+      ];
+      const res = await fetch(contact?.apiUrl || 'https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${useKey}`, 'Content-Type': 'application/json', 'HTTP-Referer': 'https://raimos.app', 'X-Title': 'Raimos' },
+        body: JSON.stringify({ model: contact?.model || 'openai/gpt-4o-mini', stream: false, temperature: 0.9, messages })
+      });
+      const data = await res.json();
+      showGameTokenBadge('fly-token-badge', data.usage || null);
+      const txt = data.choices?.[0]?.message?.content || '';
+      const m = txt.match(/\{[\s\S]*?\}/);
+      if (m) reply = JSON.parse(m[0]).a || '';
+    } catch(e) {}
+  }
+  const defaults = ['嗯，我觉得还不错！', '这个问题我也想过～', '哈哈，有意思！', '我也同意这个观点！'];
+  if (!reply) reply = defaults[Math.floor(Math.random() * defaults.length)];
+
+  // Record AI's answer to game log
+  FLY._gameLog.push({ emoji: p?.emoji, piece: p?.piece, player: aiName, q: FLY._pendingEventText, a: reply, isAI: true });
+
+  if (aiResponseText) aiResponseText.textContent = reply;
+  if (aiResponse) aiResponse.className = 'fly-ai-response visible';
+  if (continueBtn) continueBtn.style.display = 'block';
+
+  // Auto-continue after 4 seconds (more time to read full response)
+  setTimeout(flyEventDone, 4000);
 }
 
 function flyNextTurn() {
@@ -8132,6 +8418,17 @@ function flyNextTurn() {
   renderFlyPlayerBar();
   flyUpdateTurnInfo();
   flyEnableDice(true);
+
+  // If next player is AI, auto-play after delay
+  const nextP = FLY.players[FLY.currentPlayer];
+  if (nextP?.isAI) setTimeout(flyAiAutoTurn, 1300);
+}
+
+function flyAiAutoTurn() {
+  if (FLY.over) return;
+  const p = FLY.players[FLY.currentPlayer];
+  if (!p?.isAI) return;
+  flyRollDice();
 }
 
 function flyWin(playerIdx) {

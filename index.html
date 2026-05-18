@@ -781,6 +781,7 @@
       </div>
     </div>
     <div class="gomoku-ai-say" id="gomoku-comment"></div>
+    <div class="game-token-badge" id="gomoku-token-badge" style="display:none"></div>
     <div class="gomoku-board-scroll">
       <div class="gomoku-board gmk-board-wood" id="gomoku-board"></div>
     </div>
@@ -887,6 +888,7 @@
       </div>
     </div>
     <div class="gomoku-ai-say" id="go-comment"></div>
+    <div class="game-token-badge" id="go-token-badge" style="display:none"></div>
     <div style="display:flex;justify-content:center;padding:6px 0">
       <button class="btn-s" id="go-pass-btn" onclick="goPass()" style="font-size:12px;padding:5px 16px">虚手（Pass）</button>
     </div>
@@ -913,14 +915,9 @@
         </div>
       </div>
       <div class="fly-setup-section">
-        <div class="fly-setup-title">✏️ 玩家名称</div>
+        <div class="fly-setup-title">🎮 玩家配置</div>
+        <div style="font-size:11px;color:var(--text3);margin-bottom:6px">玩家1为真人，其余为AI助手</div>
         <div id="fly-setup-players"></div>
-      </div>
-      <div class="fly-setup-section">
-        <div class="fly-setup-title">🤖 选择AI助手</div>
-        <div class="fly-ai-selector-section">
-          <div class="fly-ai-selector-grid" id="fly-ai-selector"></div>
-        </div>
       </div>
       <div class="fly-setup-section fly-rules-box">
         <div class="fly-setup-title">📋 游戏规则</div>
@@ -953,9 +950,9 @@
     <button id="fly-dice-btn" class="fly-dice-btn" onclick="flyRollDice()">🎲 掷骰子</button>
   </div>
   <div class="fly-map-scroll" id="fly-map-scroll">
-    <div class="fly-map-deco">☁️ <span style="font-size:11px;color:var(--text3)">欢乐飞行棋</span> ⭐ 🌸 ☁️</div>
+    <div class="fly-map-deco">✨ <span style="font-size:11px;color:var(--text3)">聚会版飞行棋</span> 🌸 ⭐ ☁️</div>
     <div class="fly-map" id="fly-map"></div>
-    <div class="fly-map-deco">🌸 🌟 ☁️ <span style="font-size:11px;color:var(--text3)">加油！</span> 🌸</div>
+    <div class="fly-map-deco">🎀 🌟 💫 <span style="font-size:11px;color:var(--text3)">加油冲刺！</span> 🎈</div>
   </div>
 </div>
 
@@ -1061,6 +1058,7 @@
     <div class="fly-ai-response" id="fly-ai-response">
       <div class="fly-ai-response-label" id="fly-ai-response-label">🤖 AI回应：</div>
       <div id="fly-ai-response-text"></div>
+      <div class="game-token-badge" id="fly-token-badge" style="display:none"></div>
     </div>
     <button class="fly-event-continue-btn" id="fly-continue-btn" style="margin-top:10px;display:none" onclick="flyEventDone()">✓ 继续游戏</button>
   </div>
@@ -1215,6 +1213,7 @@
       <div class="gomoku-player"><span id="xq-ai-name">黑方（AI）</span></div>
     </div>
     <div class="gomoku-ai-say" id="xq-comment"></div>
+    <div class="game-token-badge" id="xq-token-badge" style="display:none"></div>
     <div class="gomoku-board-scroll">
       <div class="xq-board" id="xq-board"></div>
     </div>
@@ -1275,6 +1274,7 @@
       <div class="gomoku-player"><span id="ic-ai-name">黑方（AI）</span></div>
     </div>
     <div class="gomoku-ai-say" id="ic-comment"></div>
+    <div class="game-token-badge" id="ic-token-badge" style="display:none"></div>
     <div class="gomoku-board-scroll">
       <div class="ic-board" id="ic-board"></div>
     </div>

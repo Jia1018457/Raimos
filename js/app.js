@@ -5670,54 +5670,49 @@ async function gomokuAiMove() {
   const contact = gomokuGetContact();
   const useKey = contact?.apiKey || S.settings.apiKey;
   const useUrl = contact?.apiUrl || 'https://openrouter.ai/api/v1/chat/completions';
-  let row, col, comment;
   GOMOKU.moveCount++;
 
-  // Determine game phase
-  const phase = GOMOKU.moveCount <= 6 ? 'early' : GOMOKU.moveCount <= 20 ? 'mid' : 'late';
-  const phaseHint = phase==='early'?'开局阶段，可以随意发挥':phase==='mid'?'中局关键期，要认真思考':'终局阶段，胜负即将揭晓';
+  // Move is always determined by the algorithm — LLMs are unreliable for spatial reasoning
+  const { r: row, c: col } = gomokuHeuristic();
+  let comment = '';
 
-  // Check if player has a threatening line (for commentary)
+  // Check player's threat level for commentary
   const playerLastR = GOMOKU.lastMove?.[0], playerLastC = GOMOKU.lastMove?.[1];
-  const playerThreat = (playerLastR!=null) ? gomokuMaxLine(playerLastR, playerLastC, 1) : 0;
+  const playerThreat = (playerLastR != null) ? gomokuMaxLine(playerLastR, playerLastC, 1) : 0;
 
-  if (useKey) {
-    const blacks = [], whites = [];
-    for (let r=0;r<15;r++) for (let c=0;c<15;c++) {
-      if (GOMOKU.board[r][c]===1) blacks.push(`(${r},${c})`);
-      else if (GOMOKU.board[r][c]===2) whites.push(`(${r},${c})`);
-    }
-    const boardTxt = `黑子(对手)：${blacks.join('')||'无'}  白子(你)：${whites.join('')||'无'}`;
-    const aiName = contact?.name || 'AI';
-    const personality = (contact?.system || '你是可爱温柔的AI助手').slice(0, 130);
-    const model = contact?.model || 'openai/gpt-4o-mini';
-    // Commentary hint: if player is threatening, AI may warn/tease; if early game, be casual
+  // LLM is used only for personality-driven commentary text
+  if (useKey && GOMOKU.prefs.commentary) {
+    const phase = GOMOKU.moveCount <= 6 ? 'early' : GOMOKU.moveCount <= 20 ? 'mid' : 'late';
+    const phaseHint = phase==='early'?'开局随意发挥':phase==='mid'?'中局认真思考':'终局胜负即将揭晓';
     const commentHint = playerThreat >= 4
-      ? '对手刚连了4子，你需要反应！评论可以紧张/惊讶/挑衅'
+      ? '对手刚连了4子被你拦住，评论可以紧张/得意/挑衅'
       : playerThreat >= 3
-      ? '对手有威胁，评论可以提示/安慰/警告'
-      : GOMOKU.prefs.commentary && GOMOKU.moveCount%4===0
-      ? '过程评论，可以说游戏感受/小技巧/鼓励/调侃'
+      ? '对手有威胁，可以警惕/鼓励/调侃'
+      : GOMOKU.moveCount % 4 === 0
+      ? '随意聊聊游戏感受/小技巧/鼓励'
       : '';
-    const prompt = `你是${aiName}，和用户下五子棋。你执白子，用户执黑子，棋盘15×15（行列0-14）。\n${boardTxt}\n性格：${personality}\n阶段：第${GOMOKU.moveCount}步，${phaseHint}。\n策略要求：根据性格和阶段灵活决策。温柔性格不代表一直让，可能开始认真、局势好时才礼让一步；强势性格会全力争胜；总之要有真实的游戏节奏感，避免机械。${commentHint ? '\n评论方向：'+commentHint : ''}\n在空位落子并用1句符合性格的话回应（${commentHint?'按方向':'可以是棋局感受'}）。\n只返回JSON：{"row":数字,"col":数字,"comment":"一句话"}`;
-    try {
-      const res = await fetch(useUrl, {
-        method:'POST',
-        headers:{'Authorization':`Bearer ${useKey}`,'Content-Type':'application/json','HTTP-Referer':'https://raimos.app','X-Title':'Raimos'},
-        body:JSON.stringify({model,max_tokens:90,stream:false,temperature:0.8,messages:[{role:'user',content:prompt}]}),
-      });
-      const data = await res.json();
-      const txt = data.choices?.[0]?.message?.content || '';
-      const m = txt.match(/\{[\s\S]*?\}/);
-      if (m) { const p = JSON.parse(m[0]); row=p.row; col=p.col; comment=p.comment; }
-    } catch(e) {}
+    if (commentHint) {
+      const aiName = contact?.name || 'AI';
+      const personality = (contact?.system || '你是可爱温柔的AI助手').slice(0, 130);
+      const model = contact?.model || 'openai/gpt-4o-mini';
+      const prompt = `你是${aiName}，性格：${personality}。正在和用户下五子棋，${phaseHint}，第${GOMOKU.moveCount}步。${commentHint}。用1句符合性格的话回应。只返回JSON：{"comment":"一句话"}`;
+      try {
+        const res = await fetch(useUrl, {
+          method:'POST',
+          headers:{'Authorization':`Bearer ${useKey}`,'Content-Type':'application/json','HTTP-Referer':'https://raimos.app','X-Title':'Raimos'},
+          body:JSON.stringify({model,max_tokens:60,stream:false,temperature:0.8,messages:[{role:'user',content:prompt}]}),
+        });
+        const data = await res.json();
+        const txt = data.choices?.[0]?.message?.content || '';
+        const m = txt.match(/\{[\s\S]*?\}/);
+        if (m) comment = JSON.parse(m[0]).comment || '';
+      } catch(e) {}
+    }
   }
-
-  // Validate / heuristic fallback
-  if (typeof row!=='number'||typeof col!=='number'||row<0||row>=15||col<0||col>=15||GOMOKU.board[row][col]!==0) {
-    const h = gomokuHeuristic();
-    row=h.r; col=h.c;
-    if (!comment) comment = playerThreat>=4 ? '好险，我得拦住你！' : '嗯，就这里！';
+  if (!comment) {
+    comment = playerThreat >= 4 ? '好险，我得拦住你！'
+            : playerThreat >= 3 ? '嗯，得小心一点～'
+            : '';
   }
 
   GOMOKU.board[row][col] = 2;
@@ -5742,30 +5737,64 @@ async function gomokuAiMove() {
   gomokuSetStatus('轮到你了！');
 }
 
-// Heuristic: win > block > weighted proximity + center bias
+// Score a position for a player: higher = more dangerous / more valuable
+function gomokuScore(r, c, player) {
+  const N = 15;
+  const dirs = [[0,1],[1,0],[1,1],[1,-1]];
+  let total = 0;
+  for (const [dr, dc] of dirs) {
+    let cnt = 1, opens = 0;
+    for (let d=1;d<5;d++){const nr=r+dr*d,nc=c+dc*d;if(nr<0||nr>=N||nc<0||nc>=N)break;if(GOMOKU.board[nr][nc]===player)cnt++;else{if(GOMOKU.board[nr][nc]===0)opens++;break;}}
+    for (let d=1;d<5;d++){const nr=r-dr*d,nc=c-dc*d;if(nr<0||nr>=N||nc<0||nc>=N)break;if(GOMOKU.board[nr][nc]===player)cnt++;else{if(GOMOKU.board[nr][nc]===0)opens++;break;}}
+    if      (cnt>=5)              total += 100000;
+    else if (cnt===4&&opens>=2)   total +=  50000; // 活四
+    else if (cnt===4&&opens>=1)   total +=  10000; // 冲四
+    else if (cnt===3&&opens>=2)   total +=   2000; // 活三
+    else if (cnt===3&&opens>=1)   total +=    300; // 眠三
+    else if (cnt===2&&opens>=2)   total +=    100;
+    else if (cnt===2&&opens>=1)   total +=     20;
+  }
+  return total;
+}
+
+// Heuristic: always correct (win > block 5 > block 4 > score-based)
 function gomokuHeuristic() {
-  for (let r=0;r<15;r++) for (let c=0;c<15;c++) {
-    if (GOMOKU.board[r][c]!==0) continue;
-    GOMOKU.board[r][c]=2; const w=gomokuCheckWin(r,c,2); GOMOKU.board[r][c]=0;
-    if (w) return {r,c};
-  }
-  for (let r=0;r<15;r++) for (let c=0;c<15;c++) {
-    if (GOMOKU.board[r][c]!==0) continue;
-    GOMOKU.board[r][c]=1; const w=gomokuCheckWin(r,c,1); GOMOKU.board[r][c]=0;
-    if (w) return {r,c};
-  }
-  let best=null, bestScore=-1;
-  for (let r=0;r<15;r++) for (let c=0;c<15;c++) {
-    if (GOMOKU.board[r][c]!==0) continue;
-    let score=0;
+  const diff = GOMOKU.prefs.difficulty || 'normal';
+  const N = 15;
+  // Collect candidate cells within 2 of any piece
+  const seen = new Set();
+  let hasAny = false;
+  for (let r=0;r<N;r++) for (let c=0;c<N;c++) {
+    if (!GOMOKU.board[r][c]) continue;
+    hasAny = true;
     for (let dr=-2;dr<=2;dr++) for (let dc=-2;dc<=2;dc++) {
       const nr=r+dr,nc=c+dc;
-      if (nr>=0&&nr<15&&nc>=0&&nc<15&&GOMOKU.board[nr][nc]!==0) score+=2;
+      if (nr>=0&&nr<N&&nc>=0&&nc<N&&!GOMOKU.board[nr][nc]) seen.add(nr*N+nc);
     }
-    score += 8/(1+Math.abs(r-7)+Math.abs(c-7));
+  }
+  if (!hasAny) return {r:7,c:7};
+  const cells = [...seen].map(k=>({r:Math.floor(k/N),c:k%N}));
+
+  // All difficulties: win immediately
+  for (const {r,c} of cells){GOMOKU.board[r][c]=2;const w=gomokuCheckWin(r,c,2);GOMOKU.board[r][c]=0;if(w)return{r,c};}
+  // All difficulties: block player's 5-in-a-row
+  for (const {r,c} of cells){GOMOKU.board[r][c]=1;const w=gomokuCheckWin(r,c,1);GOMOKU.board[r][c]=0;if(w)return{r,c};}
+
+  if (diff === 'easy') {
+    // Easy: no threat detection, mostly random near existing pieces
+    const shuffled = cells.slice().sort(()=>Math.random()-0.5);
+    return shuffled[0]||{r:7,c:7};
+  }
+
+  // Normal / Hard: score-based, defense outweighs offense to ensure blocking
+  const defWeight = diff === 'hard' ? 1.3 : 1.1;
+  const noise     = diff === 'hard' ? 0   : 60;  // normal has slight randomness
+  let best=null, bestScore=-Infinity;
+  for (const {r,c} of cells) {
+    const score = gomokuScore(r,c,2) + gomokuScore(r,c,1)*defWeight + Math.random()*noise;
     if (score>bestScore){bestScore=score;best={r,c};}
   }
-  return best||{r:7,c:7};
+  return best||cells[0]||{r:7,c:7};
 }
 
 // ── Game End ──

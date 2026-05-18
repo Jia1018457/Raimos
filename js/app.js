@@ -7625,24 +7625,25 @@ const FLY_PLAYER_EMOJIS = ['🔴', '🔵', '🟡', '🟢'];
 const FLY_PIECE_OPTIONS = ['🐱','🦊','🐻','🐼','🐨','🐰','🐸','🦁','🐯','🐮','🐷','🐹','🦄','🦋','🌸','⭐','🌙','🎀','🍓','🍭','💎','🔮','🎭','🧸','🌺','🍀','🎃','🦖','🐧','🦜'];
 const DICE_FACES = ['⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
 
+// No forward3+3=back3 pairs (would cause infinite loops); more events
 const FLY_SPACE_LAYOUT = [
-  'start',                                           // 1
-  'normal','back3','normal','event',                 // 2-5
-  'skip','normal','normal','heart','checkpoint',     // 6-10
-  'normal','forward3','event','normal','back3',      // 11-15
-  'normal','heart','again','normal','checkpoint',    // 16-20
-  'event','normal','normal','back3','forward3',      // 21-25
-  'normal','heart','event','normal','checkpoint',    // 26-30
-  'normal','forward5','event','skip','normal',       // 31-35
-  'back3','normal','heart','event','checkpoint',     // 36-40
-  'normal','forward3','event','normal','back3',      // 41-45
-  'skip','heart','normal','event','checkpoint',      // 46-50
-  'normal','forward5','event','normal','heart',      // 51-55
-  'back3','normal','again','event','checkpoint',     // 56-60
-  'normal','forward3','heart','event','normal',      // 61-65
-  'back3','normal','event','skip','checkpoint',      // 66-70
-  'forward5','normal','heart','event','normal',      // 71-75
-  'normal','event','heart','normal','finish'         // 76-80
+  'start',                                            // 1
+  'normal','event','normal','heart',                  // 2-5
+  'skip','normal','checkpoint','normal','back3',      // 6-10  (back3@10; 10-3=7=normal)
+  'normal','event','heart','normal','forward3',       // 11-15 (forward3@15; 15+3=18=normal)
+  'normal','checkpoint','normal','event','back3',     // 16-20 (back3@20; 20-3=17=normal; 15+3=18≠20)
+  'normal','heart','event','normal','forward5',       // 21-25 (forward5@25; 25+5=30=back3 ok, not loop)
+  'normal','checkpoint','normal','event','back3',     // 26-30 (back3@30; 30-3=27=checkpoint)
+  'normal','event','heart','again','checkpoint',      // 31-35
+  'forward3','normal','normal','event','heart',       // 36-40 (forward3@36; 36+3=39=event)
+  'skip','normal','checkpoint','event','normal',      // 41-45
+  'back3','normal','heart','event','checkpoint',      // 46-50 (back3@46; 46-3=43=checkpoint; 36+3=39≠46)
+  'normal','forward3','event','normal','again',       // 51-55 (forward3@52; 52+3=55=again)
+  'back3','heart','checkpoint','normal','event',      // 56-60 (back3@56; 56-3=53=event; 52+3=55≠56)
+  'normal','forward3','normal','heart','event',       // 61-65 (forward3@62; 62+3=65=event)
+  'checkpoint','event','skip','normal','back3',       // 66-70 (back3@70; 70-3=67=event; 62+3=65≠70)
+  'forward5','normal','heart','event','normal',       // 71-75 (forward5@71; 71+5=76=normal)
+  'normal','event','heart','checkpoint','finish'      // 76-80
 ];
 
 const FLY_SPACE_ICONS = {
@@ -7832,6 +7833,8 @@ const FLY = {
   lastDice: 0,
   spaceTypes: [],
   aiContactIds: [null, null, null, null],
+  playerTypeMode: ['human', 'ai', 'ai', 'ai'], // 'human'|'ai'|'local' per slot
+  localNames: ['', '玩家2', '玩家3', '玩家4'],
   _setupPieces: ['🐱', '🦊', '🐻', '🐼'], // piece per player slot, configurable in setup
   _gameLog: [], // {emoji, player, q, a, isAI} - all Q&A this session for AI context
 };
@@ -7889,19 +7892,30 @@ function renderFlyPlayerInputs() {
         <span style="font-size:11px;color:var(--text3);flex-shrink:0">真人</span>
       `;
     } else {
+      const typeMode = FLY.playerTypeMode[i] || 'ai';
+      const isLocal = typeMode === 'local';
       const curId = FLY.aiContactIds[i] || contacts[i-1]?.id || contacts[0]?.id || null;
       if (!FLY.aiContactIds[i] && curId) FLY.aiContactIds[i] = curId;
       const opts = contacts.map(c => {
         const av = c.avatar?.startsWith('data:') ? '' : (c.avatar || '🤖');
         return `<option value="${esc(c.id)}" ${FLY.aiContactIds[i]===c.id?'selected':''}>${av} ${esc(c.name)}</option>`;
       }).join('');
+      const localName = FLY.localNames[i] || `玩家${i+1}`;
       row.innerHTML = `
         <span style="font-size:22px" id="fly-piece-preview-${i}">${piece}</span>
         <span class="fly-player-color-dot" style="background:${FLY_PLAYER_COLORS[i]}"></span>
-        <select class="fly-player-ai-select" id="fly-ai-select-${i}" onchange="flyAiContactChanged(${i},this.value)" style="flex:1;background:transparent;border:none;outline:none;font-size:13px;color:var(--text);font-family:inherit">
-          ${contacts.length ? opts : '<option value="">无AI助手</option>'}
-        </select>
-        <span style="font-size:11px;color:var(--text3);flex-shrink:0">AI</span>
+        <div style="flex:1;display:flex;flex-direction:column;gap:4px;min-width:0">
+          <div style="display:flex;gap:4px">
+            <button class="fly-type-btn${!isLocal?' active':''}" onclick="flySetPlayerType(${i},'ai')">🤖 AI</button>
+            <button class="fly-type-btn${isLocal?' active':''}" onclick="flySetPlayerType(${i},'local')">👤 现场</button>
+          </div>
+          <div id="fly-type-content-${i}">
+            ${isLocal
+              ? `<input class="fly-player-input" id="fly-local-name-${i}" type="text" placeholder="玩家名字" value="${esc(localName)}" maxlength="8" oninput="FLY.localNames[${i}]=this.value">`
+              : `<select class="fly-player-ai-select" id="fly-ai-select-${i}" onchange="flyAiContactChanged(${i},this.value)" style="width:100%;background:transparent;border:none;outline:none;font-size:13px;color:var(--text);font-family:inherit">${contacts.length ? opts : '<option value="">无AI助手</option>'}</select>`
+            }
+          </div>
+        </div>
       `;
     }
     wrap.appendChild(row);
@@ -7924,12 +7938,14 @@ function renderFlyPlayerInputs() {
 
 function flyAiContactChanged(i, cid) {
   FLY.aiContactIds[i] = cid || null;
-  // Auto-update piece from new contact's avatar
   const c = cid ? S._contacts[cid] : null;
   const av = c?.avatar || '';
-  if (av && !av.startsWith('data:') && !av.startsWith('http')) {
-    flySetPiece(i, av);
-  }
+  if (av && !av.startsWith('data:') && !av.startsWith('http')) flySetPiece(i, av);
+}
+
+function flySetPlayerType(i, mode) {
+  FLY.playerTypeMode[i] = mode;
+  renderFlyPlayerInputs();
 }
 
 function flySetPiece(i, piece) {
@@ -7958,16 +7974,31 @@ function startFlyGame() {
         isAI: false, aiContactId: null,
       });
     } else {
-      const cid = FLY.aiContactIds[i];
-      const contact = cid ? S._contacts[cid] : (contacts[i-1] || contacts[0]);
-      players.push({
-        name: contact?.name || `AI${i}`,
-        emoji: FLY_PLAYER_EMOJIS[i],
-        piece,
-        color: FLY_PLAYER_COLORS[i],
-        pos: 0, status: 'active', skipped: false, finishRank: 0,
-        isAI: true, aiContactId: contact?.id || null,
-      });
+      const typeMode = FLY.playerTypeMode[i] || 'ai';
+      if (typeMode === 'local') {
+        const localNameEl = $i(`fly-local-name-${i}`);
+        const localName = localNameEl?.value?.trim() || FLY.localNames[i] || `玩家${i+1}`;
+        FLY.localNames[i] = localName;
+        players.push({
+          name: localName,
+          emoji: FLY_PLAYER_EMOJIS[i],
+          piece,
+          color: FLY_PLAYER_COLORS[i],
+          pos: 0, status: 'active', skipped: false, finishRank: 0,
+          isAI: false, isLocal: true, aiContactId: null,
+        });
+      } else {
+        const cid = FLY.aiContactIds[i];
+        const contact = cid ? S._contacts[cid] : (contacts[i-1] || contacts[0]);
+        players.push({
+          name: contact?.name || `AI${i}`,
+          emoji: FLY_PLAYER_EMOJIS[i],
+          piece,
+          color: FLY_PLAYER_COLORS[i],
+          pos: 0, status: 'active', skipped: false, finishRank: 0,
+          isAI: true, isLocal: false, aiContactId: contact?.id || null,
+        });
+      }
     }
   }
   FLY._gameLog = [];
@@ -8054,7 +8085,11 @@ function flyUpdateTurnInfo() {
   if (FLY.over) { el.textContent = '游戏结束！'; return; }
   const p = FLY.players[FLY.currentPlayer];
   if (!p) return;
-  el.textContent = p.isAI ? `${p.emoji} ${p.name} (AI) 思考中…` : `${p.emoji} 轮到你了！`;
+  el.textContent = p.isAI
+    ? `${p.emoji} ${p.name} (AI) 思考中…`
+    : p.isLocal
+      ? `${p.emoji} 轮到 ${p.name} 行动！`
+      : `${p.emoji} 轮到你了！`;
 }
 
 function flyEnableDice(enabled) {
@@ -8252,12 +8287,20 @@ function flyShowEvent(eventText, type, playerIdx) {
   FLY._pendingEventText = eventText;
   FLY._pendingEventType = type;
 
-  // If AI player triggered the event, auto-respond with minimal LLM call
+  // Handle event interaction based on player type
   const triggerPlayer = FLY.players[playerIdx];
   if (triggerPlayer?.isAI) {
+    // AI auto-responds
     const answerSection = $i('fly-answer-section');
     if (answerSection) answerSection.style.display = 'none';
     setTimeout(() => flyAiAutoAnswer(playerIdx), 800);
+  } else if (triggerPlayer?.isLocal) {
+    // Local human player: show event, skip AI, just continue
+    const answerSection = $i('fly-answer-section');
+    if (answerSection) answerSection.style.display = 'none';
+    const aiResponse = $i('fly-ai-response');
+    if (aiResponse) aiResponse.style.display = 'none';
+    if (continueBtn) { continueBtn.style.display = ''; continueBtn.textContent = '✓ 继续游戏'; }
   }
 }
 
@@ -8266,9 +8309,11 @@ function flyEventDone() {
   if (overlay) overlay.style.display = 'none';
   const answerInput = $i('fly-answer-input');
   if (answerInput) answerInput.value = '';
-  // Restore answer section for human players
+  // Restore all sections for next player
   const answerSection = $i('fly-answer-section');
   if (answerSection) answerSection.style.display = '';
+  const aiResponse = $i('fly-ai-response');
+  if (aiResponse) aiResponse.style.display = '';
   const submitBtn = $i('fly-submit-btn');
   if (submitBtn) { submitBtn.style.display = ''; submitBtn.disabled = false; submitBtn.textContent = '📤 提交给AI'; }
   setTimeout(flyNextTurn, 300);

@@ -2022,7 +2022,8 @@ const GOMOKU = {
   thinking: false,
   moveCount: 0,
   startTime: 0,
-  contactId: null,   // currently selected AI contact id
+  contactId: null,   // currently selected AI contact id; 'none' = no AI
+  _history: [],      // conversation history for multi-turn context
   prefs: { boardColor:'wood', playerPiece:'classic', aiPiece:'panda', commentary:true, difficulty:'normal', commentFreq:'normal' },
 };
 
@@ -2135,8 +2136,12 @@ function renderGomokuAiSelector() {
   const el = $i('gmk-ai-selector');
   if (!el) return;
   el.innerHTML = '';
+  const noBtn = document.createElement('button');
+  noBtn.className = 'gmk-ai-btn' + (GOMOKU.contactId === 'none' ? ' active' : '');
+  noBtn.innerHTML = '<span>🎮</span><span>不用助手</span>';
+  noBtn.onclick = () => { GOMOKU.contactId = 'none'; renderGomokuAiSelector(); updateGomokuAiDisplay(); };
+  el.appendChild(noBtn);
   const contacts = Object.values(S._contacts);
-  if (!contacts.length) { el.innerHTML = '<span style="font-size:12px;color:var(--text3)">还没有AI助手，先去添加～</span>'; return; }
   contacts.forEach(c => {
     const btn = document.createElement('button');
     btn.className = 'gmk-ai-btn' + (GOMOKU.contactId === c.id ? ' active' : '');
@@ -2148,9 +2153,13 @@ function renderGomokuAiSelector() {
 }
 
 function updateGomokuAiDisplay() {
+  const el = $i('gomoku-ai-name');
+  if (GOMOKU.contactId === 'none') {
+    if (el) el.textContent = '本地AI（白子）';
+    return;
+  }
   const contact = GOMOKU.contactId ? S._contacts[GOMOKU.contactId] : (S.currentContact ? S._contacts[S.currentContact] : Object.values(S._contacts)[0]);
   const aiName = contact?.name || 'AI';
-  const el = $i('gomoku-ai-name');
   if (el) el.textContent = `${aiName}（白子）`;
 }
 
@@ -2173,7 +2182,8 @@ function initGomoku() {
   GOMOKU.thinking = false;
   GOMOKU.moveCount = 0;
   GOMOKU.startTime = Date.now();
-  // pick contact
+  GOMOKU._history = [];
+  // pick contact (don't override explicit 'none' choice)
   if (!GOMOKU.contactId) {
     GOMOKU.contactId = S.currentContact || Object.keys(S._contacts)[0] || null;
   }
@@ -2186,11 +2196,13 @@ function initGomoku() {
   updateGomokuAiDisplay();
   renderGomokuBoard();
   gomokuSetStatus('你先行棋，落下黑子！');
-  const contact = GOMOKU.contactId ? S._contacts[GOMOKU.contactId] : null;
+  const contact = GOMOKU.contactId !== 'none' ? (GOMOKU.contactId ? S._contacts[GOMOKU.contactId] : null) : null;
   const aiName = contact?.name || 'AI';
-  const greeting = contact
-    ? `你好呀！我是${aiName}，我们来下五子棋吧，看谁先赢～`
-    : '游戏开始！请在设置里选一个AI助手一起玩哦～';
+  const greeting = GOMOKU.contactId === 'none'
+    ? '纯本地模式，AI将使用内置算法对战，没有对话！'
+    : contact
+      ? `你好呀！我是${aiName}，我们来下五子棋吧，看谁先赢～`
+      : '游戏开始！请在设置里选一个AI助手一起玩哦～';
   gomokuSay(greeting);
   // close settings if open
   const panel = $i('gomoku-settings');
@@ -2307,6 +2319,7 @@ function gomokuMaxLine(r, c, player) {
 }
 
 function gomokuGetContact() {
+  if (GOMOKU.contactId === 'none') return null;
   return (GOMOKU.contactId ? S._contacts[GOMOKU.contactId] : null)
     || (S.currentContact ? S._contacts[S.currentContact] : null)
     || Object.values(S._contacts)[0] || null;
@@ -2334,10 +2347,14 @@ async function gomokuAiMove() {
   const freq = freqMap[GOMOKU.prefs.commentFreq ?? 'normal'] ?? 3;
   const shouldComment = freq > 0 && GOMOKU.moveCount % freq === 0;
 
-  // Beginner: skip LLM, use simple heuristic with 40% random nearby move
-  if (difficulty === 'beginner') {
+  // No AI mode: use heuristic only, no commentary
+  if (GOMOKU.contactId === 'none') {
     const h = gomokuHeuristic();
-    // 40% chance of random nearby move
+    row = h.r; col = h.c;
+    comment = '';
+  // Beginner: skip LLM, use simple heuristic with 40% random nearby move
+  } else if (difficulty === 'beginner') {
+    const h = gomokuHeuristic();
     if (Math.random() < 0.4 && GOMOKU.moveCount > 1) {
       const candidates = [];
       for (let r=0;r<15;r++) for (let c=0;c<15;c++) {
@@ -2359,28 +2376,33 @@ async function gomokuAiMove() {
     }
     const boardTxt = `黑子(对手)：${blacks.join('')||'无'}  白子(你)：${whites.join('')||'无'}`;
     const aiName = contact?.name || 'AI';
-    const personality = (contact?.system || '你是可爱温柔的AI助手').slice(0, 130);
+    const personality = contact?.system || '';
     const model = contact?.model || 'openai/gpt-4o-mini';
-    // Commentary hint based on frequency setting
     const commentHint = playerThreat >= 4
-      ? '对手刚连了4子，你需要反应！评论可以紧张/惊讶/挑衅'
+      ? '对手刚连了4子，需要应对！'
       : playerThreat >= 3
-      ? '对手有威胁，评论可以提示/安慰/警告'
+      ? '对手有威胁，注意防守'
       : shouldComment
-      ? '过程评论，可以说游戏感受/小技巧/鼓励/调侃'
+      ? '可以聊聊棋局感受或调侃对手'
       : '';
     const hardHint = difficulty === 'hard' ? '你是高水平棋手，必须尽全力争胜。' : '';
-    const prompt = `你是${aiName}，和用户下五子棋。你执白子，用户执黑子，棋盘15×15（行列0-14）。\n${boardTxt}\n性格：${personality}\n阶段：第${GOMOKU.moveCount}步，${phaseHint}。\n策略要求：${hardHint}根据性格和阶段灵活决策。温柔性格不代表一直让，可能开始认真、局势好时才礼让一步；强势性格会全力争胜；总之要有真实的游戏节奏感，避免机械。${commentHint ? '\n评论方向：'+commentHint : ''}\n在空位落子并用1句符合性格的话回应（${commentHint?'按方向':'可以是棋局感受'}）。\n只返回JSON：{"row":数字,"col":数字,"comment":"一句话"}`;
+    const sysPrompt = `你是${aiName}，正在和用户下五子棋。你执白子，用户执黑子，棋盘15×15（行列0-14）。${personality ? `你的性格：${personality}。` : ''}${hardHint}每次收到棋盘状态后，选择一个空位落子，并用符合你个性的话自然回应（不必局限于"一句话"，语气要真实，有情绪变化）。返回JSON：{"row":数字,"col":数字,"comment":"你的回应"}`;
+    const userMsg = `当前棋盘：${boardTxt}\n第${GOMOKU.moveCount}步，${phaseHint}。${commentHint ? '（'+commentHint+'）' : ''}`;
+    const history = GOMOKU._history.slice(-20);
     try {
       const res = await fetch(useUrl, {
         method:'POST',
         headers:{'Authorization':`Bearer ${useKey}`,'Content-Type':'application/json','HTTP-Referer':'https://raimos.app','X-Title':'Raimos'},
-        body:JSON.stringify({model,max_tokens:90,stream:false,temperature: difficulty==='hard'?0.5:0.8,messages:[{role:'user',content:prompt}]}),
+        body:JSON.stringify({model,max_tokens:150,stream:false,temperature:difficulty==='hard'?0.5:0.8,messages:[{role:'system',content:sysPrompt},...history,{role:'user',content:userMsg}]}),
       });
       const data = await res.json();
       const txt = data.choices?.[0]?.message?.content || '';
       const m = txt.match(/\{[\s\S]*?\}/);
-      if (m) { const p = JSON.parse(m[0]); row=p.row; col=p.col; comment=p.comment; }
+      if (m) {
+        const p = JSON.parse(m[0]); row=p.row; col=p.col; comment=p.comment;
+        GOMOKU._history.push({role:'user', content:userMsg});
+        GOMOKU._history.push({role:'assistant', content:txt});
+      }
     } catch(e) {}
   }
 
@@ -2468,24 +2490,26 @@ function gomokuHeuristic() {
 async function gomokuFinish(result) {
   const contact = gomokuGetContact();
   const elapsed = Math.round((Date.now() - GOMOKU.startTime) / 1000);
-  // save record
-  await saveGomokuRecord({ result, moves: GOMOKU.moveCount, elapsed, aiName: contact?.name||'AI', aiContactId: GOMOKU.contactId, date: Date.now() });
-  // get AI comment
+  const aiName = GOMOKU.contactId === 'none' ? '本地AI' : (contact?.name || 'AI');
+  await saveGomokuRecord({ result, moves: GOMOKU.moveCount, elapsed, aiName, aiContactId: GOMOKU.contactId, date: Date.now() });
   let aiComment = '';
-  const useKey = contact?.apiKey || S.settings.apiKey;
+  const useKey = GOMOKU.contactId !== 'none' && (contact?.apiKey || S.settings.apiKey);
   if (useKey) {
     try {
-      const aiName = contact?.name||'AI', personality=(contact?.system||'').slice(0,100);
-      const resultDesc = result==='player_win'?'你输了':result==='ai_win'?'你赢了':'平局';
-      const prompt = `你是${aiName}，性格：${personality||'可爱温柔'}。五子棋结束，${resultDesc}。用1句符合性格的话回应。只返回JSON：{"comment":"话"}`;
-      const res = await fetch(contact?.apiUrl||'https://openrouter.ai/api/v1/chat/completions',{method:'POST',headers:{'Authorization':`Bearer ${useKey}`,'Content-Type':'application/json','HTTP-Referer':'https://raimos.app','X-Title':'Raimos'},body:JSON.stringify({model:contact?.model||'openai/gpt-4o-mini',max_tokens:60,stream:false,messages:[{role:'user',content:prompt}]})});
-      const data=await res.json();const txt=data.choices?.[0]?.message?.content||'';const m=txt.match(/\{[\s\S]*?\}/);
-      if (m) aiComment=JSON.parse(m[0]).comment||'';
+      const personality = contact?.system || '';
+      const resultDesc = result==='player_win'?'用户赢了，你输了':result==='ai_win'?'你赢了，用户输了':'平局';
+      const sysPrompt = `你是${contact?.name||'AI'}。${personality ? `性格：${personality}。` : ''}`;
+      const userMsg = `对局结束，${resultDesc}，请自然地说几句话。`;
+      const history = GOMOKU._history.slice(-10);
+      const res = await fetch(contact?.apiUrl||'https://openrouter.ai/api/v1/chat/completions',{method:'POST',headers:{'Authorization':`Bearer ${useKey}`,'Content-Type':'application/json','HTTP-Referer':'https://raimos.app','X-Title':'Raimos'},body:JSON.stringify({model:contact?.model||'openai/gpt-4o-mini',max_tokens:120,stream:false,messages:[{role:'system',content:sysPrompt},...history,{role:'user',content:userMsg}]})});
+      const data=await res.json();
+      const txt=data.choices?.[0]?.message?.content||'';
+      const m=txt.match(/\{[\s\S]*?\}/);
+      aiComment = m ? (JSON.parse(m[0]).comment||'') : txt.trim();
     } catch(e){}
   }
   if (!aiComment) aiComment = result==='player_win'?'你赢了！再来一局吧～':result==='ai_win'?'哈哈，我赢了！再来？':'平局！旗鼓相当呢～';
   gomokuSay(aiComment);
-  // Show result modal after brief delay
   setTimeout(() => showGomokuResult(result, elapsed, aiComment, contact), 800);
 }
 
@@ -2658,7 +2682,8 @@ const GO = {
   koPoint: null,
   prevBoardState: null,
   startTime: 0,
-  contactId: null,
+  contactId: null,   // 'none' = no AI
+  _history: [],      // conversation history for multi-turn context
   prefs: { boardColor: 'wood', playerPiece: 'classic', aiPiece: 'panda', commentary: true, difficulty: 'normal', commentFreq: 'normal' },
 };
 
@@ -2745,6 +2770,11 @@ function renderGoAiSelector() {
   const el = $i('go-ai-selector');
   if (!el) return;
   el.innerHTML = '';
+  const noBtn = document.createElement('button');
+  noBtn.className = 'gmk-ai-btn' + (GO.contactId === 'none' ? ' active' : '');
+  noBtn.innerHTML = '<span style="font-size:16px">🎮</span><span style="font-size:11px;font-weight:700">不用助手</span>';
+  noBtn.onclick = () => { GO.contactId = 'none'; renderGoAiSelector(); updateGoAiDisplay(); };
+  el.appendChild(noBtn);
   const contacts = Object.values(S._contacts || {});
   contacts.forEach(c => {
     const btn = document.createElement('button');
@@ -2756,6 +2786,7 @@ function renderGoAiSelector() {
   });
 }
 function goGetContact() {
+  if (GO.contactId === 'none') return null;
   return GO.contactId ? S._contacts[GO.contactId]
     : (S.currentContact ? S._contacts[S.currentContact] : Object.values(S._contacts||{})[0]);
 }
@@ -2777,7 +2808,7 @@ function goUpdateAiPieceDisplay() {
 function updateGoAiDisplay() {
   const contact = goGetContact();
   const aiNameEl = $i('go-ai-name');
-  if (aiNameEl) aiNameEl.textContent = contact?.name || 'AI（白子）';
+  if (aiNameEl) aiNameEl.textContent = GO.contactId === 'none' ? '本地AI（白子）' : (contact?.name || 'AI（白子）');
   goUpdateAiPieceDisplay();
 }
 
@@ -2794,6 +2825,7 @@ async function initGo() {
   GO.koPoint = null;
   GO.prevBoardState = null;
   GO.startTime = Date.now();
+  GO._history = [];
 
   if (!GO.contactId) {
     GO.contactId = S.currentContact || Object.keys(S._contacts || {})[0] || null;
@@ -3007,11 +3039,14 @@ async function goAiMove() {
   const useKey = contact?.apiKey || S.settings.apiKey;
   const difficulty = GO.prefs.difficulty || 'normal';
 
+  // No AI mode: heuristic only, no commentary
+  if (GO.contactId === 'none') {
+    move = goHeuristic();
+    if (move) move.comment = '';
   // Beginner: always use heuristic (with 40% random)
-  if (difficulty === 'beginner') {
+  } else if (difficulty === 'beginner') {
     move = goHeuristic();
     if (move && Math.random() < 0.4) {
-      // pick a random nearby legal move
       const N = GO.SIZE;
       const candidates = [];
       for (let r=0;r<N;r++) for (let c=0;c<N;c++) {
@@ -3100,8 +3135,10 @@ async function goCallAI(contact, apiKey) {
   }
   const boardTxt = lines.join('\n');
   const aiName = contact?.name || 'AI';
-  const personality = (contact?.system || '').slice(0, 100);
-  const prompt = `你是${aiName}，和用户下围棋13×13。你执白子(W)，用户执黑子(B)，.表示空格。\n${boardTxt}\n性格：${personality||'聪明温柔'}。请找出最佳落子位置（0-12行列），或选择虚手。用1句符合性格的话评论。\n只返回JSON：{"row":数字,"col":数字,"comment":"一句话"} 或 {"pass":true,"comment":"一句话"}`;
+  const personality = contact?.system || '';
+  const sysPrompt = `你是${aiName}，正在和用户下围棋13×13。你执白子(W)，用户执黑子(B)，.表示空格。${personality ? `你的性格：${personality}。` : ''}每次收到棋盘后，找出最佳落子或选择虚手，并用符合你个性的话自然回应（不必局限于"一句话"）。返回JSON：{"row":数字,"col":数字,"comment":"你的回应"} 或 {"pass":true,"comment":"你的回应"}`;
+  const userMsg = `当前棋盘：\n${boardTxt}`;
+  const history = GO._history.slice(-20);
 
   const res = await fetch(contact?.apiUrl || 'https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
@@ -3113,16 +3150,19 @@ async function goCallAI(contact, apiKey) {
     },
     body: JSON.stringify({
       model: contact?.model || S.settings.model || 'openai/gpt-4o-mini',
-      max_tokens: 80,
+      max_tokens: 150,
       stream: false,
-      messages: [{ role: 'user', content: prompt }],
+      messages: [{role:'system', content:sysPrompt}, ...history, {role:'user', content:userMsg}],
     }),
   });
   const data = await res.json();
   const txt = data.choices?.[0]?.message?.content || '';
   const m = txt.match(/\{[\s\S]*?\}/);
   if (!m) return null;
-  return JSON.parse(m[0]);
+  const result = JSON.parse(m[0]);
+  GO._history.push({role:'user', content:userMsg});
+  GO._history.push({role:'assistant', content:txt});
+  return result;
 }
 
 function goHeuristic() {
@@ -3974,7 +4014,8 @@ const XQ = {
   selected: null,   // {r, c}
   validMoves: [],
   thinking: false,
-  contactId: null,
+  contactId: null,  // 'none' = no AI
+  _history: [],     // conversation history for multi-turn context
   commentary: true,
   difficulty: 'normal',
   moveCount: 0,
@@ -4152,6 +4193,7 @@ function initXiangqi() {
   XQ.validMoves = [];
   XQ.thinking = false;
   XQ.moveCount = 0;
+  XQ._history = [];
   if (!XQ.contactId) {
     XQ.contactId = S.currentContact || Object.keys(S._contacts||{})[0] || null;
   }
@@ -4159,7 +4201,7 @@ function initXiangqi() {
   updateXiangqiAiDisplay();
   xqSetStatus('你先行（红方）');
   renderXiangqiBoard();
-  xqSay('棋盘就绪！红方先行，开始对局～');
+  xqSay(XQ.contactId === 'none' ? '棋盘就绪！红方先行，开始对局～' : '棋盘就绪！红方先行，开始对局～');
   const p = $i('xiangqi-settings');
   if (p) p.style.display = 'none';
 }
@@ -4175,8 +4217,12 @@ function xqSay(msg) {
 
 function renderXiangqiAiSelector() {
   const el=$i('xq-ai-selector'); if(!el) return; el.innerHTML='';
+  const noBtn=document.createElement('button');
+  noBtn.className='gmk-ai-btn'+(XQ.contactId==='none'?' active':'');
+  noBtn.innerHTML='<span>🎮</span><span>不用助手</span>';
+  noBtn.onclick=()=>{XQ.contactId='none';renderXiangqiAiSelector();updateXiangqiAiDisplay();};
+  el.appendChild(noBtn);
   const contacts=Object.values(S._contacts||{});
-  if(!contacts.length){el.innerHTML='<span style="font-size:12px;color:var(--text3)">还没有AI助手～</span>';return;}
   contacts.forEach(c=>{
     const btn=document.createElement('button');
     btn.className='gmk-ai-btn'+(XQ.contactId===c.id?' active':'');
@@ -4187,8 +4233,10 @@ function renderXiangqiAiSelector() {
   });
 }
 function updateXiangqiAiDisplay() {
+  const el=$i('xq-ai-name'); if(!el) return;
+  if(XQ.contactId==='none'){el.textContent='本地AI（黑方）';return;}
   const contact=XQ.contactId?S._contacts[XQ.contactId]:Object.values(S._contacts||{})[0];
-  const el=$i('xq-ai-name'); if(el) el.textContent=(contact?.name||'AI')+'（黑方）';
+  el.textContent=(contact?.name||'AI')+'（黑方）';
 }
 function toggleXiangqiSettings() {
   const p=$i('xiangqi-settings'); if(!p) return;
@@ -4326,13 +4374,12 @@ function xqAiHeuristic() {
 }
 
 async function xqAiMove() {
-  const contact=XQ.contactId?S._contacts[XQ.contactId]:Object.values(S._contacts||{})[0];
-  const useKey=contact?.apiKey||S.settings.apiKey;
+  const contact=XQ.contactId==='none'?null:(XQ.contactId?S._contacts[XQ.contactId]:Object.values(S._contacts||{})[0]);
+  const useKey=XQ.contactId!=='none'&&(contact?.apiKey||S.settings.apiKey);
   let mv=null, comment='';
 
   if(useKey && XQ.difficulty!=='beginner') {
     try {
-      // Build board text
       const lines=[];
       for(let r=0;r<10;r++){
         let row='';
@@ -4341,17 +4388,20 @@ async function xqAiMove() {
       }
       const boardTxt=lines.join('\n');
       const aiName=contact?.name||'AI';
+      const personality=contact?.system||'';
       const model=contact?.model||S.settings.model||'openai/gpt-4o-mini';
-      const prompt=`你是${aiName}，和用户下中国象棋。你执黑方，用户执红方。棋盘10行9列（0-9行，0-8列）。\n${boardTxt}\n请选择最佳落子。只返回JSON：{"fr":起始行,"fc":起始列,"tr":目标行,"tc":目标列,"comment":"一句话"}`;
+      const sysPrompt=`你是${aiName}，正在和用户下中国象棋。你执黑方，用户执红方，棋盘10行9列（0-9行，0-8列）。${personality?`你的性格：${personality}。`:''}每次收到棋盘后选择最佳落子，并用符合你个性的话自然回应（不必局限于"一句话"）。返回JSON：{"fr":起始行,"fc":起始列,"tr":目标行,"tc":目标列,"comment":"你的回应"}`;
+      const userMsg=`当前棋盘：\n${boardTxt}`;
+      const history=XQ._history.slice(-20);
       const res=await fetch(contact?.apiUrl||'https://openrouter.ai/api/v1/chat/completions',{
         method:'POST',
         headers:{'Authorization':`Bearer ${useKey}`,'Content-Type':'application/json','HTTP-Referer':'https://raimos.app','X-Title':'Raimos'},
-        body:JSON.stringify({model,max_tokens:100,stream:false,messages:[{role:'user',content:prompt}]}),
+        body:JSON.stringify({model,max_tokens:150,stream:false,messages:[{role:'system',content:sysPrompt},...history,{role:'user',content:userMsg}]}),
       });
       const data=await res.json();
       const txt=data.choices?.[0]?.message?.content||'';
       const m=txt.match(/\{[\s\S]*?\}/);
-      if(m){const p=JSON.parse(m[0]);mv={fr:p.fr,fc:p.fc,tr:p.tr,tc:p.tc};comment=p.comment||'';}
+      if(m){const p=JSON.parse(m[0]);mv={fr:p.fr,fc:p.fc,tr:p.tr,tc:p.tc};comment=p.comment||'';XQ._history.push({role:'user',content:userMsg});XQ._history.push({role:'assistant',content:txt});}
     } catch(e){}
   }
 
@@ -4389,7 +4439,8 @@ const IC = {
   selected: null,
   validMoves: [],
   thinking: false,
-  contactId: null,
+  contactId: null,  // 'none' = no AI
+  _history: [],     // conversation history for multi-turn context
   commentary: true,
   difficulty: 'normal',
   boardColor: 'classic',
@@ -4550,6 +4601,7 @@ function initIntChess() {
   IC.enPassant=null;
   IC.castling={wK:true,wQR:true,wKR:true,bK:true,bQR:true,bKR:true};
   IC.promotionPending=null;
+  IC._history=[];
   if(!IC.contactId){
     IC.contactId=S.currentContact||Object.keys(S._contacts||{})[0]||null;
   }
@@ -4559,7 +4611,6 @@ function initIntChess() {
   renderIntChessBoard();
   icSay('国际象棋对局开始！白方先行～');
   const p=$i('intchess-settings'); if(p) p.style.display='none';
-  // Apply board color
   const boardEl=$i('ic-board');
   if(boardEl){boardEl.className='ic-board'+(IC.boardColor!=='classic'?' ic-'+IC.boardColor:'');}
 }
@@ -4575,8 +4626,12 @@ function icSay(msg){
 
 function renderIntChessAiSelector(){
   const el=$i('ic-ai-selector');if(!el)return;el.innerHTML='';
+  const noBtn=document.createElement('button');
+  noBtn.className='gmk-ai-btn'+(IC.contactId==='none'?' active':'');
+  noBtn.innerHTML='<span>🎮</span><span>不用助手</span>';
+  noBtn.onclick=()=>{IC.contactId='none';renderIntChessAiSelector();updateIntChessAiDisplay();};
+  el.appendChild(noBtn);
   const contacts=Object.values(S._contacts||{});
-  if(!contacts.length){el.innerHTML='<span style="font-size:12px;color:var(--text3)">还没有AI助手～</span>';return;}
   contacts.forEach(c=>{
     const btn=document.createElement('button');
     btn.className='gmk-ai-btn'+(IC.contactId===c.id?' active':'');
@@ -4587,8 +4642,10 @@ function renderIntChessAiSelector(){
   });
 }
 function updateIntChessAiDisplay(){
+  const el=$i('ic-ai-name');if(!el)return;
+  if(IC.contactId==='none'){el.textContent='本地AI（黑方）';return;}
   const contact=IC.contactId?S._contacts[IC.contactId]:Object.values(S._contacts||{})[0];
-  const el=$i('ic-ai-name');if(el)el.textContent=(contact?.name||'AI')+'（黑方）';
+  el.textContent=(contact?.name||'AI')+'（黑方）';
 }
 function toggleIntChessSettings(){
   const p=$i('intchess-settings');if(!p)return;
@@ -4761,14 +4818,15 @@ function icAiHeuristic(){
 }
 
 async function icAiMove(){
-  const contact=IC.contactId?S._contacts[IC.contactId]:Object.values(S._contacts||{})[0];
-  const useKey=contact?.apiKey||S.settings.apiKey;
+  const contact=IC.contactId==='none'?null:(IC.contactId?S._contacts[IC.contactId]:Object.values(S._contacts||{})[0]);
+  const useKey=IC.contactId!=='none'&&(contact?.apiKey||S.settings.apiKey);
   let chosen=null;
 
   if(useKey&&IC.difficulty!=='beginner'){
     try{
       const rows='ABCDEFGH';
       const aiName=contact?.name||'AI';
+      const personality=contact?.system||'';
       const model=contact?.model||S.settings.model||'openai/gpt-4o-mini';
       let boardTxt='';
       for(let r=0;r<8;r++){
@@ -4777,11 +4835,13 @@ async function icAiMove(){
         boardTxt+='\n';
       }
       boardTxt+='  A B C D E F G H';
-      const prompt=`你是${aiName}，下国际象棋，你执黑方。白方在你的对面。棋盘：\n${boardTxt}\n请选择一步合法的落棋并用中文评论。只返回JSON：{"from":"A1","to":"A2","comment":"一句话"}（列A-H，行1-8）`;
+      const sysPrompt=`你是${aiName}，正在和用户下国际象棋，你执黑方，白方是用户。${personality?`你的性格：${personality}。`:''}每次收到棋盘后，选择一步合法的落子，并用符合你个性的话自然回应（不必局限于"一句话"）。返回JSON：{"from":"A1","to":"A2","comment":"你的回应"}（列A-H，行1-8）`;
+      const userMsg=`当前棋盘：\n${boardTxt}`;
+      const history=IC._history.slice(-20);
       const res=await fetch(contact?.apiUrl||'https://openrouter.ai/api/v1/chat/completions',{
         method:'POST',
         headers:{'Authorization':`Bearer ${useKey}`,'Content-Type':'application/json','HTTP-Referer':'https://raimos.app','X-Title':'Raimos'},
-        body:JSON.stringify({model,max_tokens:80,stream:false,messages:[{role:'user',content:prompt}]}),
+        body:JSON.stringify({model,max_tokens:150,stream:false,messages:[{role:'system',content:sysPrompt},...history,{role:'user',content:userMsg}]}),
       });
       const data=await res.json();
       const txt=data.choices?.[0]?.message?.content||'';
@@ -4795,7 +4855,7 @@ async function icAiMove(){
         if(fc>=0&&fr>=0&&tc>=0&&tr>=0){
           const legalMoves=icGetMoves(fr,fc);
           const lm=legalMoves.find(mv=>mv.r===tr&&mv.c===tc);
-          if(lm) chosen={fr,fc,mv:lm,comment:p.comment};
+          if(lm){chosen={fr,fc,mv:lm,comment:p.comment};IC._history.push({role:'user',content:userMsg});IC._history.push({role:'assistant',content:txt});}
         }
       }
     }catch(e){}

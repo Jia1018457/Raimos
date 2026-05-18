@@ -2292,8 +2292,8 @@ async function sendSticker(sk){
   $i('emoji-picker').classList.remove('show');
   const stickerModal=$i('sticker-modal');if(stickerModal)stickerModal.classList.remove('show');
   if(sk.isImg){
-    // Real image → send as type:'image' so AI can see it
-    await addMsg(S.currentChat,{role:'user',type:'image',imageData:sk.url,url:sk.url,content:'[图片]'});
+    // Send as sticker so AI only sees the label name, not the actual image data
+    await addMsg(S.currentChat,{role:'user',type:'sticker',content:sk.content||sk.label||'[图片]',url:sk.url,isImg:true});
     await renderMsgs();scrollTo_(false);
     await callAI(S.currentChat);
   } else {

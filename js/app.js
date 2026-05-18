@@ -8238,20 +8238,20 @@ function flyEventDone() {
   setTimeout(flyNextTurn, 300);
 }
 
-// Build game context string from session log for AI prompts
+// Build game context string from session log for AI prompts (full log)
 function flyBuildGameContext() {
   if (!FLY._gameLog?.length) return '';
-  return '[本局游戏对话]\n' + FLY._gameLog.slice(-8).map(e =>
+  return '[本局游戏对话记录]\n' + FLY._gameLog.map(e =>
     `${e.piece||e.emoji} ${e.player}（问题：「${e.q}」→ 回答：${e.a}）`
   ).join('\n');
 }
 
-// Build system message: contact's system prompt + relevant memories
+// Build system message: contact's full system prompt + all relevant memories
 function flyBuildSysMsg(contact) {
   const sys = contact?.system || '';
   const mems = S._memories
     .filter(m => !m.contactId || m.contactId === contact?.id)
-    .slice(-8).map(m => m.text).join('\n');
+    .map(m => m.text).join('\n');
   return [sys, mems ? `[记忆]\n${mems}` : ''].filter(Boolean).join('\n\n');
 }
 
@@ -8285,7 +8285,7 @@ async function flySubmitAnswer() {
     try {
       const sysMsg = flyBuildSysMsg(contact);
       const gameCtx = flyBuildGameContext();
-      const userMsg = `${gameCtx ? gameCtx + '\n\n' : ''}你正在和大家玩飞行棋互动游戏。\n现在${humanPlayer?.name || '玩家'}触发了问题：「${FLY._pendingEventText}」\n${humanPlayer?.name || '玩家'}的回答：「${answer}」\n请用符合你性格的方式回应这个回答，可以联系之前的对话内容，有情感、有温度，2-3句话。只返回JSON：{"reply":"回应内容"}`;
+      const userMsg = `${gameCtx ? gameCtx + '\n\n' : ''}你正在和大家玩飞行棋互动游戏。\n现在${humanPlayer?.name || '玩家'}触发了问题：「${FLY._pendingEventText}」\n${humanPlayer?.name || '玩家'}的回答：「${answer}」\n请用符合你性格的方式自由回应，可以根据之前的游戏对话记录来决定是否联系、如何联系，随心而发。只返回JSON：{"reply":"回应"}`;
       const messages = [
         ...(sysMsg ? [{ role: 'system', content: sysMsg }] : []),
         { role: 'user', content: userMsg }
@@ -8293,7 +8293,7 @@ async function flySubmitAnswer() {
       const res = await fetch(contact?.apiUrl || 'https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${useKey}`, 'Content-Type': 'application/json', 'HTTP-Referer': 'https://raimos.app', 'X-Title': 'Raimos' },
-        body: JSON.stringify({ model: contact?.model || 'openai/gpt-4o-mini', max_tokens: 200, stream: false, temperature: 0.9, messages })
+        body: JSON.stringify({ model: contact?.model || 'openai/gpt-4o-mini', stream: false, temperature: 0.9, messages })
       });
       const data = await res.json();
       const txt = data.choices?.[0]?.message?.content || '';
@@ -8332,7 +8332,7 @@ async function flyAiAutoAnswer(playerIdx) {
     try {
       const sysMsg = flyBuildSysMsg(contact);
       const gameCtx = flyBuildGameContext();
-      const userMsg = `${gameCtx ? gameCtx + '\n\n' : ''}你正在和大家玩飞行棋互动游戏，现在轮到你（${aiName}）回答问题。\n问题：「${FLY._pendingEventText}」\n请用符合你性格的方式作答，可以联系之前的对话，自然真实，2-3句话。只返回JSON：{"a":"回答"}`;
+      const userMsg = `${gameCtx ? gameCtx + '\n\n' : ''}你正在和大家玩飞行棋互动游戏，现在轮到你（${aiName}）回答问题。\n问题：「${FLY._pendingEventText}」\n请完全按你自己的性格自由作答，可以根据之前的游戏对话记录自行决定是否参考、参考多少，想说多少说多少。只返回JSON：{"a":"回答"}`;
       const messages = [
         ...(sysMsg ? [{ role: 'system', content: sysMsg }] : []),
         { role: 'user', content: userMsg }
@@ -8340,7 +8340,7 @@ async function flyAiAutoAnswer(playerIdx) {
       const res = await fetch(contact?.apiUrl || 'https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${useKey}`, 'Content-Type': 'application/json', 'HTTP-Referer': 'https://raimos.app', 'X-Title': 'Raimos' },
-        body: JSON.stringify({ model: contact?.model || 'openai/gpt-4o-mini', max_tokens: 200, stream: false, temperature: 0.9, messages })
+        body: JSON.stringify({ model: contact?.model || 'openai/gpt-4o-mini', stream: false, temperature: 0.9, messages })
       });
       const data = await res.json();
       const txt = data.choices?.[0]?.message?.content || '';

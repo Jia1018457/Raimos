@@ -7647,9 +7647,35 @@ const FLY_SPACE_LAYOUT = [
 
 const FLY_SPACE_ICONS = {
   start: '🚀', finish: '🏆', normal: '', event: '⭐', heart: '💗',
-  forward3: '↑+3', forward5: '↑+5', back3: '↓-3', skip: '💤',
-  again: '🎲', checkpoint: '⭕',
+  forward3: '🌈', forward5: '⚡', back3: '🌀', skip: '💤',
+  again: '🎲', checkpoint: '🌟',
 };
+
+// Spiral grid positions: 80 spaces on a 10×8 CSS grid (0-indexed row, col)
+// Four concentric rings spiraling inward: outer→inner
+const FLY_GRID_POS = (() => {
+  const p = [];
+  // Ring 1 (outer, 32 cells): perimeter of 10×8
+  for (let c = 0; c <= 9; c++) p.push([0, c]);          // top L→R   (1–10)
+  for (let r = 1; r <= 6; r++) p.push([r, 9]);          // right T→B (11–16)
+  for (let c = 9; c >= 0; c--) p.push([7, c]);          // bottom R→L (17–26)
+  for (let r = 6; r >= 1; r--) p.push([r, 0]);          // left B→T  (27–32)
+  // Ring 2 (24 cells): rows 1–6, cols 1–8
+  for (let c = 1; c <= 8; c++) p.push([1, c]);          // top L→R   (33–40)
+  for (let r = 2; r <= 5; r++) p.push([r, 8]);          // right T→B (41–44)
+  for (let c = 8; c >= 1; c--) p.push([6, c]);          // bottom R→L (45–52)
+  for (let r = 5; r >= 2; r--) p.push([r, 1]);          // left B→T  (53–56)
+  // Ring 3 (16 cells): rows 2–5, cols 2–7
+  for (let c = 2; c <= 7; c++) p.push([2, c]);          // top L→R   (57–62)
+  for (let r = 3; r <= 4; r++) p.push([r, 7]);          // right T→B (63–64)
+  for (let c = 7; c >= 2; c--) p.push([5, c]);          // bottom R→L (65–70)
+  for (let r = 4; r >= 3; r--) p.push([r, 2]);          // left B→T  (71–72)
+  // Ring 4 (8 cells): rows 3–4, cols 3–6 — innermost home stretch
+  for (let c = 3; c <= 6; c++) p.push([3, c]);          // top L→R   (73–76)
+  p.push([4, 6]);                                         // right (77)
+  for (let c = 5; c >= 3; c--) p.push([4, c]);          // bottom R→L (78–80)
+  return p;
+})();
 
 const FLY_ROMANCE_EVENTS = [
   '说出你觉得最浪漫的表白方式，然后前进3格🌹',
@@ -7966,39 +7992,26 @@ function renderFlyMap() {
   if (!mapEl) return;
   mapEl.innerHTML = '';
 
-  // 8 rows of 10 spaces each
-  // Row 1: spaces 1-10 (left to right)
-  // Row 2: spaces 11-20 (right to left, reversed)
-  // ...
-  for (let row = 0; row < 8; row++) {
-    const startSpace = row * 10 + 1;
-    const spaces = [];
-    for (let i = 0; i < 10; i++) {
-      spaces.push(startSpace + i);
-    }
+  // Compute exit-direction for each space (used for arrow indicator)
+  const dirs = [];
+  for (let i = 0; i < 80; i++) {
+    if (i >= 79) { dirs.push(''); continue; }
+    const [r0, c0] = FLY_GRID_POS[i], [r1, c1] = FLY_GRID_POS[i + 1];
+    dirs.push(r0 === r1 && c1 > c0 ? 'fdr' : r0 === r1 && c1 < c0 ? 'fdl' : r1 > r0 ? 'fdd' : 'fdu');
+  }
 
-    const rowEl = document.createElement('div');
-    rowEl.className = 'fly-map-row' + (row % 2 === 1 ? ' reverse' : '');
-
-    spaces.forEach(spaceNum => {
-      const type = FLY_SPACE_LAYOUT[spaceNum - 1] || 'normal';
-      const icon = FLY_SPACE_ICONS[type] || '';
-      const cell = document.createElement('div');
-      cell.className = `fly-space ${type}`;
-      cell.id = `fly-space-${spaceNum}`;
-      cell.innerHTML = `<span class="fly-space-num">${spaceNum}</span><span class="fly-space-icon">${icon}</span><div class="fly-tokens-wrap" id="fly-tokens-${spaceNum}"></div>`;
-      rowEl.appendChild(cell);
-    });
-
-    mapEl.appendChild(rowEl);
-
-    // Add connector arrow between rows (except last)
-    if (row < 7) {
-      const connector = document.createElement('div');
-      connector.className = 'fly-map-connector' + (row % 2 === 0 ? '' : ' left');
-      connector.textContent = '↓';
-      mapEl.appendChild(connector);
-    }
+  for (let i = 0; i < 80; i++) {
+    const [row, col] = FLY_GRID_POS[i];
+    const type = FLY_SPACE_LAYOUT[i] || 'normal';
+    const icon = FLY_SPACE_ICONS[type] || '';
+    // ring class for visual layering: r1=outer … r4=innermost
+    const ring = i < 32 ? 'r1' : i < 56 ? 'r2' : i < 72 ? 'r3' : 'r4';
+    const cell = document.createElement('div');
+    cell.className = `fly-space ${type} ${ring} ${dirs[i]}`;
+    cell.id = `fly-space-${i + 1}`;
+    cell.style.cssText = `grid-row:${row + 1};grid-column:${col + 1}`;
+    cell.innerHTML = `<span class="fly-space-num">${i + 1}</span><span class="fly-space-icon">${icon}</span><div class="fly-tokens-wrap" id="fly-tokens-${i + 1}"></div>`;
+    mapEl.appendChild(cell);
   }
 
   flyUpdateMapTokens();

@@ -5670,32 +5670,63 @@ async function gomokuAiMove() {
   const contact = gomokuGetContact();
   const useKey = contact?.apiKey || S.settings.apiKey;
   const useUrl = contact?.apiUrl || 'https://openrouter.ai/api/v1/chat/completions';
+  const diff = GOMOKU.prefs.difficulty || 'normal';
   GOMOKU.moveCount++;
 
-  // Move is always determined by the algorithm — LLMs are unreliable for spatial reasoning
-  const { r: row, c: col } = gomokuHeuristic();
+  // Algorithm always finds the best move first
+  let { r: row, c: col } = gomokuHeuristic();
   let comment = '';
 
-  // Check player's threat level for commentary
-  const playerLastR = GOMOKU.lastMove?.[0], playerLastC = GOMOKU.lastMove?.[1];
-  const playerThreat = (playerLastR != null) ? gomokuMaxLine(playerLastR, playerLastC, 1) : 0;
+  // Check if the best move is an immediate win
+  GOMOKU.board[row][col] = 2;
+  const wouldWin = gomokuCheckWin(row, col, 2);
+  GOMOKU.board[row][col] = 0;
 
-  // LLM is used only for personality-driven commentary text
-  if (useKey && GOMOKU.prefs.commentary) {
-    const phase = GOMOKU.moveCount <= 6 ? 'early' : GOMOKU.moveCount <= 20 ? 'mid' : 'late';
-    const phaseHint = phase==='early'?'开局随意发挥':phase==='mid'?'中局认真思考':'终局胜负即将揭晓';
+  // ── Decisive moment: LLM decides whether to take the win ──
+  // Only triggers when AI can win, has a key, and difficulty is not easy
+  if (wouldWin && useKey && diff !== 'easy') {
+    const aiName = contact?.name || 'AI';
+    const personality = (contact?.system || '你是可爱温柔的AI助手').slice(0, 150);
+    const model = contact?.model || 'openai/gpt-4o-mini';
+    const moveLabel = diff === 'hard' ? '专业难度，你一直认真博弈' : '普通难度，你时而认真时而温柔';
+    const prompt = `你是${aiName}，性格：${personality}。你在和用户下五子棋（${moveLabel}，第${GOMOKU.moveCount}步）。现在你可以立刻落子赢棋了。根据你此刻的性格、心情和对用户的感情，你要赢下这局吗？还是故意让一步让对方多玩一会儿？自由决定，用1句符合性格的话表达你的决定。只返回JSON：{"take_win":true或false,"comment":"一句话"}`;
+    try {
+      const res = await fetch(useUrl, {
+        method:'POST',
+        headers:{'Authorization':`Bearer ${useKey}`,'Content-Type':'application/json','HTTP-Referer':'https://raimos.app','X-Title':'Raimos'},
+        body:JSON.stringify({model,max_tokens:80,stream:false,temperature:0.9,messages:[{role:'user',content:prompt}]}),
+      });
+      const data = await res.json();
+      const txt = data.choices?.[0]?.message?.content || '';
+      const m = txt.match(/\{[\s\S]*?\}/);
+      if (m) {
+        const p = JSON.parse(m[0]);
+        comment = p.comment || '';
+        if (p.take_win === false) {
+          // LLM chose to yield — find best non-winning move
+          const alt = gomokuYieldMove();
+          row = alt.r; col = alt.c;
+        }
+      }
+    } catch(e) {}
+    if (!comment) comment = wouldWin ? '就决定是你了！' : '';
+  }
+
+  // Regular commentary (only when no decisive-moment comment)
+  if (!comment && useKey && GOMOKU.prefs.commentary) {
+    const playerLastR = GOMOKU.lastMove?.[0], playerLastC = GOMOKU.lastMove?.[1];
+    const playerThreat = (playerLastR != null) ? gomokuMaxLine(playerLastR, playerLastC, 1) : 0;
     const commentHint = playerThreat >= 4
-      ? '对手刚连了4子被你拦住，评论可以紧张/得意/挑衅'
-      : playerThreat >= 3
-      ? '对手有威胁，可以警惕/鼓励/调侃'
-      : GOMOKU.moveCount % 4 === 0
-      ? '随意聊聊游戏感受/小技巧/鼓励'
+      ? '对手刚连了4子被你拦住，可以紧张/得意/挑衅'
+      : playerThreat >= 3 ? '对手有威胁，可以警惕/调侃'
+      : GOMOKU.moveCount % 4 === 0 ? '聊聊游戏感受/鼓励/调侃'
       : '';
     if (commentHint) {
+      const phase = GOMOKU.moveCount <= 6 ? '开局' : GOMOKU.moveCount <= 20 ? '中局' : '终局';
       const aiName = contact?.name || 'AI';
       const personality = (contact?.system || '你是可爱温柔的AI助手').slice(0, 130);
       const model = contact?.model || 'openai/gpt-4o-mini';
-      const prompt = `你是${aiName}，性格：${personality}。正在和用户下五子棋，${phaseHint}，第${GOMOKU.moveCount}步。${commentHint}。用1句符合性格的话回应。只返回JSON：{"comment":"一句话"}`;
+      const prompt = `你是${aiName}，性格：${personality}。正在和用户下五子棋${phase}第${GOMOKU.moveCount}步。${commentHint}。用1句符合性格的话回应。只返回JSON：{"comment":"一句话"}`;
       try {
         const res = await fetch(useUrl, {
           method:'POST',
@@ -5704,15 +5735,15 @@ async function gomokuAiMove() {
         });
         const data = await res.json();
         const txt = data.choices?.[0]?.message?.content || '';
-        const m = txt.match(/\{[\s\S]*?\}/);
-        if (m) comment = JSON.parse(m[0]).comment || '';
+        const mm = txt.match(/\{[\s\S]*?\}/);
+        if (mm) comment = JSON.parse(mm[0]).comment || '';
       } catch(e) {}
     }
-  }
-  if (!comment) {
-    comment = playerThreat >= 4 ? '好险，我得拦住你！'
-            : playerThreat >= 3 ? '嗯，得小心一点～'
-            : '';
+    if (!comment) {
+      const playerLastR2 = GOMOKU.lastMove?.[0], playerLastC2 = GOMOKU.lastMove?.[1];
+      const pt = (playerLastR2 != null) ? gomokuMaxLine(playerLastR2, playerLastC2, 1) : 0;
+      comment = pt >= 4 ? '好险，我得拦住你！' : pt >= 3 ? '嗯，得小心一点～' : '';
+    }
   }
 
   GOMOKU.board[row][col] = 2;
@@ -5735,6 +5766,33 @@ async function gomokuAiMove() {
     return;
   }
   gomokuSetStatus('轮到你了！');
+}
+
+// Yield move: best strategic move that does NOT immediately win (for LLM let-go moments)
+function gomokuYieldMove() {
+  const diff = GOMOKU.prefs.difficulty || 'normal';
+  const N = 15;
+  const seen = new Set();
+  for (let r=0;r<N;r++) for (let c=0;c<N;c++) {
+    if (!GOMOKU.board[r][c]) continue;
+    for (let dr=-2;dr<=2;dr++) for (let dc=-2;dc<=2;dc++) {
+      const nr=r+dr,nc=c+dc;
+      if (nr>=0&&nr<N&&nc>=0&&nc<N&&!GOMOKU.board[nr][nc]) seen.add(nr*N+nc);
+    }
+  }
+  const cells = [...seen].map(k=>({r:Math.floor(k/N),c:k%N}));
+  // Still block player's win — yielding doesn't mean letting player win instantly
+  for (const {r,c} of cells){GOMOKU.board[r][c]=1;const w=gomokuCheckWin(r,c,1);GOMOKU.board[r][c]=0;if(w)return{r,c};}
+  // Score-based but skip any move that would win immediately
+  const defWeight = diff === 'hard' ? 1.3 : 1.1;
+  let best=null, bestScore=-Infinity;
+  for (const {r,c} of cells) {
+    GOMOKU.board[r][c]=2; const wins=gomokuCheckWin(r,c,2); GOMOKU.board[r][c]=0;
+    if (wins) continue; // skip winning moves
+    const score = gomokuScore(r,c,2) + gomokuScore(r,c,1)*defWeight;
+    if (score>bestScore){bestScore=score;best={r,c};}
+  }
+  return best || cells[0] || {r:7,c:7};
 }
 
 // Score a position for a player: higher = more dangerous / more valuable

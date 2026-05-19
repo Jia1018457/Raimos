@@ -364,7 +364,8 @@ function ckGetProgress(goal, totalDays) {
 // ── Streak / Stats ──
 async function ckGetStreak(goalId) {
   const records = await ckGetRecords(goalId);
-  return ckStreakFromRecords(records);
+  const goal = CK.goals.find(g => g.id === goalId);
+  return ckStreakFromRecords(records, goal);
 }
 
 function ckStreakFromRecords(records, goal) {

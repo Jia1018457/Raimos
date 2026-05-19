@@ -107,13 +107,11 @@
     <div id="mob-input-bar">
       <button id="input-expand-btn" onclick="toggleExpandInput()" title="展开/收起输入框">⤢</button>
       <button class="ibtn ibtn-g" id="btn-emoji" onclick="toggleEmoji(event)" type="button">😊</button>
-      <button class="ibtn ibtn-g" id="btn-photo" onclick="triggerChatPhoto()" title="从相册选图">📷</button>
       <button class="ibtn ibtn-g" id="btn-sticker" onclick="openChatAlbum()" title="表情包 / 贴纸">🖼️</button>
     </div>
     <div id="input-row">
       <button class="ibtn ibtn-g mob-hidden" id="input-expand-btn-desk" onclick="toggleExpandInput()" title="展开/收起输入框" style="display:none;font-size:13px">⤢</button>
       <button class="ibtn ibtn-g mob-hidden" id="btn-emoji-desk" onclick="toggleEmoji(event)" type="button">😊</button>
-      <button class="ibtn ibtn-g" id="btn-photo-desk" onclick="triggerChatPhoto()" title="从相册选图">📷</button>
       <button class="ibtn ibtn-g" id="btn-file" onclick="triggerFileOrStopRec()" title="发文件/图片">📎</button>
       <div class="input-ta-wrap">
         <textarea id="msg-input" placeholder="发消息…（Enter 换行，Ctrl/⌘+Enter 发送）" rows="1" onkeydown="onKey(event)" oninput="autoH(this);onInputTyping()"></textarea>

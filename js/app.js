@@ -1867,15 +1867,18 @@ async function aiCommentMoment(momentId, contactId) {
   const maxC = cs(contact?.xMaxComments, S.settings.maxComments) || 1;
   const count = Math.max(1, Math.ceil(Math.random() * maxC));
   toast('🤖 AI 评论中…');
-  const prevTexts = [];
+  const messages = [
+    {role:'system', content:`你是${aiName}，${buildMomentSysPrompt(contact)}，用1句话自然地评论朋友圈，像真实朋友一样。直接输出评论内容，不要加任何名字前缀或冒号。`},
+    {role:'user', content:`朋友圈内容: ${m.text||'[图片]'}`}
+  ];
   try {
     for (let i = 0; i < count; i++) {
       if (i > 0) await new Promise(r => setTimeout(r, 1500 + Math.random()*3000));
-      const prevCtx = prevTexts.length ? `\n你刚才说了：${prevTexts.join('；')}。再补充一句不同的话，自然衔接但不重复。` : '';
-      const res = await fetch(apiUrl+'/api/v1/chat/completions',{method:'POST',headers:{'Authorization':`Bearer ${apiKey}`,'Content-Type':'application/json'},body:JSON.stringify({model:contact?.model||'openai/gpt-4o-mini',max_tokens:80,stream:false,messages:[{role:'system',content:`你是${aiName}，${buildMomentSysPrompt(contact)}，用1句话自然地评论朋友圈，像真实朋友一样。直接输出评论内容，不要加任何名字前缀或冒号。${prevCtx}`},{role:'user',content:`朋友圈内容: ${m.text||'[图片]'}`}]})});
+      const res = await fetch(apiUrl+'/api/v1/chat/completions',{method:'POST',headers:{'Authorization':`Bearer ${apiKey}`,'Content-Type':'application/json'},body:JSON.stringify({model:contact?.model||'openai/gpt-4o-mini',max_tokens:80,stream:false,messages})});
       const d=await res.json(); const comment=(d.choices?.[0]?.message?.content?.trim()||'').replace(/^[\w\s一-龥]{1,15}[：:]\s*/u,'').trim();
       if(comment){
-        prevTexts.push(comment);
+        messages.push({role:'assistant',content:comment});
+        messages.push({role:'user',content:'再补充一句不同的话，自然衔接但不重复。'});
         const c={id:uid(),momentId,author:aiName,text:comment,replyTo:null,ts:Date.now()};
         await dbPut('comments',c);
         const m2=await dbGet('moments',momentId);

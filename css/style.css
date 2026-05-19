@@ -1839,11 +1839,12 @@ button, a, .nav-tab, .nav-logo, .chat-item, .ibtn, .hbtn, .act-btn,
 #go-page { background: var(--bg2); }
 
 .go-board {
+  --go-cell: min(36px, calc((100vw - 48px) / 13));
   display: grid;
-  grid-template-columns: repeat(13, 36px);
-  grid-template-rows: repeat(13, 36px);
-  width: calc(13 * 36px);
-  height: calc(13 * 36px);
+  grid-template-columns: repeat(13, var(--go-cell));
+  grid-template-rows: repeat(13, var(--go-cell));
+  width: calc(13 * var(--go-cell));
+  height: calc(13 * var(--go-cell));
   position: relative;
   border-radius: 6px;
   padding: 0;
@@ -1855,8 +1856,8 @@ button, a, .nav-tab, .nav-logo, .chat-item, .ibtn, .hbtn, .act-btn,
 
 .go-cell {
   position: relative;
-  width: 36px;
-  height: 36px;
+  width: var(--go-cell);
+  height: var(--go-cell);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1906,8 +1907,8 @@ button, a, .nav-tab, .nav-logo, .chat-item, .ibtn, .hbtn, .act-btn,
 /* Stone */
 .go-stone {
   position: absolute;
-  width: 28px;
-  height: 28px;
+  width: calc(var(--go-cell) * 0.78);
+  height: calc(var(--go-cell) * 0.78);
   border-radius: 50%;
   z-index: 2;
   pointer-events: none;
@@ -1915,7 +1916,7 @@ button, a, .nav-tab, .nav-logo, .chat-item, .ibtn, .hbtn, .act-btn,
 }
 .go-stone.black { background: radial-gradient(circle at 35% 35%, #666, #0a0a0a); box-shadow: 2px 2px 5px rgba(0,0,0,.55); }
 .go-stone.white { background: radial-gradient(circle at 35% 35%, #fff, #d4d4d4); box-shadow: 2px 2px 5px rgba(0,0,0,.3); border: .5px solid #bbb; }
-.go-stone.emoji { background: none; box-shadow: none; border: none; font-size: 22px; line-height: 1; display: flex; align-items: center; justify-content: center; }
+.go-stone.emoji { background: none; box-shadow: none; border: none; font-size: calc(var(--go-cell) * 0.61); line-height: 1; display: flex; align-items: center; justify-content: center; }
 
 /* Last move indicator */
 .go-cell.last-move .go-stone::after {
@@ -2413,11 +2414,12 @@ button, a, .nav-tab, .nav-logo, .chat-item, .ibtn, .hbtn, .act-btn,
 
 /* ── Xiangqi Board ── */
 .xq-board {
+  --xq-cell: min(48px, calc((100vw - 48px) / 9));
   display: grid;
-  grid-template-columns: repeat(9, 48px);
-  grid-template-rows: repeat(10, 48px);
-  width: calc(9 * 48px);
-  height: calc(10 * 48px);
+  grid-template-columns: repeat(9, var(--xq-cell));
+  grid-template-rows: repeat(10, var(--xq-cell));
+  width: calc(9 * var(--xq-cell));
+  height: calc(10 * var(--xq-cell));
   background: #f0d9a0;
   border: 2px solid #8b5e3c;
   position: relative;
@@ -2426,7 +2428,7 @@ button, a, .nav-tab, .nav-logo, .chat-item, .ibtn, .hbtn, .act-btn,
   margin: 0 auto;
 }
 .xq-cell {
-  width: 48px; height: 48px;
+  width: var(--xq-cell); height: var(--xq-cell);
   display: flex; align-items: center; justify-content: center;
   position: relative; cursor: pointer;
   box-sizing: border-box;
@@ -2442,9 +2444,9 @@ button, a, .nav-tab, .nav-logo, .chat-item, .ibtn, .hbtn, .act-btn,
   pointer-events: none;
 }
 .xq-piece {
-  width: 38px; height: 38px; border-radius: 50%;
+  width: calc(var(--xq-cell) * 0.79); height: calc(var(--xq-cell) * 0.79); border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
-  font-size: 14px; font-weight: 900;
+  font-size: calc(var(--xq-cell) * 0.29); font-weight: 900;
   border: 2px solid currentColor;
   position: relative; z-index: 2;
   cursor: pointer;
@@ -2460,25 +2462,26 @@ button, a, .nav-tab, .nav-logo, .chat-item, .ibtn, .hbtn, .act-btn,
 .xq-river {
   grid-column: 1 / -1;
   display: flex; align-items: center; justify-content: center;
-  font-size: 13px; font-weight: 900; color: #8b5e3c;
-  letter-spacing: 12px; background: #e8c87a;
+  font-size: min(13px, calc(var(--xq-cell) * 0.27)); font-weight: 900; color: #8b5e3c;
+  letter-spacing: min(12px, calc(var(--xq-cell) * 0.25)); background: #e8c87a;
   border-top: 1.5px solid #8b5e3c; border-bottom: 1.5px solid #8b5e3c;
-  height: 48px;
+  height: var(--xq-cell);
   user-select: none;
 }
 
 /* ── International Chess Board ── */
 .ic-board {
-  display: grid; grid-template-columns: repeat(8, 52px); grid-template-rows: repeat(8, 52px);
-  width: calc(8 * 52px); height: calc(8 * 52px);
+  --ic-cell: min(52px, calc((100vw - 48px) / 8));
+  display: grid; grid-template-columns: repeat(8, var(--ic-cell)); grid-template-rows: repeat(8, var(--ic-cell));
+  width: calc(8 * var(--ic-cell)); height: calc(8 * var(--ic-cell));
   flex-shrink: 0; user-select: none;
   border: 2px solid #8b5e3c; border-radius: 4px; overflow: hidden;
   margin: 0 auto;
 }
 .ic-cell {
-  width: 52px; height: 52px;
+  width: var(--ic-cell); height: var(--ic-cell);
   display: flex; align-items: center; justify-content: center;
-  position: relative; cursor: pointer; font-size: 32px; line-height: 1;
+  position: relative; cursor: pointer; font-size: calc(var(--ic-cell) * 0.62); line-height: 1;
 }
 .ic-cell.light { background: #f0d9b5; }
 .ic-cell.dark  { background: #b58863; }

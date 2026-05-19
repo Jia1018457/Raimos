@@ -6376,8 +6376,12 @@ function renderXiangqiBoard() {
       const piece = XIANGQI.board[r][c];
       const isSelected = XIANGQI.selected && XIANGQI.selected.r===r && XIANGQI.selected.c===c;
       const isMovable = movableSet.has(r+','+c);
+      const isBeginner = XIANGQI.prefs.difficulty === 'beginner';
       if (isSelected) cell.classList.add('selected');
-      if (isMovable) cell.classList.add('movable');
+      if (isMovable && isBeginner) {
+        cell.classList.add('movable');
+        if (piece && piece.side === 'black') cell.classList.add('capturable');
+      }
       if (piece) {
         cell.classList.add('has-piece');
         const pd = document.createElement('div');
@@ -6793,7 +6797,7 @@ function renderIntChessBoard(){
     const isSelected=INTCHESS.selected&&INTCHESS.selected.r===r&&INTCHESS.selected.c===c;
     const isMovable=movableSet.has(r+','+c);
     if(isSelected)cell.classList.add('selected');
-    if(isMovable){cell.classList.add('movable');if(piece&&icSide(piece)!==INTCHESS.turn)cell.classList.add('has-enemy');}
+    if(isMovable&&INTCHESS.prefs.difficulty==='beginner'){cell.classList.add('movable');if(piece&&icSide(piece)!==INTCHESS.turn)cell.classList.add('has-enemy');}
     if(piece){
       const pd=document.createElement('span');pd.className='ic-piece';pd.textContent=IC_PIECES[piece]||piece;
       cell.appendChild(pd);

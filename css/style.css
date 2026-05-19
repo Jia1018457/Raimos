@@ -2459,6 +2459,19 @@ button, a, .nav-tab, .nav-logo, .chat-item, .ibtn, .hbtn, .act-btn,
   content: ''; position: absolute; width: 14px; height: 14px;
   border-radius: 50%; background: rgba(0,200,100,.45); z-index: 1;
 }
+/* Beginner move hints */
+.xq-cell.movable:not(.has-piece)::after {
+  content: ''; position: absolute;
+  width: calc(var(--xq-cell) * 0.36); height: calc(var(--xq-cell) * 0.36);
+  border-radius: 50%; background: rgba(0,190,80,.55);
+  z-index: 1; pointer-events: none;
+}
+.xq-cell.capturable::before {
+  content: ''; position: absolute;
+  width: calc(var(--xq-cell) * 0.88); height: calc(var(--xq-cell) * 0.88);
+  border-radius: 50%; border: 2.5px solid rgba(220,50,50,.8);
+  z-index: 3; pointer-events: none;
+}
 .xq-river {
   grid-column: 1 / -1;
   display: flex; align-items: center; justify-content: center;
@@ -2499,6 +2512,17 @@ button, a, .nav-tab, .nav-logo, .chat-item, .ibtn, .hbtn, .act-btn,
   border-radius: 50%; background: rgba(0,0,0,.2); pointer-events: none;
 }
 .ic-cell.capture-move { background: rgba(220,50,50,.35) !important; }
+/* Beginner move hints */
+.ic-cell.movable:not(.has-enemy)::after {
+  content: ''; position: absolute;
+  width: calc(var(--ic-cell) * 0.36); height: calc(var(--ic-cell) * 0.36);
+  border-radius: 50%; background: rgba(0,0,0,.22);
+  pointer-events: none; z-index: 1;
+}
+.ic-cell.has-enemy {
+  outline: 3px solid rgba(200,40,40,.75);
+  outline-offset: -3px;
+}
 .gmk-color-row { display: flex; gap: 8px; flex-wrap: wrap; }
 .gmk-color-swatch {
   width: 26px; height: 26px; border-radius: 50%; border: 2px solid transparent;

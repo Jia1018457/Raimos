@@ -2008,6 +2008,17 @@
         style="max-width:80px;background:var(--input-bg);border:1.5px solid var(--border);border-radius:8px;padding:6px 10px;font-size:13px;color:var(--text);font-family:inherit"/> 分钟
       <span style="font-size:11px;color:var(--text3);margin-left:6px">陪伴计时可自动累积</span>
     </div>
+    <div class="mrow" id="ckg-schedule-type-row" style="display:none">
+      <label>计划模式</label>
+      <select id="ckg-schedule-type" onchange="ckToggleScheduleType()" style="flex:1">
+        <option value="fixed">每天相同目标</option>
+        <option value="weekly">自定义每周计划</option>
+      </select>
+    </div>
+    <div id="ckg-weekly-wrap" style="display:none;flex-direction:column;gap:0;margin:4px 0 6px">
+      <div class="ckg-week-hint">分别设置每天的目标时长，关闭开关表示休息日（不影响连续打卡）</div>
+      <div id="ckg-week-grid"></div>
+    </div>
 
     <!-- 每日分项 -->
     <div class="ckg-section" style="margin-top:10px">

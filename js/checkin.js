@@ -37,6 +37,15 @@ async function ckGetRecordByDate(goalId, date) {
   return all.find(r => r.date === date) || null;
 }
 
+function ckDaySchedule(goal, dateStr) {
+  if (goal.scheduleType === 'weekly' && Array.isArray(goal.weeklySchedule) && goal.weeklySchedule.length === 7) {
+    const dow = new Date(dateStr + 'T12:00:00').getDay();
+    const slot = goal.weeklySchedule[dow] || { minutes: 0 };
+    return { required: slot.minutes > 0, minutes: slot.minutes };
+  }
+  return { required: true, minutes: goal.targetMinutes || 30 };
+}
+
 // ══════════════════════════════
 //  INIT
 // ══════════════════════════════
@@ -124,7 +133,7 @@ async function renderCkCalendar() {
 
   const monthNames  = ['一月','二月','三月','四月','五月','六月','七月','八月','九月','十月','十一月','十二月'];
   const totalChecked = records.filter(r => r.completed).length;
-  const streak       = ckStreakFromRecords(records);
+  const streak       = ckStreakFromRecords(records, goal);
 
   let html = `
     <div class="ck-cal-wrap">
@@ -152,19 +161,28 @@ async function renderCkCalendar() {
     const partial   = !done && !!rec && totalIt > 0 && doneIt > 0;
     const isToday   = ds === today;
     const isFuture  = ds > today;
+    const daySched = ckDaySchedule(goal, ds);
+    const isRestDay = !daySched.required;
+    const hasBonus = isRestDay && !!rec && (rec.minutesLogged > 0 || rec.completed);
 
     let cls = 'ck-cal-cell';
     if (isToday)  cls += ' today';
     if (done)     cls += ' checked';
     if (partial)  cls += ' partial';
     if (isFuture) cls += ' future';
+    if (isRestDay && !done) cls += ' rest-day';
+    if (hasBonus) cls += ' rest-done';
 
-    const bgStyle = (done || partial) ? `style="--cell-color:${color}"` : '';
+    const bgStyle = done ? `style="--cell-color:${color}"` :
+                    partial ? `style="--cell-color:${color}"` :
+                    hasBonus ? `style="--cell-color:${color}88"` : '';
     const cellInner = done
       ? `<span class="ck-cell-day">${d}</span><span class="ck-cell-mark">✓</span>`
-      : partial
-        ? `<span class="ck-cell-day">${d}</span><span class="ck-cell-part-mark">${doneIt}/${totalIt}</span>`
-        : `<span class="ck-cell-day">${d}</span>${isToday ? `<span class="ck-cell-today-dot"></span>` : ''}`;
+      : hasBonus
+        ? `<span class="ck-cell-day">${d}</span><span class="ck-cell-mark" style="font-size:9px">+</span>`
+        : partial
+          ? `<span class="ck-cell-day">${d}</span><span class="ck-cell-part-mark">${doneIt}/${totalIt}</span>`
+          : `<span class="ck-cell-day">${d}</span>${isToday ? `<span class="ck-cell-today-dot"></span>` : isRestDay && !isFuture ? `<span class="ck-cell-rest-dot"></span>` : ''}`;
     html += `<div class="${cls}" ${bgStyle} onclick="ckCellClick('${ds}')">${cellInner}</div>`;
   }
 
@@ -216,9 +234,11 @@ async function renderCkTodaySection() {
   const color  = goal.color || '#ff8fab';
 
   const isTimer    = goal.goalType === 'timer';
-  const targetMins = goal.targetMinutes || 30;
+  const daySched   = ckDaySchedule(goal, today);
+  const isRestDay  = isTimer && !daySched.required;
+  const targetMins = isRestDay ? 0 : daySched.minutes;
   const loggedMins = rec?.minutesLogged || 0;
-  const timerPct   = isTimer ? Math.min(100, Math.round((loggedMins / targetMins) * 100)) : null;
+  const timerPct   = (isTimer && targetMins > 0) ? Math.min(100, Math.round((loggedMins / targetMins) * 100)) : null;
 
   const totalItems = (goal.items || []).length;
   const doneItems  = totalItems > 0 ? (goal.items || []).filter(it => rec?.items?.[it.id]) : [];
@@ -266,7 +286,7 @@ async function renderCkTodaySection() {
           <div class="ck-cta-icon" style="--goal-color:${color}">⏱️</div>
           <div>
             <div class="ck-cta-title">继续计时</div>
-            <div class="ck-cta-sub">已累积 ${loggedMins} 分钟，目标 ${targetMins} 分钟</div>
+            <div class="ck-cta-sub">${isRestDay ? `休息日，已累积 ${loggedMins} 分钟` : `已累积 ${loggedMins} 分钟，目标 ${targetMins} 分钟`}</div>
           </div>
         </div>
         <div class="ck-cta-arrow">›</div>
@@ -274,7 +294,7 @@ async function renderCkTodaySection() {
       <div class="ck-timer-progress-wrap">
         <div class="ck-timer-bar-row">
           <div class="ck-timer-bar"><div class="ck-timer-bar-fill" style="width:${timerPct}%;background:${color}"></div></div>
-          <span class="ck-timer-label">${loggedMins}/${targetMins} 分钟</span>
+          <span class="ck-timer-label">${isRestDay ? `${loggedMins} 分钟（自由打卡）` : `${loggedMins}/${targetMins} 分钟`}</span>
         </div>
       </div>`;
   } else {
@@ -284,7 +304,9 @@ async function renderCkTodaySection() {
         `<span class="ck-item-chip">${it.label}</span>`).join('')}</div>`;
     }
     const ctaTitle = isTimer ? '开始计时' : '立即打卡';
-    const ctaSub   = isTimer ? `今日目标 ${targetMins} 分钟，还没开始哦` : '今天还没打卡哦，坚持是最好的习惯';
+    const ctaSub   = isTimer
+      ? (isRestDay ? `今天是休息日，可以选择性打卡累积时长` : `今日目标 ${targetMins} 分钟，还没开始哦`)
+      : '今天还没打卡哦，坚持是最好的习惯';
     doneHtml = `
       <div class="ck-checkin-cta" onclick="openCkCheckinModal('${today}')">
         <div class="ck-cta-left">
@@ -345,7 +367,7 @@ async function ckGetStreak(goalId) {
   return ckStreakFromRecords(records);
 }
 
-function ckStreakFromRecords(records) {
+function ckStreakFromRecords(records, goal) {
   const doneSet = new Set(records.filter(r => r.completed).map(r => r.date));
   let streak = 0;
   const now = new Date();
@@ -353,7 +375,8 @@ function ckStreakFromRecords(records) {
     const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
     const ds = ckDateStr(d);
     if (doneSet.has(ds)) { streak++; }
-    else if (i > 0) break;
+    else if (goal && !ckDaySchedule(goal, ds).required) { continue; }
+    else if (i > 0) { break; }
   }
   return streak;
 }
@@ -429,7 +452,9 @@ async function openCkCheckinModal(date) {
 
   const prevProgress = existingRec?.progress ?? 100;
   const isTimer    = goal.goalType === 'timer';
-  const targetMins = goal.targetMinutes || 30;
+  const daySched   = ckDaySchedule(goal, date);
+  const isRestDay  = isTimer && !daySched.required;
+  const targetMins = isRestDay ? 0 : daySched.minutes;
   const prevMins   = existingRec?.minutesLogged || 0;
 
   const progressSection = isTimer ? `
@@ -440,7 +465,7 @@ async function openCkCheckinModal(date) {
           style="max-width:90px;background:var(--input-bg);border:1.5px solid var(--border);
                  border-radius:8px;padding:6px 10px;font-size:13px;color:var(--text);
                  font-family:inherit;outline:none"/> 分钟
-        <span style="font-size:12px;color:var(--text3)">已累积: ${prevMins}/${targetMins} 分钟</span>
+        <span style="font-size:12px;color:var(--text3)">${isRestDay ? `已累积: ${prevMins} 分钟（休息日，无上限）` : `已累积: ${prevMins}/${targetMins} 分钟`}</span>
       </div>
     </div>` : `
     <div class="ck-modal-section">
@@ -477,7 +502,9 @@ async function doCkCheckin() {
   if (!goal || !CK._checkinDate) return;
 
   const isTimer    = goal.goalType === 'timer';
-  const targetMins = goal.targetMinutes || 30;
+  const daySched   = ckDaySchedule(goal, CK._checkinDate);
+  const isRestDay  = isTimer && !daySched.required;
+  const targetMins = isRestDay ? 0 : daySched.minutes;
 
   const totalItems = (goal.items || []).length;
   const newItems = {};
@@ -492,8 +519,8 @@ async function doCkCheckin() {
   if (isTimer) {
     const addedMins = parseInt($i('cki-minutes')?.value || '0');
     minutesLogged = (existing?.minutesLogged || 0) + addedMins;
-    progress  = Math.min(100, Math.round((minutesLogged / targetMins) * 100));
-    completed = minutesLogged >= targetMins;
+    progress  = isRestDay ? 100 : Math.min(100, Math.round((minutesLogged / targetMins) * 100));
+    completed = isRestDay ? minutesLogged > 0 : minutesLogged >= targetMins;
   } else {
     progress  = parseInt($i('cki-progress')?.value ?? '100');
     // Merge items (union — once checked, stays checked)
@@ -667,6 +694,10 @@ function openCkGoalModal(goalId) {
   ckPreviewContact(g?.contactId || '');
   ckToggleDuration();
   ckToggleGoalType();
+  const schedEl = $i('ckg-schedule-type');
+  if (schedEl) schedEl.value = g?.scheduleType || 'fixed';
+  ckRenderWeekSchedule(g?.weeklySchedule || null);
+  ckToggleScheduleType();
   ckToggleAiSection();
   ckToggleReminderSection();
   ckTogglePromptMode();
@@ -752,9 +783,55 @@ function ckToggleDuration() {
   $i('ckg-days-row').style.display = $i('ckg-duration').value === 'fixed' ? 'flex' : 'none';
 }
 function ckToggleGoalType() {
-  const type = $i('ckg-goal-type')?.value || 'count';
-  const row  = $i('ckg-target-mins-row');
-  if (row) row.style.display = type === 'timer' ? 'flex' : 'none';
+  const isTimer = ($i('ckg-goal-type')?.value || 'count') === 'timer';
+  const schedRow = $i('ckg-schedule-type-row');
+  if (schedRow) schedRow.style.display = isTimer ? 'flex' : 'none';
+  ckToggleScheduleType();
+}
+
+function ckToggleScheduleType() {
+  const isTimer = ($i('ckg-goal-type')?.value || 'count') === 'timer';
+  const isWeekly = ($i('ckg-schedule-type')?.value || 'fixed') === 'weekly';
+  const fixedRow = $i('ckg-target-mins-row');
+  const weeklyWrap = $i('ckg-weekly-wrap');
+  if (fixedRow) fixedRow.style.display = (isTimer && !isWeekly) ? 'flex' : 'none';
+  if (weeklyWrap) weeklyWrap.style.display = (isTimer && isWeekly) ? 'flex' : 'none';
+}
+
+function ckRenderWeekSchedule(schedule) {
+  const el = $i('ckg-week-grid');
+  if (!el) return;
+  el.innerHTML = '';
+  const DAYS = ['周日','周一','周二','周三','周四','周五','周六'];
+  DAYS.forEach((name, dow) => {
+    const slot = schedule?.[dow];
+    const mins = slot != null ? slot.minutes : (dow === 0 ? 0 : 30);
+    const isActive = mins > 0;
+    const div = document.createElement('div');
+    div.className = 'ckg-week-row';
+    div.dataset.dow = dow;
+    div.innerHTML = `<span class="ckg-week-day-name">${name}</span>
+      <label class="toggle" style="flex-shrink:0"><input type="checkbox" class="ckg-week-active" ${isActive ? 'checked' : ''} onchange="ckUpdateWeekRow(${dow})"><span class="tslider"></span></label>
+      <div class="ckg-week-mins-wrap" style="${isActive ? '' : 'visibility:hidden'}"><input type="number" class="ckg-week-mins-input" value="${mins || 30}" min="1" max="1440"> 分钟</div>
+      <span class="ckg-week-rest-label" style="${isActive ? 'display:none' : ''}">休息日</span>`;
+    el.appendChild(div);
+  });
+}
+
+function ckUpdateWeekRow(dow) {
+  const row = $i('ckg-week-grid')?.querySelector(`[data-dow="${dow}"]`);
+  if (!row) return;
+  const active = row.querySelector('.ckg-week-active').checked;
+  row.querySelector('.ckg-week-mins-wrap').style.visibility = active ? '' : 'hidden';
+  row.querySelector('.ckg-week-rest-label').style.display = active ? 'none' : '';
+}
+
+function ckGetWeekSchedule() {
+  return Array.from($i('ckg-week-grid')?.querySelectorAll('[data-dow]') || []).map(row => {
+    const active = row.querySelector('.ckg-week-active').checked;
+    const mins = active ? Math.max(1, parseInt(row.querySelector('.ckg-week-mins-input')?.value) || 30) : 0;
+    return { minutes: mins };
+  });
 }
 function ckToggleAiSection() {
   const enabled = $i('ckg-ai').checked;
@@ -796,6 +873,8 @@ async function saveCkGoal() {
       reminderCount:      parseInt($i('ckg-remind-count').value || '1'),
       goalType:           $i('ckg-goal-type')?.value || 'count',
       targetMinutes:      parseInt($i('ckg-target-mins')?.value || '30'),
+      scheduleType:       $i('ckg-schedule-type')?.value || 'fixed',
+      weeklySchedule:     $i('ckg-schedule-type')?.value === 'weekly' ? ckGetWeekSchedule() : (existing?.weeklySchedule || null),
       createdAt:          existing?.createdAt || new Date().toISOString(),
     };
 

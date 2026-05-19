@@ -950,7 +950,7 @@ async function exportCkData(format) {
   if (typeof closeModal === 'function') closeModal('ck-export-modal');
 
   const totalDays = records.filter(r => r.completed).length;
-  const streak    = ckStreakFromRecords(records);
+  const streak    = ckStreakFromRecords(records, goal);
 
   let content, mime, filename;
   const safeTitle = goal.title.replace(/[\\/:*?"<>|]/g, '_');

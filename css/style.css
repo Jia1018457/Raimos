@@ -2224,6 +2224,7 @@ button, a, .nav-tab, .nav-logo, .chat-item, .ibtn, .hbtn, .act-btn,
 .fly-space.normal     { background: linear-gradient(135deg, #e0e7ff, #ddd6fe); border-color: rgba(165,180,252,.6); }
 .fly-space.event      { background: linear-gradient(135deg, #fef3c7, #fde68a); border-color: rgba(251,191,36,.6); }
 .fly-space.heart      { background: linear-gradient(135deg, #fce7f3, #f9a8d4); border-color: rgba(249,168,212,.7); }
+.fly-space.couple     { background: linear-gradient(135deg, #fdf4ff, #e9d5ff); border-color: rgba(196,139,250,.65); }
 .fly-space.forward3   { background: linear-gradient(135deg, #d1fae5, #a7f3d0); border-color: rgba(110,231,183,.7); }
 .fly-space.forward5   { background: linear-gradient(135deg, #a7f3d0, #34d399); border-color: #10b981; box-shadow: 0 1px 5px rgba(16,185,129,.2); }
 .fly-space.back3      { background: linear-gradient(135deg, #ffe4e6, #fca5a5); border-color: rgba(248,113,113,.6); }

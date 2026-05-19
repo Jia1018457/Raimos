@@ -764,6 +764,10 @@
         <option value="high">高（每步）</option>
       </select>
     </div>
+    <div class="gmk-settings-section">
+      <div class="gmk-settings-label">显示AI Token用量</div>
+      <label class="toggle"><input type="checkbox" id="gmk-show-token-toggle" onchange="S.settings.showGameToken=this.checked;saveSetting('settings',S.settings)"><span class="tslider"></span></label>
+    </div>
     <div class="gmk-settings-section" style="padding-bottom:4px">
       <button class="settings-save-btn" onclick="saveGomokuPrefs();toggleGomokuSettings()">💾 保存设置</button>
     </div>
@@ -871,6 +875,10 @@
         <option value="high">高（每步）</option>
       </select>
     </div>
+    <div class="gmk-settings-section">
+      <div class="gmk-settings-label">显示AI Token用量</div>
+      <label class="toggle"><input type="checkbox" id="go-show-token-toggle" onchange="S.settings.showGameToken=this.checked;saveSetting('settings',S.settings)"><span class="tslider"></span></label>
+    </div>
     <div class="gmk-settings-section" style="padding-bottom:4px">
       <button class="settings-save-btn" onclick="saveGoPrefs();toggleGoSettings()">💾 保存设置</button>
     </div>
@@ -923,13 +931,21 @@
         <div class="fly-setup-title">📋 游戏规则</div>
         <div class="fly-rules-text">
           🎲 掷骰子决定步数，第一个走到终点的玩家获胜！<br>
-          💗 粉心格触发浪漫事件<br>
+          💑 情侣挑战格（~80%格子）触发各类情侣互动<br>
+          💗 粉心格触发浪漫问答<br>
           ⭐ 事件格触发随机问答<br>
           ↑+3/+5 前进额外格数<br>
           ↓-3 后退格数<br>
           💤 跳过下一回合<br>
           🎲 幸运格再掷一次<br>
           ⭕ 安全格不受负面影响
+        </div>
+      </div>
+      <div class="fly-setup-section">
+        <div class="fly-setup-title">⚙️ 游戏设置</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0">
+          <span style="font-size:13px">显示AI Token用量</span>
+          <label class="toggle"><input type="checkbox" id="fly-show-token-toggle" onchange="S.settings.showGameToken=this.checked;saveSetting('settings',S.settings)"><span class="tslider"></span></label>
         </div>
       </div>
       <button class="btn-p" style="width:100%;padding:14px;font-size:16px;margin-top:8px" onclick="startFlyGame()">🚀 开始游戏</button>
@@ -1202,6 +1218,10 @@
         <option value="high">高（每步）</option>
       </select>
     </div>
+    <div class="gmk-settings-section">
+      <div class="gmk-settings-label">显示AI Token用量</div>
+      <label class="toggle"><input type="checkbox" id="xq-show-token-toggle" onchange="S.settings.showGameToken=this.checked;saveSetting('settings',S.settings)"><span class="tslider"></span></label>
+    </div>
     <div class="gmk-settings-section" style="padding-bottom:4px">
       <button class="settings-save-btn" onclick="saveXiangqiPrefs();toggleXiangqiSettings()">💾 保存设置</button>
     </div>
@@ -1262,6 +1282,10 @@
         <option value="normal" selected>适中（每3步）</option>
         <option value="high">高（每步）</option>
       </select>
+    </div>
+    <div class="gmk-settings-section">
+      <div class="gmk-settings-label">显示AI Token用量</div>
+      <label class="toggle"><input type="checkbox" id="ic-show-token-toggle" onchange="S.settings.showGameToken=this.checked;saveSetting('settings',S.settings)"><span class="tslider"></span></label>
     </div>
     <div class="gmk-settings-section" style="padding-bottom:4px">
       <button class="settings-save-btn" onclick="saveIntChessPrefs();toggleIntChessSettings()">💾 保存设置</button>

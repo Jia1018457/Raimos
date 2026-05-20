@@ -5985,6 +5985,8 @@ const QUIZ = {
   over: false,
   _history: [],
   selectedPreset: null,
+  maxRounds: 20,
+  roundCount: 0,
 };
 
 // ── Setup ──
@@ -5992,6 +5994,7 @@ function initQuizSetup() {
   QUIZ.playerCount = 1;
   QUIZ.contactId = 'none';
   QUIZ.selectedPreset = null;
+  QUIZ.maxRounds = 20;
   renderQuizPlayerInputs();
   buildQuizAiSelector();
   renderQuizPresets();
@@ -6002,6 +6005,14 @@ function initQuizSetup() {
   document.querySelectorAll('#quiz-setup-page .fly-count-btn').forEach((btn, i) => {
     btn.classList.toggle('active', i === 0);
   });
+  const roundBtns = document.querySelectorAll('#quiz-rounds-row .fly-count-btn');
+  roundBtns.forEach((btn, i) => btn.classList.toggle('active', i === 0));
+}
+
+function setQuizMaxRounds(n, el) {
+  QUIZ.maxRounds = n;
+  document.querySelectorAll('#quiz-rounds-row .fly-count-btn').forEach(b => b.classList.remove('active'));
+  if (el) el.classList.add('active');
 }
 
 function setQuizPlayerCount(n, el) {
@@ -6098,6 +6109,7 @@ function startQuizGame() {
   QUIZ.usedAnswers = [];
   QUIZ.over = false;
   QUIZ._history = [];
+  QUIZ.roundCount = 0;
   if (QUIZ.timer) clearInterval(QUIZ.timer);
 
   switchPage('quiz-game-page');
@@ -6115,6 +6127,8 @@ function startQuizGame() {
 function quizUpdateCategoryDisplay() {
   const lbl = $i('quiz-category-label');
   if (lbl) lbl.textContent = QUIZ.category;
+  const counter = $i('quiz-round-counter');
+  if (counter) counter.textContent = `${QUIZ.roundCount} / ${QUIZ.maxRounds} 轮`;
 }
 
 // ── Player Bar ──
@@ -6267,12 +6281,23 @@ async function quizCallAI(player) {
   const apiKey = contact?.apiKey || S.settings.apiKey;
   if (!apiKey) return null;
 
+  // Pool exhaustion: as used answers accumulate, AI has increasing chance to fail
+  // After using ~70% of known words, AI starts "blanking" like a real person
+  const poolSize = QUIZ.wordList.length > 0 ? QUIZ.wordList.length : 40;
+  const exhaustion = QUIZ.usedAnswers.length / poolSize;
+  if (exhaustion > 0.5 && Math.random() < Math.min(0.85, (exhaustion - 0.5) * 2.2)) {
+    return null; // AI blanks out
+  }
+
   const aiName = contact?.name || 'AI助手';
   const personality = contact?.system || '聪明博学';
-  const usedStr = QUIZ.usedAnswers.join('、');
-  const systemPrompt = `你是${aiName}，正在和玩家玩"博学知识家"游戏。当前主题是"${QUIZ.category}"，不能说已经说过的答案。你的答案必须简洁（1-3字为主）。${personality}`;
-  const userMsg = usedStr
-    ? `主题：${QUIZ.category}。已说过的答案：${usedStr}。请说出一个新的${QUIZ.category}，只需回答答案本身，不需要解释。`
+  // AI only "remembers" the last 10 answers — simulates natural human memory limits
+  // Older answers may be forgotten, causing accidental repeats and fair gameplay
+  const recentAnswers = QUIZ.usedAnswers.slice(-10);
+  const usedStr = recentAnswers.join('、') + (QUIZ.usedAnswers.length > 10 ? '……（更早的已记不清了）' : '');
+  const systemPrompt = `你是${aiName}，正在和玩家玩"博学知识家"游戏。当前主题是"${QUIZ.category}"。你只能记住最近说过的答案，早些时候说过的可能已经忘了。你的答案必须简洁（1-3字为主）。${personality}`;
+  const userMsg = QUIZ.usedAnswers.length > 0
+    ? `主题：${QUIZ.category}。最近说过的答案：${usedStr}。请说出一个${QUIZ.category}，只需回答答案本身，不需要解释。`
     : `主题：${QUIZ.category}。请说出一个${QUIZ.category}，只需回答答案本身，不需要解释。`;
 
   try {
@@ -6318,14 +6343,61 @@ function quizProcessAnswer(playerIdx, answer, isHuman) {
 
   // Valid answer
   QUIZ.usedAnswers.push(answer);
+  QUIZ.roundCount++;
+  quizUpdateCategoryDisplay();
 
-  // Add to AI history (human answers as user messages)
+  // Add to AI history
   if (isHuman) {
     QUIZ._history.push({ role: 'user', content: answer });
   }
 
   quizAddToLog(p.name, answer, true);
+
+  // Check if max rounds reached
+  if (QUIZ.roundCount >= QUIZ.maxRounds) {
+    setTimeout(quizEndByRounds, 600);
+    return;
+  }
+
   setTimeout(() => quizNextTurn(), 600);
+}
+
+function quizEndByRounds() {
+  QUIZ.over = true;
+  quizStopTimer();
+  const inputArea = $i('quiz-input-area');
+  if (inputArea) inputArea.style.display = 'none';
+  const aiThink = $i('quiz-ai-thinking');
+  if (aiThink) aiThink.style.display = 'none';
+
+  // Sort by lives descending
+  const ranked = [...QUIZ.players].sort((a, b) => b.lives - a.lives);
+  const winner = ranked[0];
+  const loser = ranked[ranked.length - 1];
+
+  const resultEl = $i('quiz-result-content');
+  if (resultEl) {
+    let html = `<div style="font-size:14px;margin-bottom:8px">🏁 已完成 ${QUIZ.maxRounds} 轮！</div>`;
+    ranked.forEach((p, i) => {
+      const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i+1}.`;
+      html += `<div style="margin:4px 0">${medal} ${p.emoji} ${esc(p.name)} — ${'💗'.repeat(p.lives)}${'🖤'.repeat(Math.max(0,3-p.lives))}</div>`;
+    });
+    resultEl.innerHTML = html;
+  }
+
+  // Show punishment for loser (if more than 1 player)
+  if (QUIZ.players.length > 1) {
+    const punishArea = $i('quiz-punishment-area');
+    const punishText = $i('quiz-punishment-text');
+    if (punishArea && punishText) {
+      const punishment = QUIZ_PUNISHMENT_LIST[Math.floor(Math.random() * QUIZ_PUNISHMENT_LIST.length)];
+      punishText.textContent = `${loser.emoji} ${loser.name}：${punishment}`;
+      punishArea.style.display = 'block';
+    }
+  }
+
+  const overlay = $i('quiz-result-overlay');
+  if (overlay) overlay.style.display = 'flex';
 }
 
 function quizAddToLog(playerName, answer, correct, note = '') {

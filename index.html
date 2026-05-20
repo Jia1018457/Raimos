@@ -1128,6 +1128,16 @@
         <input class="fly-player-input" id="quiz-custom-category" type="text" placeholder="或输入自定义主题…" maxlength="20" style="width:100%;margin-top:8px;box-sizing:border-box">
       </div>
       <div class="fly-setup-section">
+        <div class="fly-setup-title">⏱️ 结算回合</div>
+        <div class="fly-count-row" id="quiz-rounds-row">
+          <button class="fly-count-btn active" onclick="setQuizMaxRounds(20,this)">20轮</button>
+          <button class="fly-count-btn" onclick="setQuizMaxRounds(40,this)">40轮</button>
+          <button class="fly-count-btn" onclick="setQuizMaxRounds(60,this)">60轮</button>
+          <button class="fly-count-btn" onclick="setQuizMaxRounds(80,this)">80轮</button>
+        </div>
+        <div style="font-size:11px;color:var(--text3);margin-top:4px">达到回合上限后按存活命数决出胜者</div>
+      </div>
+      <div class="fly-setup-section">
         <div class="fly-setup-title">⚙️ 游戏设置</div>
         <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0">
           <span style="font-size:13px">显示AI Token用量</span>
@@ -1158,7 +1168,10 @@
   <div style="flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:10px">
     <!-- Category display -->
     <div class="quiz-category-display">
-      <span style="font-size:12px;color:var(--text3)">当前主题</span>
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span style="font-size:12px;color:var(--text3)">当前主题</span>
+        <span id="quiz-round-counter" style="font-size:11px;color:var(--text3)"></span>
+      </div>
       <div id="quiz-category-label" class="quiz-category-label"></div>
     </div>
     <!-- Player lives bar -->

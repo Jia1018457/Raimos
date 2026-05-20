@@ -158,6 +158,11 @@ function switchPage(id) {
     const el = document.getElementById(oid);
     if (el) el.style.display = 'none';
   });
+  // Stop match game intervals when leaving
+  if (typeof MATCH !== 'undefined' && id !== 'match-game-page') {
+    if (MATCH.aiInterval) { clearInterval(MATCH.aiInterval); MATCH.aiInterval = null; }
+    if (MATCH.timerInterval) { clearInterval(MATCH.timerInterval); MATCH.timerInterval = null; }
+  }
   $i(id).classList.add('active');
   document.querySelector(`[data-page="${id}"]`)?.classList.add('active');
   if (id === 'memory-page') renderMemories();

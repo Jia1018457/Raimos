@@ -608,11 +608,10 @@
         <div class="orb-name">棋逢对手</div>
         <div class="orb-sub">五子棋 · 象棋等</div>
       </div>
-      <div class="game-orb game-orb-match" onclick="toast('消除类游戏即将上线～')">
+      <div class="game-orb game-orb-match" onclick="switchPage('match-setup-page');initMatchSetup()">
         <div class="orb-icon">🫧</div>
         <div class="orb-name">消消快乐</div>
-        <div class="orb-sub">连连看 · 消消乐</div>
-        <div class="orb-badge">即将推出</div>
+        <div class="orb-sub">羊了个羊 · 消消乐</div>
       </div>
       <div class="game-orb game-orb-board" onclick="switchPage('board-setup-page');initBoardSetup()">
         <div class="orb-icon">🎲</div>
@@ -1213,7 +1212,105 @@
   </div>
 </div>
 
+
+<!-- ── MATCH SETUP PAGE ── -->
+<div class="page" id="match-setup-page">
+  <div class="page-header">
+    <button class="page-back-btn" onclick="switchPage('game-hub-page')">‹ 返回</button>
+    <h2>🫧 消消快乐</h2>
+  </div>
+  <div style="flex:1;overflow-y:auto;padding:16px">
+    <div class="fly-setup-wrap">
+      <div class="fly-setup-section">
+        <div class="fly-setup-title">🎯 难度选择</div>
+        <div class="fly-count-row" id="match-diff-row">
+          <button class="fly-count-btn" onclick="setMatchDiff('easy',this)">😊 简单</button>
+          <button class="fly-count-btn active" onclick="setMatchDiff('normal',this)">🎯 普通</button>
+          <button class="fly-count-btn" onclick="setMatchDiff('hard',this)">🔥 困难</button>
+        </div>
+        <div style="font-size:11px;color:var(--text3);margin-top:4px" id="match-diff-desc">AI速度：适中，偶尔犯错</div>
+      </div>
+      <div class="fly-setup-section">
+        <div class="fly-setup-title">🤖 选择AI助手</div>
+        <div class="gmk-ai-selector" id="match-ai-selector"></div>
+      </div>
+      <div class="fly-setup-section">
+        <div class="fly-setup-title">⚙️ 游戏设置</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0">
+          <span style="font-size:13px">显示Token用量</span>
+          <label class="toggle"><input type="checkbox" id="match-show-token-toggle"><span class="tslider"></span></label>
+        </div>
+      </div>
+      <div class="fly-setup-section fly-rules-box">
+        <div class="fly-setup-title">📋 游戏规则</div>
+        <div class="fly-rules-text">
+          🫧 点击牌面上的方块移入底部托盘<br>
+          🃏 只有最上层（未被覆盖）的方块可点击<br>
+          ✨ 托盘中凑齐3个相同图案即自动消除<br>
+          💔 托盘满7个未消除则失败<br>
+          🏆 先清空所有方块者获胜！
+        </div>
+      </div>
+      <button class="btn-p" style="width:100%;padding:14px;font-size:16px;margin-top:8px" onclick="startMatchGame()">🚀 开始游戏</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── MATCH GAME PAGE ── -->
+<div class="page" id="match-game-page">
+  <div class="page-header">
+    <button class="page-back-btn" onclick="confirmMatchQuit()">‹ 退出</button>
+    <h2>🫧 消消快乐</h2>
+    <div id="match-timer" class="match-timer">00:00</div>
+  </div>
+  <!-- AI Panel -->
+  <div class="match-ai-panel" id="match-ai-panel">
+    <div class="match-ai-info">
+      <span id="match-ai-avatar" class="match-ai-avatar">🤖</span>
+      <span id="match-ai-name-label" class="match-ai-name">系统AI</span>
+    </div>
+    <div style="flex:1;min-width:0">
+      <div class="match-progress-bar">
+        <div class="match-progress-fill" id="match-ai-progress"></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:2px">
+        <span id="match-ai-pct" style="font-size:10px;color:var(--text3)">0% 已清除</span>
+        <span id="match-ai-remain" style="font-size:10px;color:var(--text3)">剩余54</span>
+      </div>
+    </div>
+    <div id="match-ai-tray-preview" class="match-ai-tray-preview"></div>
+  </div>
+  <!-- Player board area -->
+  <div style="flex:1;overflow-y:auto;overflow-x:auto;padding:10px 12px;display:flex;flex-direction:column;gap:8px">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-shrink:0">
+      <span id="match-remain-label" style="font-size:12px;color:var(--text2);font-weight:600">剩余: 54/54</span>
+      <span style="font-size:11px;color:var(--text3)">点击可点击的方块</span>
+    </div>
+    <div class="match-board-wrap">
+      <div class="match-board" id="match-board"></div>
+    </div>
+    <!-- Tray -->
+    <div style="flex-shrink:0">
+      <div style="font-size:11px;color:var(--text3);margin-bottom:4px;text-align:center">🗂️ 托盘（最多7格）</div>
+      <div class="match-tray" id="match-tray"></div>
+    </div>
+  </div>
+</div>
+
 </div><!-- #pages -->
+
+<!-- ── MATCH RESULT OVERLAY ── -->
+<div class="overlay" id="match-result-overlay" style="display:none">
+  <div class="board-event-card" style="text-align:center;max-width:320px">
+    <div id="match-result-emoji" style="font-size:48px;margin-bottom:8px">🏆</div>
+    <div id="match-result-title" class="board-event-type" style="font-size:20px;margin-bottom:8px">游戏结束！</div>
+    <div id="match-result-stats" style="font-size:13px;color:var(--text2);margin:10px 0;line-height:1.8"></div>
+    <div style="display:flex;gap:10px;margin-top:14px">
+      <button class="fly-event-continue-btn" style="flex:1" onclick="matchResultBack()">返回大厅</button>
+      <button class="fly-event-submit-btn" style="flex:1" onclick="matchResultReplay()">再来一局</button>
+    </div>
+  </div>
+</div>
 
 <!-- ── GOMOKU RESULT MODAL ── -->
 <div class="overlay" id="gomoku-result-overlay">

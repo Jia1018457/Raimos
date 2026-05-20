@@ -107,13 +107,11 @@
     <div id="mob-input-bar">
       <button id="input-expand-btn" onclick="toggleExpandInput()" title="展开/收起输入框">⤢</button>
       <button class="ibtn ibtn-g" id="btn-emoji" onclick="toggleEmoji(event)" type="button">😊</button>
-      <button class="ibtn ibtn-g" id="btn-photo" onclick="triggerChatPhoto()" title="从相册选图">📷</button>
       <button class="ibtn ibtn-g" id="btn-sticker" onclick="openChatAlbum()" title="表情包 / 贴纸">🖼️</button>
     </div>
     <div id="input-row">
       <button class="ibtn ibtn-g mob-hidden" id="input-expand-btn-desk" onclick="toggleExpandInput()" title="展开/收起输入框" style="display:none;font-size:13px">⤢</button>
       <button class="ibtn ibtn-g mob-hidden" id="btn-emoji-desk" onclick="toggleEmoji(event)" type="button">😊</button>
-      <button class="ibtn ibtn-g" id="btn-photo-desk" onclick="triggerChatPhoto()" title="从相册选图">📷</button>
       <button class="ibtn ibtn-g" id="btn-file" onclick="triggerFileOrStopRec()" title="发文件/图片">📎</button>
       <div class="input-ta-wrap">
         <textarea id="msg-input" placeholder="发消息…（Enter 换行，Ctrl/⌘+Enter 发送）" rows="1" onkeydown="onKey(event)" oninput="autoH(this);onInputTyping()"></textarea>
@@ -2009,6 +2007,17 @@
       <input type="number" id="ckg-target-mins" value="30" min="1" max="1440"
         style="max-width:80px;background:var(--input-bg);border:1.5px solid var(--border);border-radius:8px;padding:6px 10px;font-size:13px;color:var(--text);font-family:inherit"/> 分钟
       <span style="font-size:11px;color:var(--text3);margin-left:6px">陪伴计时可自动累积</span>
+    </div>
+    <div class="mrow" id="ckg-schedule-type-row" style="display:none">
+      <label>计划模式</label>
+      <select id="ckg-schedule-type" onchange="ckToggleScheduleType()" style="flex:1">
+        <option value="fixed">每天相同目标</option>
+        <option value="weekly">自定义每周计划</option>
+      </select>
+    </div>
+    <div id="ckg-weekly-wrap" style="display:none;flex-direction:column;gap:0;margin:4px 0 6px">
+      <div class="ckg-week-hint">分别设置每天的目标时长，关闭开关表示休息日（不影响连续打卡）</div>
+      <div id="ckg-week-grid"></div>
     </div>
 
     <!-- 每日分项 -->

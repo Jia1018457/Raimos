@@ -2563,3 +2563,362 @@ button, a, .nav-tab, .nav-logo, .chat-item, .ibtn, .hbtn, .act-btn,
 .game-quit-btn { background: none; border: 1.5px solid var(--border); border-radius: 8px; padding: 5px 10px; font-size: 12px; cursor: pointer; color: var(--text2); font-family: inherit; transition: background .15s; }
 .game-quit-btn:hover { background: var(--hover); }
 .settings-save-btn { width: 100%; padding: 9px; margin-top: 8px; border-radius: 10px; border: none; background: var(--accent); color: #fff; font-size: 14px; font-family: inherit; font-weight: 700; cursor: pointer; }
+
+/* ══════════════════════════════════════════
+   🎲 幸运大冒险 Board Game Styles
+   ══════════════════════════════════════════ */
+
+/* Player bar */
+.board-player-bar {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 4px 0;
+  -webkit-overflow-scrolling: touch;
+}
+.board-player-card {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: var(--card);
+  border: 2px solid var(--border);
+  min-width: 90px;
+  flex-shrink: 0;
+  transition: border-color .2s, box-shadow .2s;
+}
+.board-player-card.active {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px rgba(255,143,171,0.3);
+}
+.board-player-card.bankrupt {
+  opacity: 0.45;
+}
+.board-player-card-emoji { font-size: 22px; }
+.board-player-card-info { display: flex; flex-direction: column; gap: 1px; }
+.board-player-card-name { font-size: 12px; font-weight: 700; color: var(--text1); }
+.board-player-card-coins { font-size: 11px; color: var(--text2); }
+.board-player-card-props { font-size: 10px; color: var(--text3); }
+
+/* Turn info */
+.board-turn-info {
+  text-align: center;
+  font-size: 15px;
+  color: var(--text2);
+  padding: 6px;
+  border-radius: 10px;
+  background: var(--card);
+  border: 1px solid var(--border);
+}
+
+/* Action row */
+.board-action-row {
+  display: flex;
+  gap: 10px;
+}
+.board-dice-btn {
+  flex: 2;
+  padding: 12px;
+  font-size: 15px;
+  font-weight: 700;
+  border: none;
+  border-radius: 12px;
+  background: var(--primary);
+  color: #fff;
+  cursor: pointer;
+  font-family: inherit;
+  transition: opacity .15s, transform .1s;
+}
+.board-dice-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+.board-dice-btn:not(:disabled):active { transform: scale(0.97); }
+.board-item-btn {
+  flex: 1;
+  padding: 12px;
+  font-size: 13px;
+  border: 1.5px solid var(--border);
+  border-radius: 12px;
+  background: var(--card);
+  color: var(--text1);
+  cursor: pointer;
+  font-family: inherit;
+}
+
+/* Board map - vertical list for mobile */
+.board-map-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.board-map { }
+.board-space-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.board-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: var(--card);
+  border: 1.5px solid var(--border);
+  position: relative;
+  min-height: 44px;
+}
+.board-cell-start   { border-color: #22c55e; background: rgba(34,197,94,0.08); }
+.board-cell-land    { }
+.board-cell-chance  { border-color: #f59e0b; background: rgba(245,158,11,0.08); }
+.board-cell-community { border-color: #3b82f6; background: rgba(59,130,246,0.08); }
+.board-cell-couple_challenge { border-color: #ec4899; background: rgba(236,72,153,0.08); }
+.board-cell-truth_dare  { border-color: #8b5cf6; background: rgba(139,92,246,0.08); }
+.board-cell-warmup  { border-color: #ef4444; background: rgba(239,68,68,0.08); }
+.board-cell-tax     { border-color: #dc2626; background: rgba(220,38,38,0.08); }
+.board-cell-jail    { border-color: #6b7280; background: rgba(107,114,128,0.08); }
+.board-cell-free    { border-color: #10b981; background: rgba(16,185,129,0.08); }
+.board-cell-back3   { border-color: #f97316; background: rgba(249,115,22,0.08); }
+.board-cell-forward3 { border-color: #06b6d4; background: rgba(6,182,212,0.08); }
+.board-cell-shop    { border-color: #a855f7; background: rgba(168,85,247,0.08); }
+
+.board-cell-color {
+  width: 4px;
+  height: 36px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+.board-cell-icon { font-size: 18px; flex-shrink: 0; }
+.board-cell-name { font-size: 12px; color: var(--text1); font-weight: 500; flex: 1; }
+.board-cell-owner {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  border: 1.5px solid var(--card);
+}
+.board-cell-houses { font-size: 10px; flex-shrink: 0; }
+.board-cell-tokens {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.board-token {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  border: 2px solid var(--card);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+
+/* Log */
+.board-log {
+  max-height: 120px;
+  overflow-y: auto;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 10px;
+}
+.board-log-entry {
+  font-size: 12px;
+  color: var(--text2);
+  padding: 2px 0;
+  border-bottom: 1px solid var(--border);
+  line-height: 1.4;
+}
+.board-log-entry:last-child { border-bottom: none; }
+
+/* Event card overlay */
+.board-event-card {
+  background: var(--card);
+  border-radius: 20px;
+  padding: 24px 20px;
+  max-width: 380px;
+  width: 90%;
+  max-height: 85vh;
+  overflow-y: auto;
+  box-shadow: 0 8px 40px rgba(0,0,0,0.25);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.board-event-type {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--primary);
+  text-align: center;
+}
+.board-event-player {
+  font-size: 14px;
+  color: var(--text2);
+  text-align: center;
+}
+.board-event-text {
+  font-size: 15px;
+  color: var(--text1);
+  line-height: 1.6;
+  padding: 12px;
+  background: var(--hover);
+  border-radius: 12px;
+  text-align: center;
+}
+
+/* Shop */
+.board-shop-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+.board-shop-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1.5px solid var(--border);
+  background: var(--bg);
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+  transition: border-color .15s, background .15s;
+}
+.board-shop-item:not(:disabled):hover { border-color: var(--primary); background: var(--hover); }
+.board-shop-item:disabled { opacity: 0.5; cursor: not-allowed; }
+.board-shop-icon { font-size: 22px; flex-shrink: 0; }
+.board-shop-info { flex: 1; }
+.board-shop-name { font-size: 14px; font-weight: 600; color: var(--text1); }
+.board-shop-desc { font-size: 11px; color: var(--text3); margin-top: 1px; }
+.board-shop-price { font-size: 12px; font-weight: 700; color: var(--primary); flex-shrink: 0; }
+
+/* ══════════════════════════════════════════
+   🎓 博学知识家 Quiz Game Styles
+   ══════════════════════════════════════════ */
+
+/* Category presets */
+.quiz-category-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.quiz-preset-btn {
+  padding: 7px 12px;
+  border-radius: 20px;
+  border: 1.5px solid var(--border);
+  background: var(--bg);
+  font-family: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition: border-color .15s, background .15s;
+  color: var(--text1);
+}
+.quiz-preset-btn.active { border-color: var(--primary); background: rgba(255,143,171,0.1); color: var(--primary); font-weight: 700; }
+
+/* Category display */
+.quiz-category-display {
+  text-align: center;
+  padding: 12px;
+  background: var(--card);
+  border-radius: 14px;
+  border: 1.5px solid var(--border);
+}
+.quiz-category-label {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--primary);
+  margin-top: 2px;
+}
+
+/* Player bar */
+.quiz-player-bar {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.quiz-player-card {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: var(--card);
+  border: 2px solid var(--border);
+  min-width: 100px;
+  flex-shrink: 0;
+  transition: border-color .2s, box-shadow .2s;
+}
+.quiz-player-card.active { border-color: var(--primary); box-shadow: 0 0 0 2px rgba(255,143,171,0.3); }
+.quiz-player-card.eliminated { opacity: 0.45; }
+.quiz-player-emoji { font-size: 22px; }
+.quiz-player-info { display: flex; flex-direction: column; gap: 2px; }
+.quiz-player-name { font-size: 12px; font-weight: 700; color: var(--text1); }
+.quiz-player-lives { font-size: 13px; }
+
+/* Timer */
+.quiz-timer-wrap {
+  position: relative;
+  height: 28px;
+  background: var(--hover);
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+.quiz-timer-bar {
+  height: 100%;
+  background: var(--primary);
+  border-radius: 14px;
+  transition: width 1s linear, background .3s;
+  width: 100%;
+}
+.quiz-timer-bar.warning { background: #f59e0b; }
+.quiz-timer-bar.danger { background: #ef4444; }
+.quiz-timer-text {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 13px;
+  font-weight: 700;
+  color: #fff;
+  pointer-events: none;
+}
+
+/* Input area */
+.quiz-input-area {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+/* Answer log */
+.quiz-answers-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text3);
+}
+.quiz-answer-log {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+.quiz-answer-entry {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--card);
+  border: 1px solid var(--border);
+}
+.quiz-answer-entry.wrong { background: rgba(239,68,68,0.06); border-color: rgba(239,68,68,0.3); }
+.quiz-answer-player { font-size: 12px; color: var(--text3); flex-shrink: 0; }
+.quiz-answer-word { font-size: 14px; font-weight: 600; color: var(--text1); flex: 1; }
+.quiz-answer-word.wrong { color: #ef4444; }
+.quiz-answer-note { font-size: 11px; color: #ef4444; }

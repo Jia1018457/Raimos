@@ -6532,3 +6532,462 @@ function confirmQuizQuit() {
   quizStopTimer();
   if (confirm('确定要退出游戏吗？')) switchPage('game-hub-page');
 }
+
+// ══════════════════════════════════════════════════════════════
+//  MATCH GAME (消消快乐) — 羊了个羊风格 tile-matching
+// ══════════════════════════════════════════════════════════════
+
+const MATCH_EMOJIS = ['🍎','🍊','🍋','🍇','🍓','🍑','🥝','🍉','🍌','🍍','🥭','🍒','🫐','🍈','🍏','🥥','🍅','🥑'];
+
+const MATCH = {
+  tiles: [],
+  aiTiles: [],
+  tray: [],
+  aiTray: [],
+  over: false,
+  playerResult: null,
+  startTime: 0,
+  timerInterval: null,
+  aiInterval: null,
+  difficulty: 'normal',
+  contactId: 'none',
+  showToken: false,
+  seed: 0,
+};
+
+// ── Setup ──
+function initMatchSetup() {
+  MATCH.difficulty = 'normal';
+  MATCH.contactId = 'none';
+  MATCH.showToken = false;
+  // Reset difficulty buttons
+  document.querySelectorAll('#match-diff-row .fly-count-btn').forEach((btn, i) => {
+    btn.classList.toggle('active', i === 1); // default: normal (index 1)
+  });
+  updateMatchDiffDesc();
+  buildMatchAiSelector();
+  const tog = $i('match-show-token-toggle');
+  if (tog) tog.checked = false;
+}
+
+function setMatchDiff(diff, el) {
+  MATCH.difficulty = diff;
+  document.querySelectorAll('#match-diff-row .fly-count-btn').forEach(b => b.classList.remove('active'));
+  if (el) el.classList.add('active');
+  updateMatchDiffDesc();
+}
+
+function updateMatchDiffDesc() {
+  const el = $i('match-diff-desc');
+  if (!el) return;
+  const descs = {
+    easy:   'AI速度：较慢，经常犯错',
+    normal: 'AI速度：适中，偶尔犯错',
+    hard:   'AI速度：极快，始终最优',
+  };
+  el.textContent = descs[MATCH.difficulty] || '';
+}
+
+function buildMatchAiSelector() {
+  const el = $i('match-ai-selector');
+  if (!el) return;
+  el.innerHTML = '';
+  const contacts = Object.values(S._contacts || {});
+  const noBtn = document.createElement('button');
+  noBtn.className = 'gmk-ai-btn' + (MATCH.contactId === 'none' ? ' active' : '');
+  noBtn.textContent = '🚫 系统AI';
+  noBtn.onclick = () => { MATCH.contactId = 'none'; buildMatchAiSelector(); };
+  el.appendChild(noBtn);
+  contacts.forEach(c => {
+    const btn = document.createElement('button');
+    btn.className = 'gmk-ai-btn' + (MATCH.contactId === c.id ? ' active' : '');
+    btn.textContent = (c.avatar && !c.avatar.startsWith('data:') ? c.avatar : '🤖') + ' ' + c.name;
+    btn.onclick = () => { MATCH.contactId = c.id; buildMatchAiSelector(); };
+    el.appendChild(btn);
+  });
+}
+
+// ── Tile Generation ──
+function generateMatchTiles(seed) {
+  let pool = [];
+  MATCH_EMOJIS.forEach(e => { pool.push(e, e, e); });
+
+  // Seeded LCG shuffle
+  let s = seed;
+  for (let i = pool.length - 1; i > 0; i--) {
+    s = (s * 1664525 + 1013904223) & 0xffffffff;
+    const j = Math.abs(s) % (i + 1);
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+
+  const tiles = [];
+  let idx = 0;
+
+  // Layer 0: 6 cols × 4 rows = 24
+  for (let r = 0; r < 4; r++) {
+    for (let c = 0; c < 6; c++) {
+      tiles.push({ id: idx, emoji: pool[idx], layer: 0, row: r, col: c, removed: false });
+      idx++;
+    }
+  }
+  // Layer 1: 5 cols × 3 rows, offset 0.5
+  for (let r = 0; r < 3; r++) {
+    for (let c = 0; c < 5; c++) {
+      tiles.push({ id: idx, emoji: pool[idx], layer: 1, row: r + 0.5, col: c + 0.5, removed: false });
+      idx++;
+    }
+  }
+  // Layer 2: 5 cols × 3 rows, offset 1.0
+  for (let r = 0; r < 3; r++) {
+    for (let c = 0; c < 5; c++) {
+      tiles.push({ id: idx, emoji: pool[idx], layer: 2, row: r + 1, col: c + 1, removed: false });
+      idx++;
+    }
+  }
+
+  return tiles;
+}
+
+function matchTileAccessible(tile, tiles) {
+  if (tile.removed) return false;
+  return !tiles.some(other =>
+    !other.removed &&
+    other.layer > tile.layer &&
+    Math.abs(other.row - tile.row) < 1 &&
+    Math.abs(other.col - tile.col) < 1
+  );
+}
+
+// ── Tray Logic ──
+function matchAddToTray(tray, tile) {
+  tile.removed = true;
+  tray.push({ emoji: tile.emoji, id: tile.id });
+  if (tray.length > 7) return 'overflow';
+
+  const counts = {};
+  tray.forEach(t => { counts[t.emoji] = (counts[t.emoji] || 0) + 1; });
+  const matched = Object.keys(counts).find(e => counts[e] >= 3);
+  if (matched) {
+    let removed = 0;
+    for (let i = tray.length - 1; i >= 0 && removed < 3; i--) {
+      if (tray[i].emoji === matched) { tray.splice(i, 1); removed++; }
+    }
+    return 'matched';
+  }
+  return 'ok';
+}
+
+// ── Start Game ──
+function startMatchGame() {
+  const tog = $i('match-show-token-toggle');
+  MATCH.showToken = tog ? tog.checked : false;
+  MATCH.seed = Date.now() & 0xfffffff;
+  MATCH.tiles = generateMatchTiles(MATCH.seed);
+  MATCH.aiTiles = generateMatchTiles(MATCH.seed); // same layout
+  MATCH.tray = [];
+  MATCH.aiTray = [];
+  MATCH.over = false;
+  MATCH.playerResult = null;
+  MATCH.startTime = Date.now();
+
+  // AI identity
+  const contact = MATCH.contactId !== 'none' ? S._contacts[MATCH.contactId] : null;
+  const aiName = contact ? contact.name : '系统AI';
+  const aiAvatar = (contact && contact.avatar && !contact.avatar.startsWith('data:')) ? contact.avatar : '🤖';
+
+  const aiNameEl = $i('match-ai-name-label');
+  const aiAvatarEl = $i('match-ai-avatar');
+  if (aiNameEl) aiNameEl.textContent = aiName;
+  if (aiAvatarEl) aiAvatarEl.textContent = aiAvatar;
+
+  switchPage('match-game-page');
+  renderMatchBoard();
+  renderMatchTray();
+  matchUpdateRemainLabel();
+  matchUpdateAiPanel();
+
+  // Start timer
+  if (MATCH.timerInterval) clearInterval(MATCH.timerInterval);
+  MATCH.timerInterval = setInterval(matchTickTimer, 1000);
+
+  // Start AI
+  if (MATCH.aiInterval) clearInterval(MATCH.aiInterval);
+  const intervals = { easy: 1800, normal: 1100, hard: 650 };
+  const delay = intervals[MATCH.difficulty] || 1100;
+  MATCH.aiInterval = setInterval(matchAiStep, delay);
+}
+
+// ── Timer ──
+function matchTickTimer() {
+  if (MATCH.over) return;
+  const elapsed = Math.floor((Date.now() - MATCH.startTime) / 1000);
+  const mm = String(Math.floor(elapsed / 60)).padStart(2, '0');
+  const ss = String(elapsed % 60).padStart(2, '0');
+  const el = $i('match-timer');
+  if (el) el.textContent = `${mm}:${ss}`;
+}
+
+// ── Board Rendering ──
+function renderMatchBoard() {
+  const board = $i('match-board');
+  if (!board) return;
+  board.innerHTML = '';
+  const TILE_SIZE = 52;
+  MATCH.tiles.forEach(tile => {
+    const div = document.createElement('div');
+    div.className = 'match-tile';
+    div.dataset.id = tile.id;
+    if (tile.removed) {
+      div.classList.add('removed');
+    } else {
+      const accessible = matchTileAccessible(tile, MATCH.tiles);
+      div.classList.add(accessible ? 'accessible' : 'blocked');
+      if (accessible) {
+        div.onclick = () => matchClickTile(tile.id);
+      }
+    }
+    div.style.left = (tile.col * TILE_SIZE + tile.layer * 4) + 'px';
+    div.style.top = (tile.row * TILE_SIZE - tile.layer * 4 + 8) + 'px'; // +8 for padding-top
+    div.style.zIndex = tile.layer * 1000 + Math.round(tile.row) * 10 + Math.round(tile.col);
+    div.textContent = tile.emoji;
+    // Extra shadow for higher layers
+    if (tile.layer === 1) div.style.boxShadow = '0 3px 8px rgba(0,0,0,0.15)';
+    if (tile.layer === 2) div.style.boxShadow = '0 5px 14px rgba(0,0,0,0.22)';
+    board.appendChild(div);
+  });
+}
+
+function matchRefreshBoardAccessibility() {
+  MATCH.tiles.forEach(tile => {
+    const el = document.querySelector(`[data-id="${tile.id}"]`);
+    if (!el) return;
+    if (tile.removed) {
+      el.className = 'match-tile removed';
+      el.onclick = null;
+      return;
+    }
+    const accessible = matchTileAccessible(tile, MATCH.tiles);
+    el.className = 'match-tile ' + (accessible ? 'accessible' : 'blocked');
+    el.onclick = accessible ? () => matchClickTile(tile.id) : null;
+  });
+}
+
+// ── Tray Rendering ──
+function renderMatchTray() {
+  const tray = $i('match-tray');
+  if (!tray) return;
+  tray.innerHTML = '';
+  for (let i = 0; i < 7; i++) {
+    const slot = document.createElement('div');
+    slot.className = 'match-tray-slot' + (MATCH.tray[i] ? ' filled' : '');
+    slot.id = `match-tray-slot-${i}`;
+    if (MATCH.tray[i]) slot.textContent = MATCH.tray[i].emoji;
+    tray.appendChild(slot);
+  }
+}
+
+function matchUpdateRemainLabel() {
+  const remaining = MATCH.tiles.filter(t => !t.removed).length;
+  const el = $i('match-remain-label');
+  if (el) el.textContent = `剩余: ${remaining}/54`;
+}
+
+// ── Player Click ──
+function matchClickTile(tileId) {
+  if (MATCH.over) return;
+  const tile = MATCH.tiles.find(t => t.id === tileId);
+  if (!tile || tile.removed) return;
+  if (!matchTileAccessible(tile, MATCH.tiles)) return;
+  if (MATCH.tray.length >= 7) return;
+
+  const result = matchAddToTray(MATCH.tray, tile);
+
+  // Immediately hide the tile in DOM
+  const tileEl = document.querySelector(`[data-id="${tileId}"]`);
+  if (tileEl) tileEl.className = 'match-tile removed';
+
+  if (result === 'matched') {
+    matchRefreshBoardAccessibility();
+    renderMatchTray();
+    matchUpdateRemainLabel();
+    matchCheckPlayerWin();
+    return;
+  }
+
+  if (result === 'overflow') {
+    matchEndGame('lose');
+    return;
+  }
+
+  // Overflow check: if tray is full (7) and no match possible
+  if (MATCH.tray.length >= 7) {
+    const counts = {};
+    MATCH.tray.forEach(t => { counts[t.emoji] = (counts[t.emoji] || 0) + 1; });
+    const hasMatch = Object.values(counts).some(n => n >= 3);
+    if (!hasMatch) {
+      matchEndGame('lose');
+      return;
+    }
+  }
+
+  matchRefreshBoardAccessibility();
+  renderMatchTray();
+  matchUpdateRemainLabel();
+  matchCheckPlayerWin();
+}
+
+function matchCheckPlayerWin() {
+  if (MATCH.over) return;
+  if (MATCH.tiles.every(t => t.removed) && MATCH.tray.length === 0) {
+    matchEndGame('win');
+  }
+}
+
+// ── AI Step ──
+function matchAiStep() {
+  if (MATCH.over) return;
+
+  const accessible = MATCH.aiTiles.filter(t => matchTileAccessible(t, MATCH.aiTiles));
+  if (accessible.length === 0) {
+    if (MATCH.aiTiles.every(t => t.removed) && MATCH.aiTray.length === 0) {
+      matchEndGame('ai_win');
+    }
+    return;
+  }
+
+  const diffConfig = { easy: 0.25, normal: 0.10, hard: 0 };
+  const randomChance = diffConfig[MATCH.difficulty] !== undefined ? diffConfig[MATCH.difficulty] : 0.10;
+
+  let chosen = null;
+  if (Math.random() >= randomChance) {
+    const trayCounts = {};
+    MATCH.aiTray.forEach(t => { trayCounts[t.emoji] = (trayCounts[t.emoji] || 0) + 1; });
+    // Priority 1: complete a triplet
+    chosen = accessible.find(t => trayCounts[t.emoji] >= 2);
+    // Priority 2: build toward match
+    if (!chosen) chosen = accessible.find(t => trayCounts[t.emoji] >= 1);
+  }
+  if (!chosen) chosen = accessible[Math.floor(Math.random() * accessible.length)];
+
+  chosen.removed = true;
+  MATCH.aiTray.push({ emoji: chosen.emoji, id: chosen.id });
+
+  if (MATCH.aiTray.length > 7) {
+    // AI tray overflow — AI loses, player wins
+    matchEndGame('win');
+    return;
+  }
+
+  // Check for triplet in AI tray
+  const counts = {};
+  MATCH.aiTray.forEach(t => { counts[t.emoji] = (counts[t.emoji] || 0) + 1; });
+  const matched = Object.keys(counts).find(e => counts[e] >= 3);
+  if (matched) {
+    let removed = 0;
+    for (let i = MATCH.aiTray.length - 1; i >= 0 && removed < 3; i--) {
+      if (MATCH.aiTray[i].emoji === matched) { MATCH.aiTray.splice(i, 1); removed++; }
+    }
+  }
+
+  // Check if AI cleared all tiles
+  if (MATCH.aiTiles.every(t => t.removed) && MATCH.aiTray.length === 0) {
+    matchEndGame('ai_win');
+    return;
+  }
+
+  matchUpdateAiPanel();
+}
+
+function matchUpdateAiPanel() {
+  const remaining = MATCH.aiTiles.filter(t => !t.removed).length;
+  const cleared = 54 - remaining;
+  const pct = Math.round(cleared / 54 * 100);
+
+  const progressEl = $i('match-ai-progress');
+  if (progressEl) progressEl.style.width = pct + '%';
+
+  const pctEl = $i('match-ai-pct');
+  if (pctEl) pctEl.textContent = `${pct}% 已清除`;
+
+  const remainEl = $i('match-ai-remain');
+  if (remainEl) remainEl.textContent = `剩余${remaining}`;
+
+  const previewEl = $i('match-ai-tray-preview');
+  if (previewEl) {
+    previewEl.innerHTML = MATCH.aiTray.map(t => `<span>${t.emoji}</span>`).join('');
+  }
+}
+
+// ── End Game ──
+function matchEndGame(result) {
+  if (MATCH.over) return;
+  MATCH.over = true;
+  MATCH.playerResult = result;
+
+  if (MATCH.aiInterval) { clearInterval(MATCH.aiInterval); MATCH.aiInterval = null; }
+  if (MATCH.timerInterval) { clearInterval(MATCH.timerInterval); MATCH.timerInterval = null; }
+
+  const elapsed = Math.floor((Date.now() - MATCH.startTime) / 1000);
+  const mm = String(Math.floor(elapsed / 60)).padStart(2, '0');
+  const ss = String(elapsed % 60).padStart(2, '0');
+  const timeStr = `${mm}:${ss}`;
+
+  const emojiEl = $i('match-result-emoji');
+  const titleEl = $i('match-result-title');
+  const statsEl = $i('match-result-stats');
+
+  const playerName = S.settings.userName || '玩家';
+  const aiNameEl = $i('match-ai-name-label');
+  const aiName = aiNameEl ? aiNameEl.textContent : '系统AI';
+
+  let emoji, title, statsHtml;
+  const playerCleared = MATCH.tiles.filter(t => t.removed).length;
+  const aiCleared = MATCH.aiTiles.filter(t => t.removed).length;
+
+  if (result === 'win') {
+    emoji = '🏆'; title = '你赢了！';
+    statsHtml = `⏱️ 用时：${timeStr}<br>✨ 你清除了所有方块！<br>🤖 ${esc(aiName)} 已清除 ${aiCleared}/54`;
+  } else if (result === 'ai_win') {
+    emoji = '😢'; title = `${esc(aiName)} 获胜！`;
+    statsHtml = `⏱️ 用时：${timeStr}<br>🤖 ${esc(aiName)} 抢先清空了！<br>📦 你还剩 ${54 - playerCleared} 块未清除`;
+  } else {
+    emoji = '😵'; title = '手气不好！';
+    statsHtml = `⏱️ 用时：${timeStr}<br>💔 托盘已满，无法消除<br>📦 你还剩 ${54 - playerCleared} 块未清除`;
+  }
+
+  if (emojiEl) emojiEl.textContent = emoji;
+  if (titleEl) titleEl.textContent = title;
+  if (statsEl) statsEl.innerHTML = statsHtml;
+
+  const ov = $i('match-result-overlay');
+  if (ov) ov.style.display = 'flex';
+}
+
+function matchResultBack() {
+  const ov = $i('match-result-overlay');
+  if (ov) ov.style.display = 'none';
+  switchPage('game-hub-page');
+}
+
+function matchResultReplay() {
+  const ov = $i('match-result-overlay');
+  if (ov) ov.style.display = 'none';
+  startMatchGame();
+}
+
+function confirmMatchQuit() {
+  if (MATCH.over) { switchPage('game-hub-page'); return; }
+  if (MATCH.aiInterval) { clearInterval(MATCH.aiInterval); MATCH.aiInterval = null; }
+  if (MATCH.timerInterval) { clearInterval(MATCH.timerInterval); MATCH.timerInterval = null; }
+  if (confirm('确定要退出游戏吗？')) {
+    switchPage('game-hub-page');
+  } else {
+    // Resume
+    if (!MATCH.over) {
+      const intervals = { easy: 1800, normal: 1100, hard: 650 };
+      const delay = intervals[MATCH.difficulty] || 1100;
+      MATCH.aiInterval = setInterval(matchAiStep, delay);
+      MATCH.timerInterval = setInterval(matchTickTimer, 1000);
+    }
+  }
+}

@@ -863,7 +863,9 @@ async function addMsg(chatId, msg) {
 
 async function renderMsgs() {
   const chat = S._chats[S.currentChat]; if (!chat) return;
-  const ca = $i('chat-area'); ca.innerHTML = '';
+  const ca = $i('chat-area');
+  const _st = ca.scrollTop, _sh = ca.scrollHeight;
+  ca.innerHTML = '';
   const contact = S.currentContact ? S._contacts[S.currentContact] : null;
   const aiAv = contact?.avatar || S.settings.aiAvatar;
   const userAv = S.settings.userAvatar;
@@ -903,6 +905,7 @@ async function renderMsgs() {
     }
     appendBubble(groupEl, msg);
   }
+  if (_sh > 0) ca.scrollTop = _st + (ca.scrollHeight - _sh);
   requestAnimationFrame(renderMinimap);
 }
 
@@ -1066,7 +1069,7 @@ try {
     }
     for (const sk of stkList) await addMsg(chatId, { role:'ai', type:'sticker', content:sk.content, url:sk.url, isImg:sk.isImg });
     await maybeAiSendImage(chatId, contact, cleanText);
-    await renderMsgs(); scrollTo_(false);
+    await renderMsgs();
     if (cs(contact?.xAutoTts, s.autoTts) && cleanText) speakText(cleanText);
     checkKwAnims(cleanText, 'ai');
     if (cleanText) void _updateCompanionStats({ msgDelta:1, charDelta:cleanText.length, contactId: contact?.id || null });
@@ -1075,10 +1078,10 @@ try {
     removeTyping();
     if (e.name !== 'AbortError') {
       await addMsg(chatId, { role:'ai', type:'text', content:`❌ 出错了：${e.message}` });
-      await renderMsgs(); scrollTo_(false);
+      await renderMsgs();
     }
   }
-  S.isStreaming = false; S._lockScroll = false; S._abortCtrl = null; stopHapticStream(); hideStopBtn();
+  S.isStreaming = false; S._lockScroll = false; S._abortCtrl = null; stopHapticStream(); hideStopBtn(); scrollTo_(false);
 }
 
 function stopGeneration() {
@@ -2139,9 +2142,9 @@ async function archiveMoments() {
 //  VOICE
 // ══════════════════════════════
 let recStream=null;
-function startRec(e){if(e)e.preventDefault();if(S.isRecording)return;haptic([10,5,10]);navigator.mediaDevices.getUserMedia({audio:true}).then(stream=>{recStream=stream;S.mediaRecorder=new MediaRecorder(stream);S.audioChunks=[];S.isRecording=true;S.recSecs=0;S.mediaRecorder.ondataavailable=e=>S.audioChunks.push(e.data);S.mediaRecorder.start();$i('btn-voice').classList.add('recording');$i('rec-bar').classList.add('show');const fb=$i('btn-file');if(fb){fb.innerHTML='⏹';fb.title='停止录音';}S.recTimer=setInterval(()=>{S.recSecs++;const m=Math.floor(S.recSecs/60),s=S.recSecs%60;$i('rec-timer').textContent=`${m}:${s.toString().padStart(2,'0')}`;},1000);}).catch(e=>toast('无法访问麦克风: '+e.message));}
-function stopRec(){if(!S.isRecording)return;haptic([8,4,8]);S.isRecording=false;clearInterval(S.recTimer);$i('btn-voice').classList.remove('recording');$i('rec-bar').classList.remove('show');$i('rec-timer').textContent='0:00';const fb=$i('btn-file');if(fb){fb.innerHTML='📎';fb.title='发文件/图片';}S.mediaRecorder.stop();S.mediaRecorder.onstop=async()=>{const blob=new Blob(S.audioChunks,{type:'audio/webm'});recStream?.getTracks().forEach(t=>t.stop());const dur=`${Math.floor(S.recSecs/60)}:${(S.recSecs%60).toString().padStart(2,'0')}`;const url=URL.createObjectURL(blob);const transcript=await sttBrowser();const chat=S._chats[S.currentChat];if(!chat)return;const vmsg={role:'user',type:'voice',url,dur,transcript,content:transcript?`[语音] ${transcript}`:'[语音消息]'};await addMsg(S.currentChat,vmsg);await renderMsgs();scrollTo_(false);if(transcript)await callAI(S.currentChat);};}
-function cancelRec(){if(!S.isRecording)return;S.isRecording=false;clearInterval(S.recTimer);S.mediaRecorder?.stop();recStream?.getTracks().forEach(t=>t.stop());$i('btn-voice').classList.remove('recording');$i('rec-bar').classList.remove('show');const fb=$i('btn-file');if(fb){fb.innerHTML='📎';fb.title='发文件/图片';}}
+function startRec(e){if(e)e.preventDefault();if(S.isRecording)return;haptic([10,5,10]);const _go=stream=>{recStream=stream;S.mediaRecorder=new MediaRecorder(stream);S.audioChunks=[];S.isRecording=true;S.recSecs=0;S.mediaRecorder.ondataavailable=e=>S.audioChunks.push(e.data);S.mediaRecorder.start();$i('btn-voice').classList.add('recording');$i('rec-bar').classList.add('show');const fb=$i('btn-file');if(fb){fb.innerHTML='⏹';fb.title='停止录音';}S.recTimer=setInterval(()=>{S.recSecs++;const m=Math.floor(S.recSecs/60),s=S.recSecs%60;$i('rec-timer').textContent=`${m}:${s.toString().padStart(2,'0')}`;},1000);};if(recStream&&recStream.active)_go(recStream);else navigator.mediaDevices.getUserMedia({audio:true}).then(_go).catch(e=>toast('无法访问麦克风: '+e.message));}
+function stopRec(){if(!S.isRecording)return;haptic([8,4,8]);S.isRecording=false;clearInterval(S.recTimer);$i('btn-voice').classList.remove('recording');$i('rec-bar').classList.remove('show');$i('rec-timer').textContent='0:00';const fb=$i('btn-file');if(fb){fb.innerHTML='📎';fb.title='发文件/图片';}S.mediaRecorder.stop();S.mediaRecorder.onstop=async()=>{const blob=new Blob(S.audioChunks,{type:'audio/webm'});const dur=`${Math.floor(S.recSecs/60)}:${(S.recSecs%60).toString().padStart(2,'0')}`;const url=URL.createObjectURL(blob);const transcript=await sttBrowser();const chat=S._chats[S.currentChat];if(!chat)return;const vmsg={role:'user',type:'voice',url,dur,transcript,content:transcript?`[语音] ${transcript}`:'[语音消息]'};await addMsg(S.currentChat,vmsg);await renderMsgs();scrollTo_(false);if(transcript)await callAI(S.currentChat);};}
+function cancelRec(){if(!S.isRecording)return;S.isRecording=false;clearInterval(S.recTimer);S.mediaRecorder?.stop();$i('btn-voice').classList.remove('recording');$i('rec-bar').classList.remove('show');const fb=$i('btn-file');if(fb){fb.innerHTML='📎';fb.title='发文件/图片';}}
 function sttBrowser(){return new Promise(resolve=>{if(!('webkitSpeechRecognition'in window||'SpeechRecognition'in window)){resolve('');return;}const SR=window.SpeechRecognition||window.webkitSpeechRecognition;const r=new SR();r.lang='zh-CN';r.interimResults=false;r.start();r.onresult=e=>resolve(e.results[0][0].transcript);r.onerror=()=>resolve('');r.onend=()=>resolve('');setTimeout(()=>{try{r.stop();}catch(e){}},5000);});}
 async function playVoice(id){const msgs=await dbGetAll('messages','chatId',S.currentChat);const msg=msgs.find(m=>m.id===id);if(msg?.url)new Audio(msg.url).play();}
 
@@ -2218,7 +2221,7 @@ function onVoiceTouchEnd(e) {
 }
 function startRecMobile() {
   haptic([10,5,10]);
-  navigator.mediaDevices.getUserMedia({audio:true}).then(stream => {
+  const _go = stream => {
     recStream = stream;
     S.mediaRecorder = new MediaRecorder(stream);
     S.audioChunks = [];
@@ -2235,7 +2238,9 @@ function startRecMobile() {
       const m = Math.floor(S.recSecs/60), s = S.recSecs%60;
       $i('rec-timer').textContent = `${m}:${s.toString().padStart(2,'0')}`;
     }, 1000);
-  }).catch(e => toast('无法访问麦克风: ' + e.message));
+  };
+  if (recStream && recStream.active) _go(recStream);
+  else navigator.mediaDevices.getUserMedia({audio:true}).then(_go).catch(e => toast('无法访问麦克风: ' + e.message));
 }
 function stopRecToInput() {
   if (!S.isRecording) return;
@@ -2251,7 +2256,6 @@ function stopRecToInput() {
   S.mediaRecorder.stop();
   S.mediaRecorder.onstop = async () => {
     const blob = new Blob(S.audioChunks, {type:'audio/webm'});
-    recStream?.getTracks().forEach(t => t.stop());
     const transcript = await sttBrowser();
     if (transcript) {
       const inp = $i('msg-input');

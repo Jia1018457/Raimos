@@ -2784,7 +2784,15 @@ function initScrollObs(){
     if (atBot) S._lockScroll = false;
   });
 }
-function scrollTo_(top,instant){if(!top && S._lockScroll)return;const ca=$i('chat-area');ca.scrollTo({top:top?0:ca.scrollHeight,behavior:instant?'auto':'smooth'});}
+function scrollTo_(top,instant){
+  const ca=$i('chat-area');if(!ca)return;
+  if(top){ca.scrollTo({top:0,behavior:'smooth'});return;}
+  // instant=true means force-scroll (initial chat open only)
+  if(instant){ca.scrollTop=ca.scrollHeight;return;}
+  // Smart scroll: only follow to bottom if user is already near bottom
+  const atBot=ca.scrollTop+ca.clientHeight>ca.scrollHeight-150;
+  if(atBot)ca.scrollTop=ca.scrollHeight;
+}
 
 // ══════════════════════════════
 //  MINIMAP

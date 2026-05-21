@@ -608,17 +608,15 @@
         <div class="orb-name">棋逢对手</div>
         <div class="orb-sub">五子棋 · 象棋等</div>
       </div>
-      <div class="game-orb game-orb-match" onclick="toast('消除类游戏即将上线～')">
+      <div class="game-orb game-orb-match" onclick="switchPage('match-setup-page');initMatchSetup()">
         <div class="orb-icon">🫧</div>
         <div class="orb-name">消消快乐</div>
-        <div class="orb-sub">连连看 · 消消乐</div>
-        <div class="orb-badge">即将推出</div>
+        <div class="orb-sub">羊了个羊 · 消消乐</div>
       </div>
-      <div class="game-orb game-orb-board" onclick="toast('大富翁游戏即将上线～')">
+      <div class="game-orb game-orb-board" onclick="switchPage('board-setup-page');initBoardSetup()">
         <div class="orb-icon">🎲</div>
         <div class="orb-name">幸运大冒险</div>
         <div class="orb-sub">情侣大富翁等</div>
-        <div class="orb-badge">即将推出</div>
       </div>
       <div class="game-orb game-orb-draw" onclick="toast('你画我猜即将上线～')">
         <div class="orb-icon">🎨</div>
@@ -626,11 +624,10 @@
         <div class="orb-sub">创意无限</div>
         <div class="orb-badge">即将推出</div>
       </div>
-      <div class="game-orb game-orb-quiz" onclick="toast('知识挑战游戏即将上线～')">
-        <div class="orb-icon">🧠</div>
+      <div class="game-orb game-orb-quiz" onclick="switchPage('quiz-setup-page');initQuizSetup()">
+        <div class="orb-icon">🎓</div>
         <div class="orb-name">博学知识家</div>
         <div class="orb-sub">举例 · 自定义主题</div>
-        <div class="orb-badge">即将推出</div>
       </div>
     </div>
   </div>
@@ -970,7 +967,350 @@
   </div>
 </div>
 
+<!-- ── BOARD SETUP PAGE ── -->
+<div class="page" id="board-setup-page">
+  <div class="page-header">
+    <button class="page-back-btn" onclick="switchPage('game-hub-page')">‹ 返回</button>
+    <h2>🎲 幸运大冒险</h2>
+  </div>
+  <div style="flex:1;overflow-y:auto;padding:16px">
+    <div class="fly-setup-wrap">
+      <div class="fly-setup-section">
+        <div class="fly-setup-title">🎮 选择人数</div>
+        <div class="fly-count-row">
+          <button class="fly-count-btn active" onclick="setBoardPlayerCount(2,this)">2人</button>
+          <button class="fly-count-btn" onclick="setBoardPlayerCount(3,this)">3人</button>
+          <button class="fly-count-btn" onclick="setBoardPlayerCount(4,this)">4人</button>
+        </div>
+      </div>
+      <div class="fly-setup-section">
+        <div class="fly-setup-title">👤 玩家配置</div>
+        <div id="board-setup-players"></div>
+      </div>
+      <div class="fly-setup-section">
+        <div class="fly-setup-title">🤖 AI 助手</div>
+        <div class="gmk-ai-selector" id="board-ai-selector"></div>
+      </div>
+      <div class="fly-setup-section">
+        <div class="fly-setup-title">⚙️ 游戏设置</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0">
+          <span style="font-size:13px">显示AI Token用量</span>
+          <label class="toggle"><input type="checkbox" id="board-show-token-toggle"><span class="tslider"></span></label>
+        </div>
+      </div>
+      <div class="fly-setup-section fly-rules-box">
+        <div class="fly-setup-title">📋 游戏规则</div>
+        <div class="fly-rules-text">
+          🎲 掷骰子前进，每人起始1500金币<br>
+          🏡 购买地产，收取对方租金<br>
+          🎰 抽机会/公共基金卡获得随机效果<br>
+          💑 情侣挑战 / 🎭 真心话大冒险<br>
+          🔥 情侣升温任务 / 🛒 购买道具卡<br>
+          破产（金币<0）淘汰，最后存活者胜利<br>
+          或20回合后金币+地产总值最高者胜
+        </div>
+      </div>
+      <button class="btn-p" style="width:100%;padding:14px;font-size:16px;margin-top:8px" onclick="startBoardGame()">🚀 开始游戏</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── BOARD GAME PAGE ── -->
+<div class="page" id="board-game-page">
+  <div class="page-header">
+    <button class="page-back-btn" onclick="confirmBoardQuit()">‹ 退出</button>
+    <h2>🎲 幸运大冒险</h2>
+    <span id="board-round-label" style="margin-left:auto;font-size:12px;color:var(--text3)">第1回合</span>
+  </div>
+  <div style="flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:10px">
+    <!-- Player info bar -->
+    <div id="board-player-bar" class="board-player-bar"></div>
+    <!-- Current turn -->
+    <div id="board-turn-info" class="board-turn-info">等待开始…</div>
+    <!-- Board display -->
+    <div class="board-map-wrap">
+      <div id="board-map" class="board-map"></div>
+    </div>
+    <!-- Action buttons -->
+    <div class="board-action-row">
+      <button id="board-dice-btn" class="board-dice-btn" onclick="boardRollDice()">🎲 掷骰子</button>
+      <button class="board-item-btn" onclick="boardUseItem()">🎒 使用道具</button>
+    </div>
+    <!-- Log -->
+    <div id="board-log" class="board-log"></div>
+  </div>
+</div>
+
+<!-- ── BOARD ACTION OVERLAY ── -->
+<div class="overlay" id="board-action-overlay" style="display:none">
+  <div class="board-event-card" id="board-event-card">
+    <div id="board-event-type" class="board-event-type"></div>
+    <div id="board-event-player" class="board-event-player"></div>
+    <div id="board-event-text" class="board-event-text"></div>
+    <div id="board-ai-response" class="fly-ai-response"></div>
+    <button class="fly-event-continue-btn" onclick="boardEventDone()">继续 →</button>
+  </div>
+</div>
+
+<!-- ── BOARD BUY OVERLAY ── -->
+<div class="overlay" id="board-buy-overlay" style="display:none">
+  <div class="board-event-card">
+    <div class="board-event-type">🏡 购买地产</div>
+    <div id="board-buy-name" class="board-event-player"></div>
+    <div id="board-buy-info" class="board-event-text"></div>
+    <div style="display:flex;gap:10px;margin-top:12px">
+      <button class="fly-event-continue-btn" style="flex:1" onclick="boardDeclineBuy()">放弃</button>
+      <button class="fly-event-submit-btn" style="flex:1" onclick="boardConfirmBuy()">购买</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── BOARD ITEM OVERLAY ── -->
+<div class="overlay" id="board-item-overlay" style="display:none">
+  <div class="board-event-card">
+    <div class="board-event-type">🛒 购买道具</div>
+    <div class="board-event-text" style="font-size:13px;color:var(--text2)">每张50金币，选择购买：</div>
+    <div id="board-shop-list" class="board-shop-list"></div>
+    <button class="fly-event-continue-btn" style="margin-top:10px" onclick="boardCloseShop()">关闭</button>
+  </div>
+</div>
+
+<!-- ── BOARD USE ITEM OVERLAY ── -->
+<div class="overlay" id="board-use-item-overlay" style="display:none">
+  <div class="board-event-card">
+    <div class="board-event-type">🎒 使用道具</div>
+    <div id="board-use-item-list" class="board-shop-list"></div>
+    <button class="fly-event-continue-btn" style="margin-top:10px" onclick="boardCloseUseItem()">取消</button>
+  </div>
+</div>
+
+<!-- ── BOARD RESULT OVERLAY ── -->
+<div class="overlay" id="board-result-overlay" style="display:none">
+  <div class="board-event-card">
+    <div class="board-event-type" style="font-size:22px">🏆 游戏结束！</div>
+    <div id="board-result-rankings" style="margin:12px 0"></div>
+    <div style="display:flex;gap:10px;margin-top:12px">
+      <button class="fly-event-continue-btn" style="flex:1" onclick="document.getElementById('board-result-overlay').style.display='none';switchPage('game-hub-page')">返回大厅</button>
+      <button class="fly-event-submit-btn" style="flex:1" onclick="document.getElementById('board-result-overlay').style.display='none';switchPage('board-setup-page');initBoardSetup()">再来一局</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── QUIZ SETUP PAGE ── -->
+<div class="page" id="quiz-setup-page">
+  <div class="page-header">
+    <button class="page-back-btn" onclick="switchPage('game-hub-page')">‹ 返回</button>
+    <h2>🎓 博学知识家</h2>
+  </div>
+  <div style="flex:1;overflow-y:auto;padding:16px">
+    <div class="fly-setup-wrap">
+      <div class="fly-setup-section">
+        <div class="fly-setup-title">🎮 选择人数</div>
+        <div class="fly-count-row">
+          <button class="fly-count-btn active" onclick="setQuizPlayerCount(1,this)">1人</button>
+          <button class="fly-count-btn" onclick="setQuizPlayerCount(2,this)">2人</button>
+          <button class="fly-count-btn" onclick="setQuizPlayerCount(3,this)">3人</button>
+          <button class="fly-count-btn" onclick="setQuizPlayerCount(4,this)">4人</button>
+        </div>
+      </div>
+      <div class="fly-setup-section">
+        <div class="fly-setup-title">👤 玩家配置</div>
+        <div id="quiz-setup-players"></div>
+      </div>
+      <div class="fly-setup-section">
+        <div class="fly-setup-title">🤖 AI 助手</div>
+        <div class="gmk-ai-selector" id="quiz-ai-selector"></div>
+      </div>
+      <div class="fly-setup-section">
+        <div class="fly-setup-title">🏷️ 选择主题</div>
+        <div class="quiz-category-presets" id="quiz-presets"></div>
+        <input class="fly-player-input" id="quiz-custom-category" type="text" placeholder="或输入自定义主题…" maxlength="20" style="width:100%;margin-top:8px;box-sizing:border-box">
+      </div>
+      <div class="fly-setup-section">
+        <div class="fly-setup-title">⏱️ 结算回合</div>
+        <div class="fly-count-row" id="quiz-rounds-row">
+          <button class="fly-count-btn active" onclick="setQuizMaxRounds(20,this)">20轮</button>
+          <button class="fly-count-btn" onclick="setQuizMaxRounds(40,this)">40轮</button>
+          <button class="fly-count-btn" onclick="setQuizMaxRounds(60,this)">60轮</button>
+          <button class="fly-count-btn" onclick="setQuizMaxRounds(80,this)">80轮</button>
+        </div>
+        <div style="font-size:11px;color:var(--text3);margin-top:4px">达到回合上限后按存活命数决出胜者</div>
+      </div>
+      <div class="fly-setup-section">
+        <div class="fly-setup-title">⚙️ 游戏设置</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0">
+          <span style="font-size:13px">显示AI Token用量</span>
+          <label class="toggle"><input type="checkbox" id="quiz-show-token-toggle"><span class="tslider"></span></label>
+        </div>
+      </div>
+      <div class="fly-setup-section fly-rules-box">
+        <div class="fly-setup-title">📋 游戏规则</div>
+        <div class="fly-rules-text">
+          🏷️ 选择主题，轮流举例说出该类事物<br>
+          ⏱️ 每人10秒内必须作答，不能重复<br>
+          💗 超时或重复答案失去一条命（共3条）<br>
+          🏆 最后一个存活的玩家获胜<br>
+          😈 失败者接受真心话大冒险惩罚！
+        </div>
+      </div>
+      <button class="btn-p" style="width:100%;padding:14px;font-size:16px;margin-top:8px" onclick="startQuizGame()">🚀 开始游戏</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── QUIZ GAME PAGE ── -->
+<div class="page" id="quiz-game-page">
+  <div class="page-header">
+    <button class="page-back-btn" onclick="confirmQuizQuit()">‹ 退出</button>
+    <h2>🎓 博学知识家</h2>
+  </div>
+  <div style="flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:10px">
+    <!-- Category display -->
+    <div class="quiz-category-display">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span style="font-size:12px;color:var(--text3)">当前主题</span>
+        <span id="quiz-round-counter" style="font-size:11px;color:var(--text3)"></span>
+      </div>
+      <div id="quiz-category-label" class="quiz-category-label"></div>
+    </div>
+    <!-- Player lives bar -->
+    <div id="quiz-player-bar" class="quiz-player-bar"></div>
+    <!-- Turn info -->
+    <div id="quiz-turn-info" class="board-turn-info"></div>
+    <!-- Timer -->
+    <div class="quiz-timer-wrap">
+      <div id="quiz-timer-bar" class="quiz-timer-bar"></div>
+      <div id="quiz-timer-text" class="quiz-timer-text">10</div>
+    </div>
+    <!-- Input area (for human players) -->
+    <div id="quiz-input-area" class="quiz-input-area" style="display:none">
+      <input id="quiz-answer-input" class="fly-player-input" type="text" placeholder="输入你的答案…" maxlength="20" style="flex:1">
+      <button class="board-dice-btn" style="flex-shrink:0;padding:10px 18px" onclick="quizSubmitAnswer()">提交</button>
+    </div>
+    <!-- AI thinking indicator -->
+    <div id="quiz-ai-thinking" style="display:none;text-align:center;color:var(--text3);font-size:13px;padding:8px">🤔 思考中…</div>
+    <!-- Answer log -->
+    <div class="quiz-answers-label">已说出的答案</div>
+    <div id="quiz-answer-log" class="quiz-answer-log"></div>
+  </div>
+</div>
+
+<!-- ── QUIZ RESULT OVERLAY ── -->
+<div class="overlay" id="quiz-result-overlay" style="display:none">
+  <div class="board-event-card">
+    <div class="board-event-type" style="font-size:22px">🎓 游戏结束！</div>
+    <div id="quiz-result-content" style="margin:12px 0"></div>
+    <div id="quiz-punishment-area" style="margin:10px 0;padding:12px;background:var(--hover);border-radius:12px;display:none">
+      <div style="font-size:12px;font-weight:700;color:#e74c3c;margin-bottom:6px">😈 惩罚时刻</div>
+      <div id="quiz-punishment-text" style="font-size:14px;color:var(--text)"></div>
+      <div id="quiz-punishment-ai" class="fly-ai-response"></div>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:12px">
+      <button class="fly-event-continue-btn" style="flex:1" onclick="document.getElementById('quiz-result-overlay').style.display='none';switchPage('game-hub-page')">返回大厅</button>
+      <button class="fly-event-submit-btn" style="flex:1" onclick="document.getElementById('quiz-result-overlay').style.display='none';switchPage('quiz-setup-page');initQuizSetup()">再来一局</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ── MATCH SETUP PAGE ── -->
+<div class="page" id="match-setup-page">
+  <div class="page-header">
+    <button class="page-back-btn" onclick="switchPage('game-hub-page')">‹ 返回</button>
+    <h2>🫧 消消快乐</h2>
+  </div>
+  <div style="flex:1;overflow-y:auto;padding:16px">
+    <div class="fly-setup-wrap">
+      <div class="fly-setup-section">
+        <div class="fly-setup-title">🎯 难度选择</div>
+        <div class="fly-count-row" id="match-diff-row">
+          <button class="fly-count-btn" onclick="setMatchDiff('easy',this)">😊 简单</button>
+          <button class="fly-count-btn active" onclick="setMatchDiff('normal',this)">🎯 普通</button>
+          <button class="fly-count-btn" onclick="setMatchDiff('hard',this)">🔥 困难</button>
+        </div>
+        <div style="font-size:11px;color:var(--text3);margin-top:4px" id="match-diff-desc">AI速度：适中，偶尔犯错</div>
+      </div>
+      <div class="fly-setup-section">
+        <div class="fly-setup-title">🤖 选择AI助手</div>
+        <div class="gmk-ai-selector" id="match-ai-selector"></div>
+      </div>
+      <div class="fly-setup-section">
+        <div class="fly-setup-title">⚙️ 游戏设置</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0">
+          <span style="font-size:13px">显示Token用量</span>
+          <label class="toggle"><input type="checkbox" id="match-show-token-toggle"><span class="tslider"></span></label>
+        </div>
+      </div>
+      <div class="fly-setup-section fly-rules-box">
+        <div class="fly-setup-title">📋 游戏规则</div>
+        <div class="fly-rules-text">
+          🫧 点击牌面上的方块移入底部托盘<br>
+          🃏 只有最上层（未被覆盖）的方块可点击<br>
+          ✨ 托盘中凑齐3个相同图案即自动消除<br>
+          💔 托盘满7个未消除则失败<br>
+          🏆 先清空所有方块者获胜！
+        </div>
+      </div>
+      <button class="btn-p" style="width:100%;padding:14px;font-size:16px;margin-top:8px" onclick="startMatchGame()">🚀 开始游戏</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── MATCH GAME PAGE ── -->
+<div class="page" id="match-game-page">
+  <div class="page-header">
+    <button class="page-back-btn" onclick="confirmMatchQuit()">‹ 退出</button>
+    <h2>🫧 消消快乐</h2>
+    <div id="match-timer" class="match-timer">00:00</div>
+  </div>
+  <!-- AI Panel -->
+  <div class="match-ai-panel" id="match-ai-panel">
+    <div class="match-ai-info">
+      <span id="match-ai-avatar" class="match-ai-avatar">🤖</span>
+      <span id="match-ai-name-label" class="match-ai-name">系统AI</span>
+    </div>
+    <div style="flex:1;min-width:0">
+      <div class="match-progress-bar">
+        <div class="match-progress-fill" id="match-ai-progress"></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:2px">
+        <span id="match-ai-pct" style="font-size:10px;color:var(--text3)">0% 已清除</span>
+        <span id="match-ai-remain" style="font-size:10px;color:var(--text3)">剩余54</span>
+      </div>
+    </div>
+    <div id="match-ai-tray-preview" class="match-ai-tray-preview"></div>
+  </div>
+  <!-- Player board area -->
+  <div style="flex:1;overflow-y:auto;overflow-x:auto;padding:10px 12px;display:flex;flex-direction:column;gap:8px">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-shrink:0">
+      <span id="match-remain-label" style="font-size:12px;color:var(--text2);font-weight:600">剩余: 54/54</span>
+      <span style="font-size:11px;color:var(--text3)">点击可点击的方块</span>
+    </div>
+    <div class="match-board-wrap">
+      <div class="match-board" id="match-board"></div>
+    </div>
+    <!-- Tray -->
+    <div style="flex-shrink:0">
+      <div style="font-size:11px;color:var(--text3);margin-bottom:4px;text-align:center">🗂️ 托盘（最多7格）</div>
+      <div class="match-tray" id="match-tray"></div>
+    </div>
+  </div>
+</div>
+
 </div><!-- #pages -->
+
+<!-- ── MATCH RESULT OVERLAY ── -->
+<div class="overlay" id="match-result-overlay" style="display:none">
+  <div class="board-event-card" style="text-align:center;max-width:320px">
+    <div id="match-result-emoji" style="font-size:48px;margin-bottom:8px">🏆</div>
+    <div id="match-result-title" class="board-event-type" style="font-size:20px;margin-bottom:8px">游戏结束！</div>
+    <div id="match-result-stats" style="font-size:13px;color:var(--text2);margin:10px 0;line-height:1.8"></div>
+    <div style="display:flex;gap:10px;margin-top:14px">
+      <button class="fly-event-continue-btn" style="flex:1" onclick="matchResultBack()">返回大厅</button>
+      <button class="fly-event-submit-btn" style="flex:1" onclick="matchResultReplay()">再来一局</button>
+    </div>
+  </div>
+</div>
 
 <!-- ── GOMOKU RESULT MODAL ── -->
 <div class="overlay" id="gomoku-result-overlay">

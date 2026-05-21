@@ -158,6 +158,11 @@ function switchPage(id) {
     const el = document.getElementById(oid);
     if (el) el.style.display = 'none';
   });
+  // Stop match game intervals when leaving
+  if (typeof MATCH !== 'undefined' && id !== 'match-game-page') {
+    if (MATCH.aiInterval) { clearInterval(MATCH.aiInterval); MATCH.aiInterval = null; }
+    if (MATCH.timerInterval) { clearInterval(MATCH.timerInterval); MATCH.timerInterval = null; }
+  }
   $i(id).classList.add('active');
   document.querySelector(`[data-page="${id}"]`)?.classList.add('active');
   if (id === 'memory-page') renderMemories();
@@ -4877,5 +4882,2112 @@ async function icAiMove(){
     IC.over=true;icSetStatus('平局（逼和）');icSay('平局了～');
   } else {
     icSetStatus('轮到你了（白方）');
+  }
+}
+
+// ══════════════════════════════════════════
+// 🎲 幸运大冒险 (Lucky Adventure Board Game)
+// ══════════════════════════════════════════
+
+const BOARD_PLAYER_COLORS = ['#ff6b6b', '#4d9fff', '#ffd93d', '#6bcb77'];
+const BOARD_PLAYER_EMOJIS = ['🔴', '🔵', '🟡', '🟢'];
+
+const BOARD_PROPERTIES = [
+  { id:0,  name:'粉红小屋', group:0, price:60,  rent:[2,10,30,90,160,250],  houseCost:50  },
+  { id:1,  name:'玫瑰庄园', group:0, price:60,  rent:[4,20,60,180,320,450], houseCost:50  },
+  { id:2,  name:'蓝湾别墅', group:1, price:100, rent:[6,30,90,270,400,550], houseCost:50  },
+  { id:3,  name:'海风公寓', group:1, price:120, rent:[8,40,100,300,450,600], houseCost:50  },
+  { id:4,  name:'樱花小院', group:2, price:140, rent:[10,50,150,450,625,750], houseCost:100 },
+  { id:5,  name:'蜜桃庭苑', group:2, price:160, rent:[12,60,180,500,700,900], houseCost:100 },
+  { id:6,  name:'夕阳花园', group:3, price:180, rent:[14,70,200,550,750,950], houseCost:100 },
+  { id:7,  name:'琥珀小筑', group:3, price:200, rent:[16,80,220,600,800,1000],houseCost:100 },
+  { id:8,  name:'红枫山庄', group:4, price:220, rent:[18,90,250,700,875,1050],houseCost:150 },
+  { id:9,  name:'绛红公馆', group:4, price:240, rent:[20,100,300,750,925,1100],houseCost:150 },
+  { id:10, name:'金色庄园', group:5, price:260, rent:[22,110,330,800,975,1150],houseCost:150 },
+  { id:11, name:'阳光别苑', group:5, price:280, rent:[24,120,360,850,1025,1200],houseCost:150 },
+  { id:12, name:'翠竹山庄', group:6, price:300, rent:[26,130,390,900,1100,1275],houseCost:200 },
+  { id:13, name:'碧波庄院', group:6, price:320, rent:[28,150,450,1000,1200,1400],houseCost:200 },
+  { id:14, name:'星钻宫殿', group:7, price:350, rent:[35,175,500,1100,1300,1500],houseCost:200 },
+  { id:15, name:'皇冠御苑', group:7, price:400, rent:[50,200,600,1400,1700,2000],houseCost:200 },
+];
+
+const BOARD_PROP_COLORS = ['#e879f9','#38bdf8','#f472b6','#fb923c','#ef4444','#fbbf24','#22c55e','#1d4ed8'];
+
+const BOARD_SPACE_LAYOUT = [
+  {type:'start',    name:'出发点',   icon:'🏠'},
+  {type:'land',     name:'粉红小屋', icon:'🏡', propId:0,  color:'#e879f9'},
+  {type:'chance',   name:'机会',     icon:'🎰'},
+  {type:'land',     name:'玫瑰庄园', icon:'🏡', propId:1,  color:'#e879f9'},
+  {type:'tax',      name:'所得税',   icon:'💰'},
+  {type:'shop',     name:'道具商店', icon:'🛒'},
+  {type:'land',     name:'蓝湾别墅', icon:'🏡', propId:2,  color:'#38bdf8'},
+  {type:'community',name:'公共基金', icon:'📦'},
+  {type:'land',     name:'海风公寓', icon:'🏡', propId:3,  color:'#38bdf8'},
+  {type:'warmup',   name:'情侣升温', icon:'🔥'},
+  {type:'jail',     name:'休息一下', icon:'⛓️'},
+  {type:'land',     name:'樱花小院', icon:'🏡', propId:4,  color:'#f472b6'},
+  {type:'couple_challenge',name:'情侣挑战',icon:'💑'},
+  {type:'land',     name:'蜜桃庭苑', icon:'🏡', propId:5,  color:'#f472b6'},
+  {type:'land',     name:'夕阳花园', icon:'🏡', propId:6,  color:'#fb923c'},
+  {type:'truth_dare',name:'真心话大冒险',icon:'🎭'},
+  {type:'land',     name:'琥珀小筑', icon:'🏡', propId:7,  color:'#fb923c'},
+  {type:'chance',   name:'机会',     icon:'🎰'},
+  {type:'land',     name:'红枫山庄', icon:'🏡', propId:8,  color:'#ef4444'},
+  {type:'warmup',   name:'情侣升温', icon:'🔥'},
+  {type:'free',     name:'免费停车', icon:'🅿️'},
+  {type:'land',     name:'绛红公馆', icon:'🏡', propId:9,  color:'#ef4444'},
+  {type:'couple_challenge',name:'情侣挑战',icon:'💑'},
+  {type:'land',     name:'金色庄园', icon:'🏡', propId:10, color:'#fbbf24'},
+  {type:'community',name:'公共基金', icon:'📦'},
+  {type:'land',     name:'阳光别苑', icon:'🏡', propId:11, color:'#fbbf24'},
+  {type:'back3',    name:'后退3格',  icon:'⬅️'},
+  {type:'land',     name:'翠竹山庄', icon:'🏡', propId:12, color:'#22c55e'},
+  {type:'truth_dare',name:'真心话大冒险',icon:'🎭'},
+  {type:'land',     name:'碧波庄院', icon:'🏡', propId:13, color:'#22c55e'},
+  {type:'forward3', name:'前进3格',  icon:'➡️'},
+  {type:'land',     name:'星钻宫殿', icon:'🏡', propId:14, color:'#1d4ed8'},
+  {type:'chance',   name:'机会',     icon:'🎰'},
+  {type:'land',     name:'皇冠御苑', icon:'🏡', propId:15, color:'#1d4ed8'},
+  {type:'couple_challenge',name:'情侣挑战',icon:'💑'},
+  {type:'shop',     name:'道具商店', icon:'🛒'},
+  {type:'community',name:'公共基金', icon:'📦'},
+  {type:'warmup',   name:'情侣升温', icon:'🔥'},
+  {type:'tax',      name:'奢侈税',   icon:'💰'},
+  {type:'jail',     name:'休息一下', icon:'⛓️'},
+];
+
+const BOARD_ITEM_CARDS = [
+  { id:'pass',     name:'免费通行证', icon:'🛡️', desc:'免除一次租金支付' },
+  { id:'lucky',    name:'幸运骰子',   icon:'🎲', desc:'掷两次取最大值' },
+  { id:'bomb',     name:'炸弹卡',     icon:'💣', desc:'对手后退5格' },
+  { id:'teleport', name:'传送卡',     icon:'🔮', desc:'传送到任意已拥有地产' },
+  { id:'build',    name:'建设卡',     icon:'🏗️', desc:'免费建一栋房子' },
+  { id:'freeze',   name:'冻结卡',     icon:'❄️', desc:'冻结对手，跳过他们下一回合' },
+];
+
+const BOARD_COUPLE_TASKS = [
+  '给对方一个温暖的拥抱，并持续10秒',
+  '看着对方的眼睛，说一句真心话',
+  '用最甜蜜的方式说"我爱你"',
+  '为对方轻轻捏肩膀1分钟',
+  '说出对方三个让你最欣赏的优点',
+  '互换手机，各自看对方最近发的一条朋友圈',
+  '用歌声表达你对对方的感情',
+  '两人手牵手，说说第一次见面的感受',
+  '给对方一个额头吻',
+  '说出你们在一起以来最难忘的一个瞬间',
+  '为对方写一句诗或情话',
+  '模仿对方最常说的口头禅，让对方猜',
+  '两人一起做同一个傻动作并拍下来',
+  '告诉对方你最喜欢他/她哪个部位',
+  '说出一件你因为对方而改变的习惯',
+  '给对方一个"意外"的小礼物或零食',
+  '假装是第一次见面，重新自我介绍',
+  '两人互拍一张满意的自拍',
+  '说出你觉得你们最般配的地方',
+  '一起规划一次未来的约会',
+];
+
+const BOARD_TRUTH_DARE = [
+  '说出你对现在这段关系最满意的一点',
+  '说出你认为两人之间最需要改进的地方',
+  '你有没有对对方说过善意的谎言？说说是什么',
+  '你最希望对方改变的一个习惯是什么？',
+  '你第一次意识到喜欢对方是什么时候？',
+  '你觉得对方最让你感动的一件事是什么？',
+  '如果可以带对方去任何地方，你会选哪里？',
+  '你最大的梦想是什么？有想过和对方一起实现吗？',
+  '用三个词形容你眼中的对方',
+  '说出一件你从未告诉过对方的小秘密',
+  '大声唱出你们最有意义的一首歌的副歌',
+  '做10个深蹲，同时每蹲一下说一句情话',
+  '用舞蹈动作描述你们相遇的故事',
+  '模仿你心目中对方最可爱的表情动作',
+  '闭上眼睛，凭感觉描述对方今天穿的衣服',
+  '用婴儿语气向对方撒娇30秒',
+  '说出5件你比对方做得更好的事（不允许谦虚）',
+  '表演一段你们第一次约会的场景',
+  '用最动听的声音给对方读一段文字',
+  '向对方告白，好像这是你们第一次',
+];
+
+const BOARD_WARMUP_TASKS = [
+  '分享一段你们最美好的共同记忆，说出细节',
+  '说出一件对方做过的、让你最感动的事',
+  '告诉对方你最担心失去他/她的原因',
+  '说说你觉得你们最像的一个地方',
+  '分享一个只有你们两人才懂的私密笑话或暗号',
+  '说出你希望未来五年两人一起完成的一件事',
+  '告诉对方你最欣赏他/她待人的方式是什么',
+  '说出对方对你人生影响最大的一句话',
+  '分享你第一次带对方见家人时心里在想什么',
+  '说出你觉得两人感情最深厚的一个时刻',
+  '告诉对方你最感激他/她为你做的一件小事',
+  '说说如果生命中没有对方，你的生活会有什么不同',
+  '为对方创作一首即兴"迷你情歌"（至少4句）',
+  '说出一件你一直想对对方说但没说出口的话',
+  '两人各说三件希望对方记住的事',
+];
+
+const BOARD_CHANCE_CARDS = [
+  { text:'你发现了一笔宝藏！获得200金币', effect:'coins', value:200 },
+  { text:'股市大涨！获得150金币红利', effect:'coins', value:150 },
+  { text:'意外收到礼物！获得100金币', effect:'coins', value:100 },
+  { text:'收到神秘礼包！获得一张随机道具卡', effect:'item', value:1 },
+  { text:'前进到最近的道具商店', effect:'move_to', value:'shop' },
+  { text:'比赛获奖！每位玩家向你支付50金币', effect:'collect_all', value:50 },
+  { text:'银行失误多转给你100金币（不退还）', effect:'coins', value:100 },
+  { text:'被小偷光顾！损失80金币', effect:'coins', value:-80 },
+  { text:'税务稽查！缴纳当前金币的10%', effect:'percent_tax', value:0.1 },
+  { text:'时光倒流！后退6格', effect:'move', value:-6 },
+  { text:'获得免费通行证！', effect:'get_item', value:'pass' },
+  { text:'中了彩票！获得300金币', effect:'coins', value:300 },
+  { text:'汽车维修费用！损失50金币', effect:'coins', value:-50 },
+  { text:'朋友生日请吃饭！损失100金币', effect:'coins', value:-100 },
+  { text:'旅行计划受阻，损失所有临时收入（损失30金币）', effect:'coins', value:-30 },
+  { text:'获得幸运骰子！', effect:'get_item', value:'lucky' },
+  { text:'幸运！直接前进5格', effect:'move', value:5 },
+  { text:'获得炸弹卡！', effect:'get_item', value:'bomb' },
+  { text:'好运连连！额外获得一次掷骰机会', effect:'extra_roll', value:1 },
+  { text:'获得传送卡！', effect:'get_item', value:'teleport' },
+];
+
+const BOARD_COMMUNITY_CARDS = [
+  { text:'社区筹款成功！获得100金币', effect:'coins', value:100 },
+  { text:'街道改造补贴！获得80金币', effect:'coins', value:80 },
+  { text:'生日快乐！每位玩家送你30金币', effect:'collect_all', value:30 },
+  { text:'慈善捐款！你捐出50金币', effect:'coins', value:-50 },
+  { text:'节日红包！获得120金币', effect:'coins', value:120 },
+  { text:'医疗费用报销！获得60金币', effect:'coins', value:60 },
+  { text:'年终奖金！获得200金币', effect:'coins', value:200 },
+  { text:'社区表彰！获得建设卡一张', effect:'get_item', value:'build' },
+  { text:'水电费账单！缴纳40金币', effect:'coins', value:-40 },
+  { text:'环保奖励！获得冻结卡一张', effect:'get_item', value:'freeze' },
+  { text:'中秋节礼金！获得150金币', effect:'coins', value:150 },
+  { text:'街坊互助！向最近玩家支付60金币', effect:'pay_leader', value:60 },
+  { text:'社区共建基金！获得90金币', effect:'coins', value:90 },
+  { text:'节日聚餐费！支付70金币', effect:'coins', value:-70 },
+  { text:'社区彩票中奖！获得250金币', effect:'coins', value:250 },
+];
+
+const BOARD = {
+  playerCount: 2,
+  players: [],
+  currentPlayer: 0,
+  rolling: false,
+  over: false,
+  round: 1,
+  maxRounds: 20,
+  contactId: 'none',
+  showToken: false,
+  _history: [],
+  // property ownership: { propId -> playerIndex }
+  ownership: {},
+  // houses per property: { propId -> count }
+  houses: {},
+  // frozen players: set of player indices
+  frozen: new Set(),
+  _pendingAction: null,
+};
+
+// ── Setup ──
+function initBoardSetup() {
+  BOARD.playerCount = 2;
+  BOARD.contactId = 'none';
+  renderBoardPlayerInputs();
+  buildBoardAiSelector();
+  const tog = $i('board-show-token-toggle');
+  if (tog) tog.checked = !!S.settings.showGameToken;
+  document.querySelectorAll('#board-setup-page .fly-count-btn').forEach((btn, i) => {
+    btn.classList.toggle('active', i === 0);
+  });
+}
+
+function setBoardPlayerCount(n, el) {
+  BOARD.playerCount = n;
+  document.querySelectorAll('#board-setup-page .fly-count-btn').forEach(b => b.classList.remove('active'));
+  if (el) el.classList.add('active');
+  renderBoardPlayerInputs();
+}
+
+function renderBoardPlayerInputs() {
+  const container = $i('board-setup-players');
+  if (!container) return;
+  container.innerHTML = '';
+  for (let i = 0; i < BOARD.playerCount; i++) {
+    const row = document.createElement('div');
+    row.className = 'fly-player-input-row';
+    row.innerHTML = `<span class="fly-player-emoji">${BOARD_PLAYER_EMOJIS[i]}</span>
+      <span class="fly-player-color-dot" style="background:${BOARD_PLAYER_COLORS[i]}"></span>
+      <input class="fly-player-input" id="board-player-name-${i}" type="text" placeholder="玩家${i+1}" value="玩家${i+1}" maxlength="8">`;
+    container.appendChild(row);
+  }
+}
+
+function buildBoardAiSelector() {
+  const el = $i('board-ai-selector');
+  if (!el) return;
+  el.innerHTML = '';
+  const contacts = Object.values(S._contacts || {});
+  const noBtn = document.createElement('button');
+  noBtn.className = 'gmk-ai-btn' + (BOARD.contactId === 'none' ? ' active' : '');
+  noBtn.textContent = '🚫 无助手';
+  noBtn.onclick = () => { BOARD.contactId = 'none'; buildBoardAiSelector(); };
+  el.appendChild(noBtn);
+  contacts.forEach(c => {
+    const btn = document.createElement('button');
+    btn.className = 'gmk-ai-btn' + (BOARD.contactId === c.id ? ' active' : '');
+    btn.textContent = (c.avatar || '🤖') + ' ' + c.name;
+    btn.onclick = () => { BOARD.contactId = c.id; buildBoardAiSelector(); };
+    el.appendChild(btn);
+  });
+}
+
+function startBoardGame() {
+  const players = [];
+  for (let i = 0; i < BOARD.playerCount; i++) {
+    const nameEl = $i(`board-player-name-${i}`);
+    players.push({
+      name: nameEl?.value.trim() || `玩家${i+1}`,
+      emoji: BOARD_PLAYER_EMOJIS[i],
+      color: BOARD_PLAYER_COLORS[i],
+      pos: 0,
+      coins: 1500,
+      items: [],
+      active: true,
+      skipped: false,
+    });
+  }
+  const tog = $i('board-show-token-toggle');
+  BOARD.showToken = tog ? tog.checked : false;
+  BOARD.players = players;
+  BOARD.currentPlayer = 0;
+  BOARD.rolling = false;
+  BOARD.over = false;
+  BOARD.round = 1;
+  BOARD.ownership = {};
+  BOARD.houses = {};
+  BOARD.frozen = new Set();
+  BOARD._history = [];
+  BOARD._pendingAction = null;
+
+  switchPage('board-game-page');
+  renderBoardMap();
+  renderBoardPlayerBar();
+  boardUpdateTurnInfo();
+  boardEnableDice(true);
+  boardLog(`🎲 游戏开始！每人各有1500金币，祝大家好运！`);
+}
+
+// ── Board Rendering ──
+function renderBoardMap() {
+  const mapEl = $i('board-map');
+  if (!mapEl) return;
+  mapEl.innerHTML = '';
+
+  // Create 40 cells arranged in a monopoly-style loop
+  // We'll show them as a 4-row grid representation
+  // Bottom row (0-9): spaces 0-9 L->R
+  // Left col (10-19): spaces 10-19 bottom->top
+  // Top row (20-29): spaces 20-29 L->R
+  // Right col (30-39): spaces 30-39 top->bottom
+
+  const grid = document.createElement('div');
+  grid.className = 'board-grid';
+
+  function makeCell(idx) {
+    const sp = BOARD_SPACE_LAYOUT[idx];
+    const cell = document.createElement('div');
+    cell.className = `board-cell board-cell-${sp.type}`;
+    cell.id = `board-cell-${idx}`;
+    let colorBar = '';
+    if (sp.type === 'land' && sp.color) {
+      colorBar = `<div class="board-cell-color" style="background:${sp.color}"></div>`;
+    }
+    // Show owner indicator
+    const ownerIdx = BOARD.ownership[sp.propId];
+    const ownerDot = (ownerIdx !== undefined) ?
+      `<div class="board-cell-owner" style="background:${BOARD_PLAYER_COLORS[ownerIdx]}"></div>` : '';
+    // Houses
+    const houseCount = BOARD.houses[sp.propId] || 0;
+    const houseDots = houseCount > 0 ? `<div class="board-cell-houses">${'🏠'.repeat(Math.min(houseCount,4))}</div>` : '';
+    cell.innerHTML = `${colorBar}<div class="board-cell-icon">${sp.icon}</div><div class="board-cell-name">${sp.name}</div>${ownerDot}${houseDots}<div class="board-cell-tokens" id="board-tokens-${idx}"></div>`;
+    return cell;
+  }
+
+  // Build 11x11 grid layout
+  // Corner cells: 0(BR), 10(BL), 20(TL), 30(TR) => we use a simpler linear display
+  // For mobile: vertical scroll list
+  const listWrap = document.createElement('div');
+  listWrap.className = 'board-space-list';
+  for (let i = 0; i < 40; i++) {
+    listWrap.appendChild(makeCell(i));
+  }
+  mapEl.appendChild(listWrap);
+  boardUpdateMapTokens();
+}
+
+function boardUpdateMapTokens() {
+  document.querySelectorAll('[id^="board-tokens-"]').forEach(el => el.innerHTML = '');
+  BOARD.players.forEach((p, idx) => {
+    if (!p.active) return;
+    const container = $i(`board-tokens-${p.pos}`);
+    if (container) {
+      const token = document.createElement('div');
+      token.className = 'board-token';
+      token.style.background = p.color;
+      token.title = p.name;
+      token.textContent = p.emoji;
+      container.appendChild(token);
+    }
+  });
+}
+
+function renderBoardPlayerBar() {
+  const bar = $i('board-player-bar');
+  if (!bar) return;
+  bar.innerHTML = '';
+  BOARD.players.forEach((p, idx) => {
+    const card = document.createElement('div');
+    const isActive = idx === BOARD.currentPlayer && !BOARD.over;
+    card.className = 'board-player-card' + (isActive ? ' active' : '') + (!p.active ? ' bankrupt' : '');
+    const propCount = Object.values(BOARD.ownership).filter(o => o === idx).length;
+    card.innerHTML = `<div class="board-player-card-emoji">${p.emoji}</div>
+      <div class="board-player-card-info">
+        <div class="board-player-card-name">${esc(p.name)}</div>
+        <div class="board-player-card-coins">💰${p.coins}</div>
+        <div class="board-player-card-props">${propCount > 0 ? `🏡×${propCount}` : ''}${p.items.length > 0 ? ` 🎒×${p.items.length}` : ''}</div>
+      </div>`;
+    bar.appendChild(card);
+  });
+  // update round label
+  const rl = $i('board-round-label');
+  if (rl) rl.textContent = `第${BOARD.round}回合`;
+}
+
+function boardUpdateTurnInfo() {
+  const el = $i('board-turn-info');
+  if (!el) return;
+  if (BOARD.over) { el.textContent = '游戏结束！'; return; }
+  const p = BOARD.players[BOARD.currentPlayer];
+  if (!p) return;
+  el.innerHTML = `${p.emoji} <strong>${esc(p.name)}</strong> 的回合`;
+}
+
+function boardEnableDice(enabled) {
+  const btn = $i('board-dice-btn');
+  if (btn) btn.disabled = !enabled;
+}
+
+// ── Log ──
+function boardLog(msg) {
+  const log = $i('board-log');
+  if (!log) return;
+  const div = document.createElement('div');
+  div.className = 'board-log-entry';
+  div.textContent = msg;
+  log.prepend(div);
+  if (log.children.length > 30) log.removeChild(log.lastChild);
+}
+
+// ── Dice ──
+function boardRollDice() {
+  if (BOARD.rolling || BOARD.over) return;
+  const p = BOARD.players[BOARD.currentPlayer];
+  if (!p || !p.active) return;
+
+  BOARD.rolling = true;
+  boardEnableDice(false);
+
+  // Check if player has lucky dice item
+  const hasLucky = p.items.includes('lucky');
+  let result;
+  if (hasLucky) {
+    const r1 = Math.floor(Math.random() * 6) + 1;
+    const r2 = Math.floor(Math.random() * 6) + 1;
+    result = Math.max(r1, r2);
+    p.items.splice(p.items.indexOf('lucky'), 1);
+    toast(`🎲 幸运骰子！掷出 ${r1} 和 ${r2}，取最大值 ${result}`);
+  } else {
+    result = Math.floor(Math.random() * 6) + 1;
+  }
+
+  // Animate dice
+  const btn = $i('board-dice-btn');
+  if (btn) btn.textContent = DICE_FACES[result-1] + ' ' + result;
+  boardLog(`${p.emoji} ${p.name} 掷出了 ${result} 点`);
+
+  setTimeout(() => {
+    if (btn) btn.textContent = '🎲 掷骰子';
+    BOARD.rolling = false;
+    boardMovePlayer(BOARD.currentPlayer, result);
+  }, 600);
+}
+
+async function boardMovePlayer(playerIdx, steps) {
+  const p = BOARD.players[playerIdx];
+  if (!p) return;
+
+  const oldPos = p.pos;
+  let newPos = (p.pos + steps) % 40;
+  // check if passed start (space 0)
+  if (newPos < oldPos && steps > 0) {
+    // passed start - collect 200
+    p.coins += 200;
+    boardLog(`🏠 ${p.name} 经过出发点，获得200金币！`);
+    toast(`🏠 ${p.name} 经过出发点，获得 200金币！`);
+  }
+  p.pos = newPos;
+
+  renderBoardPlayerBar();
+  boardUpdateMapTokens();
+
+  const sp = BOARD_SPACE_LAYOUT[newPos];
+  boardLog(`${p.emoji} ${p.name} 移动到 ${sp.icon} ${sp.name}（第${newPos+1}格）`);
+
+  await boardDelay(400);
+  await boardTriggerSpace(playerIdx);
+}
+
+function boardDelay(ms) {
+  return new Promise(r => setTimeout(r, ms));
+}
+
+async function boardTriggerSpace(playerIdx) {
+  const p = BOARD.players[playerIdx];
+  const sp = BOARD_SPACE_LAYOUT[p.pos];
+
+  switch (sp.type) {
+    case 'start':
+      p.coins += 200;
+      boardLog(`🏠 ${p.name} 停在出发点，额外获得200金币！`);
+      renderBoardPlayerBar();
+      boardNextTurn();
+      break;
+
+    case 'land': {
+      const prop = BOARD_PROPERTIES.find(pr => pr.id === sp.propId);
+      if (!prop) { boardNextTurn(); return; }
+      const ownerIdx = BOARD.ownership[sp.propId];
+      if (ownerIdx === undefined) {
+        // unowned - offer to buy
+        if (p.coins >= prop.price) {
+          boardShowBuyOverlay(playerIdx, prop);
+        } else {
+          boardLog(`${p.name} 金币不足，无法购买 ${prop.name}`);
+          boardNextTurn();
+        }
+      } else if (ownerIdx === playerIdx) {
+        boardLog(`🏡 ${p.name} 停在自己的 ${prop.name}，无事发生`);
+        boardNextTurn();
+      } else {
+        // pay rent
+        const houseCount = BOARD.houses[prop.id] || 0;
+        const rent = prop.rent[houseCount];
+        // Check if current player has pass card
+        if (p.items.includes('pass')) {
+          p.items.splice(p.items.indexOf('pass'), 1);
+          boardLog(`🛡️ ${p.name} 使用免费通行证，免付租金！`);
+          boardNextTurn();
+        } else {
+          const owner = BOARD.players[ownerIdx];
+          const actualRent = Math.min(rent, p.coins + 10); // prevent going too negative
+          p.coins -= actualRent;
+          owner.coins += actualRent;
+          boardLog(`💸 ${p.name} 向 ${owner.name} 支付租金 ${actualRent}金币（${prop.name}）`);
+          toast(`💸 租金 ${actualRent}金币 → ${owner.name}`);
+          renderBoardPlayerBar();
+          await boardCheckBankruptcy(playerIdx);
+        }
+      }
+      break;
+    }
+
+    case 'chance': {
+      const card = BOARD_CHANCE_CARDS[Math.floor(Math.random() * BOARD_CHANCE_CARDS.length)];
+      await boardApplyCard(playerIdx, card, '🎰 机会');
+      break;
+    }
+
+    case 'community': {
+      const card = BOARD_COMMUNITY_CARDS[Math.floor(Math.random() * BOARD_COMMUNITY_CARDS.length)];
+      await boardApplyCard(playerIdx, card, '📦 公共基金');
+      break;
+    }
+
+    case 'couple_challenge': {
+      const task = BOARD_COUPLE_TASKS[Math.floor(Math.random() * BOARD_COUPLE_TASKS.length)];
+      await boardShowEventOverlay('💑 情侣挑战', p.emoji + ' ' + p.name + ' 触发', task, 'couple_challenge', playerIdx);
+      break;
+    }
+
+    case 'truth_dare': {
+      const task = BOARD_TRUTH_DARE[Math.floor(Math.random() * BOARD_TRUTH_DARE.length)];
+      await boardShowEventOverlay('🎭 真心话大冒险', p.emoji + ' ' + p.name + ' 触发', task, 'truth_dare', playerIdx);
+      break;
+    }
+
+    case 'warmup': {
+      const task = BOARD_WARMUP_TASKS[Math.floor(Math.random() * BOARD_WARMUP_TASKS.length)];
+      await boardShowEventOverlay('🔥 情侣升温', p.emoji + ' ' + p.name + ' 触发', task, 'warmup', playerIdx);
+      break;
+    }
+
+    case 'tax': {
+      const amount = sp.name === '奢侈税' ? 100 : 50;
+      p.coins -= amount;
+      boardLog(`💰 ${p.name} 缴纳税款 ${amount}金币`);
+      toast(`💰 税款 ${amount}金币`);
+      renderBoardPlayerBar();
+      await boardCheckBankruptcy(playerIdx);
+      break;
+    }
+
+    case 'jail':
+      p.skipped = true;
+      boardLog(`⛓️ ${p.name} 需要休息，跳过下一回合`);
+      toast(`⛓️ ${p.name} 跳过下一回合`);
+      boardNextTurn();
+      break;
+
+    case 'free':
+      boardLog(`🅿️ ${p.name} 停在免费停车场，无事发生`);
+      boardNextTurn();
+      break;
+
+    case 'back3': {
+      const newP = (p.pos - 3 + 40) % 40;
+      p.pos = newP;
+      boardLog(`⬅️ ${p.name} 后退3格到 ${BOARD_SPACE_LAYOUT[newP].name}`);
+      boardUpdateMapTokens();
+      await boardDelay(300);
+      await boardTriggerSpace(playerIdx);
+      break;
+    }
+
+    case 'forward3': {
+      const newP = (p.pos + 3) % 40;
+      p.pos = newP;
+      boardLog(`➡️ ${p.name} 前进3格到 ${BOARD_SPACE_LAYOUT[newP].name}`);
+      boardUpdateMapTokens();
+      await boardDelay(300);
+      await boardTriggerSpace(playerIdx);
+      break;
+    }
+
+    case 'shop':
+      boardShowShop(playerIdx);
+      break;
+
+    default:
+      boardNextTurn();
+  }
+}
+
+async function boardApplyCard(playerIdx, card, label) {
+  const p = BOARD.players[playerIdx];
+  boardLog(`${label}: ${card.text}`);
+  toast(card.text);
+
+  switch (card.effect) {
+    case 'coins':
+      p.coins += card.value;
+      renderBoardPlayerBar();
+      if (card.value < 0) await boardCheckBankruptcy(playerIdx);
+      else boardNextTurn();
+      break;
+    case 'item':
+    case 'get_item': {
+      const itemId = card.value === 1 ?
+        BOARD_ITEM_CARDS[Math.floor(Math.random() * BOARD_ITEM_CARDS.length)].id :
+        card.value;
+      p.items.push(itemId);
+      const item = BOARD_ITEM_CARDS.find(it => it.id === itemId);
+      boardLog(`${p.name} 获得道具：${item?.icon||''} ${item?.name||itemId}`);
+      renderBoardPlayerBar();
+      boardNextTurn();
+      break;
+    }
+    case 'collect_all': {
+      let total = 0;
+      BOARD.players.forEach((other, idx) => {
+        if (idx !== playerIdx && other.active) {
+          const pay = Math.min(card.value, other.coins + 10);
+          other.coins -= pay;
+          p.coins += pay;
+          total += pay;
+        }
+      });
+      boardLog(`${p.name} 向所有玩家收取各 ${card.value}金币，共 ${total}金币`);
+      renderBoardPlayerBar();
+      boardNextTurn();
+      break;
+    }
+    case 'pay_leader': {
+      // pay richest player
+      const richest = BOARD.players.reduce((best, pl, idx) => {
+        if (idx === playerIdx || !pl.active) return best;
+        return (!best || pl.coins > BOARD.players[best].coins) ? idx : best;
+      }, -1);
+      if (richest >= 0) {
+        const pay = Math.min(card.value, p.coins + 10);
+        p.coins -= pay;
+        BOARD.players[richest].coins += pay;
+        boardLog(`${p.name} 向 ${BOARD.players[richest].name} 支付 ${pay}金币`);
+      }
+      renderBoardPlayerBar();
+      if (p.coins < 0) await boardCheckBankruptcy(playerIdx);
+      else boardNextTurn();
+      break;
+    }
+    case 'percent_tax': {
+      const tax = Math.floor(p.coins * card.value);
+      p.coins -= tax;
+      boardLog(`${p.name} 缴纳 ${tax}金币（10%税）`);
+      renderBoardPlayerBar();
+      if (p.coins < 0) await boardCheckBankruptcy(playerIdx);
+      else boardNextTurn();
+      break;
+    }
+    case 'move':
+      await boardMovePlayer(playerIdx, card.value);
+      break;
+    case 'move_to': {
+      // move to next shop
+      let nextPos = (p.pos + 1) % 40;
+      for (let i = 0; i < 40; i++) {
+        if (BOARD_SPACE_LAYOUT[nextPos].type === card.value) break;
+        nextPos = (nextPos + 1) % 40;
+      }
+      const steps = (nextPos - p.pos + 40) % 40;
+      await boardMovePlayer(playerIdx, steps || 40);
+      break;
+    }
+    case 'extra_roll':
+      boardLog(`🎲 ${p.name} 获得额外掷骰机会！`);
+      boardEnableDice(true);
+      BOARD.rolling = false;
+      break;
+    default:
+      boardNextTurn();
+  }
+}
+
+// ── Buy Overlay ──
+function boardShowBuyOverlay(playerIdx, prop) {
+  const p = BOARD.players[playerIdx];
+  const nameEl = $i('board-buy-name');
+  const infoEl = $i('board-buy-info');
+  if (nameEl) nameEl.textContent = `${p.emoji} ${p.name} 停在 ${prop.name}`;
+  if (infoEl) infoEl.innerHTML = `💰 购买价格：<strong>${prop.price}</strong> 金币<br>🏠 基础租金：${prop.rent[0]} 金币<br>💎 当前余额：${p.coins} 金币`;
+  BOARD._pendingAction = { type: 'buy', playerIdx, propId: prop.id };
+  const ov = $i('board-buy-overlay');
+  if (ov) ov.style.display = 'flex';
+}
+
+function boardConfirmBuy() {
+  const ov = $i('board-buy-overlay');
+  if (ov) ov.style.display = 'none';
+  const action = BOARD._pendingAction;
+  if (!action || action.type !== 'buy') return;
+  const p = BOARD.players[action.playerIdx];
+  const prop = BOARD_PROPERTIES.find(pr => pr.id === action.propId);
+  if (!prop || p.coins < prop.price) { toast('金币不足！'); boardNextTurn(); return; }
+  p.coins -= prop.price;
+  BOARD.ownership[prop.id] = action.playerIdx;
+  BOARD.houses[prop.id] = 0;
+  boardLog(`🏡 ${p.name} 购买了 ${prop.name}（-${prop.price}金币）`);
+  toast(`🏡 ${p.name} 购买 ${prop.name} 成功！`);
+  renderBoardPlayerBar();
+  renderBoardMap();
+  boardNextTurn();
+}
+
+function boardDeclineBuy() {
+  const ov = $i('board-buy-overlay');
+  if (ov) ov.style.display = 'none';
+  boardLog(`${BOARD.players[BOARD.currentPlayer]?.name} 放弃购买`);
+  boardNextTurn();
+}
+
+// ── Shop ──
+function boardShowShop(playerIdx) {
+  const p = BOARD.players[playerIdx];
+  const listEl = $i('board-shop-list');
+  if (!listEl) { boardNextTurn(); return; }
+  listEl.innerHTML = '';
+  BOARD_ITEM_CARDS.forEach(item => {
+    const btn = document.createElement('button');
+    btn.className = 'board-shop-item';
+    btn.disabled = p.coins < 50;
+    btn.innerHTML = `<span class="board-shop-icon">${item.icon}</span>
+      <div class="board-shop-info">
+        <div class="board-shop-name">${item.name}</div>
+        <div class="board-shop-desc">${item.desc}</div>
+      </div>
+      <span class="board-shop-price">50金币</span>`;
+    btn.onclick = () => {
+      if (p.coins < 50) { toast('金币不足！'); return; }
+      p.coins -= 50;
+      p.items.push(item.id);
+      boardLog(`🛒 ${p.name} 购买了 ${item.icon} ${item.name}`);
+      toast(`🛒 购买 ${item.name} 成功！`);
+      renderBoardPlayerBar();
+      BOARD._pendingAction = null;
+      const ov = $i('board-item-overlay');
+      if (ov) ov.style.display = 'none';
+      boardNextTurn();
+    };
+    listEl.appendChild(btn);
+  });
+  BOARD._pendingAction = { type: 'shop' };
+  const ov = $i('board-item-overlay');
+  if (ov) ov.style.display = 'flex';
+}
+
+function boardCloseShop() {
+  const ov = $i('board-item-overlay');
+  if (ov) ov.style.display = 'none';
+  const wasShop = BOARD._pendingAction?.type === 'shop';
+  BOARD._pendingAction = null;
+  if (wasShop) boardNextTurn();
+}
+
+// ── Use Item ──
+function boardUseItem() {
+  const p = BOARD.players[BOARD.currentPlayer];
+  if (!p || BOARD.over) return;
+  if (p.items.length === 0) { toast('你没有道具卡！'); return; }
+  const listEl = $i('board-use-item-list');
+  if (!listEl) return;
+  listEl.innerHTML = '';
+  p.items.forEach((itemId, idx) => {
+    const item = BOARD_ITEM_CARDS.find(it => it.id === itemId);
+    if (!item) return;
+    const btn = document.createElement('button');
+    btn.className = 'board-shop-item';
+    btn.innerHTML = `<span class="board-shop-icon">${item.icon}</span>
+      <div class="board-shop-info">
+        <div class="board-shop-name">${item.name}</div>
+        <div class="board-shop-desc">${item.desc}</div>
+      </div>`;
+    btn.onclick = () => {
+      boardCloseUseItem();
+      boardActivateItem(BOARD.currentPlayer, itemId, idx);
+    };
+    listEl.appendChild(btn);
+  });
+  const ov = $i('board-use-item-overlay');
+  if (ov) ov.style.display = 'flex';
+}
+
+function boardCloseUseItem() {
+  const ov = $i('board-use-item-overlay');
+  if (ov) ov.style.display = 'none';
+}
+
+function boardActivateItem(playerIdx, itemId, itemIdx) {
+  const p = BOARD.players[playerIdx];
+  p.items.splice(itemIdx, 1);
+  const item = BOARD_ITEM_CARDS.find(it => it.id === itemId);
+  boardLog(`${p.emoji} ${p.name} 使用了 ${item?.icon||''} ${item?.name||itemId}`);
+
+  switch (itemId) {
+    case 'bomb': {
+      // find next active opponent
+      const opponents = BOARD.players.map((pl, idx) => ({pl, idx})).filter(({pl, idx}) => idx !== playerIdx && pl.active);
+      if (opponents.length === 0) { toast('没有对手！'); return; }
+      // pick random opponent
+      const target = opponents[Math.floor(Math.random() * opponents.length)];
+      target.pl.pos = Math.max(0, (target.pl.pos - 5 + 40) % 40);
+      boardLog(`💣 炸弹！${target.pl.name} 后退5格`);
+      toast(`💣 ${target.pl.name} 被炸弹击中，后退5格！`);
+      boardUpdateMapTokens();
+      break;
+    }
+    case 'teleport': {
+      const ownedProps = Object.entries(BOARD.ownership).filter(([propId, ownerIdx]) => ownerIdx === playerIdx);
+      if (ownedProps.length === 0) { toast('你没有地产！'); p.items.splice(0, 0, itemId); return; }
+      const propId = parseInt(ownedProps[Math.floor(Math.random() * ownedProps.length)][0]);
+      const spaceIdx = BOARD_SPACE_LAYOUT.findIndex(sp => sp.propId === propId);
+      if (spaceIdx >= 0) {
+        p.pos = spaceIdx;
+        boardLog(`🔮 ${p.name} 传送到 ${BOARD_SPACE_LAYOUT[spaceIdx].name}`);
+        toast(`🔮 传送到 ${BOARD_SPACE_LAYOUT[spaceIdx].name}！`);
+        boardUpdateMapTokens();
+      }
+      break;
+    }
+    case 'build': {
+      const ownedProps = Object.entries(BOARD.ownership).filter(([propId, ownerIdx]) => ownerIdx === playerIdx);
+      if (ownedProps.length === 0) { toast('你没有地产！'); return; }
+      const propId = parseInt(ownedProps[0][0]);
+      BOARD.houses[propId] = Math.min(4, (BOARD.houses[propId] || 0) + 1);
+      const prop = BOARD_PROPERTIES.find(pr => pr.id === propId);
+      boardLog(`🏗️ ${p.name} 在 ${prop?.name||''} 建造了一栋房子`);
+      toast(`🏗️ 建造成功！`);
+      renderBoardMap();
+      break;
+    }
+    case 'freeze': {
+      const opponents2 = BOARD.players.map((pl, idx) => ({pl, idx})).filter(({pl, idx}) => idx !== playerIdx && pl.active);
+      if (opponents2.length === 0) { toast('没有对手！'); return; }
+      const target2 = opponents2[Math.floor(Math.random() * opponents2.length)];
+      target2.pl.skipped = true;
+      boardLog(`❄️ ${target2.pl.name} 被冻结，跳过下一回合`);
+      toast(`❄️ ${target2.pl.name} 被冻结！`);
+      break;
+    }
+    case 'lucky':
+    case 'pass':
+      // These are used automatically during gameplay
+      p.items.push(itemId); // put it back
+      toast(`${item?.name} 会在适当时机自动生效！`);
+      break;
+    default:
+      break;
+  }
+  renderBoardPlayerBar();
+}
+
+// ── Event Overlay (couple/truth/warmup) ──
+function boardShowEventOverlay(title, player, text, type, playerIdx) {
+  return new Promise(resolve => {
+    const ov = $i('board-action-overlay');
+    const typeEl = $i('board-event-type');
+    const playerEl = $i('board-event-player');
+    const textEl = $i('board-event-text');
+    const aiEl = $i('board-ai-response');
+
+    if (typeEl) typeEl.textContent = title;
+    if (playerEl) playerEl.textContent = player;
+    if (textEl) textEl.textContent = text;
+    if (aiEl) { aiEl.innerHTML = ''; aiEl.style.display = 'none'; }
+    if (ov) ov.style.display = 'flex';
+
+    BOARD._pendingAction = { type: 'event', resolve };
+
+    // Call AI if configured
+    if (BOARD.contactId !== 'none') {
+      boardCallAIForEvent(type, text, playerIdx).then(aiText => {
+        if (aiText && aiEl) {
+          aiEl.innerHTML = `<div class="fly-ai-response-label">🤖 AI回应：</div><div>${esc(aiText)}</div>`;
+          aiEl.style.display = 'block';
+        }
+      });
+    }
+  });
+}
+
+function boardEventDone() {
+  const ov = $i('board-action-overlay');
+  if (ov) ov.style.display = 'none';
+  const action = BOARD._pendingAction;
+  BOARD._pendingAction = null;
+  if (action?.resolve) action.resolve();
+  boardNextTurn();
+}
+
+async function boardCallAIForEvent(type, taskText, playerIdx) {
+  const contact = BOARD.contactId !== 'none' ? S._contacts[BOARD.contactId] : null;
+  const apiKey = contact?.apiKey || S.settings.apiKey;
+  if (!apiKey) return null;
+
+  const p = BOARD.players[playerIdx];
+  const gameContext = `当前游戏状态：${BOARD.players.map(pl => `${pl.name}(${pl.coins}金币,${Object.values(BOARD.ownership).filter(o=>o===BOARD.players.indexOf(pl)).length}处地产)`).join('，')}。第${BOARD.round}回合。`;
+  const typeLabel = { couple_challenge:'情侣挑战', truth_dare:'真心话大冒险', warmup:'情侣升温' }[type] || '游戏事件';
+  const systemPrompt = contact?.system
+    ? `${contact.system}\n你现在在陪伴玩家进行"幸运大冒险"桌游。请用角色口吻对当前的${typeLabel}任务发表评论，风格温柔有趣，不超过60字。`
+    : `你是游戏主持人，正在主持"幸运大冒险"桌游。请对当前${typeLabel}任务发表简短有趣的评论，不超过60字。`;
+  const userMsg = `${gameContext}\n${p.name}触发了${typeLabel}：${taskText}`;
+
+  try {
+    const history = BOARD._history.slice(-18);
+    const res = await fetch(contact?.apiUrl || 'https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json', 'HTTP-Referer': 'https://raimos.app', 'X-Title': 'Raimos' },
+      body: JSON.stringify({ model: contact?.model || S.settings.model || 'openai/gpt-4o-mini', max_tokens: 100, stream: false, messages: [{ role: 'system', content: systemPrompt }, ...history, { role: 'user', content: userMsg }] })
+    });
+    const data = await res.json();
+    const txt = data.choices?.[0]?.message?.content?.trim() || '';
+    if (txt) {
+      BOARD._history.push({ role: 'user', content: userMsg });
+      BOARD._history.push({ role: 'assistant', content: txt });
+      if (BOARD._history.length > 20) BOARD._history = BOARD._history.slice(-20);
+      // Show token badge
+      if (BOARD.showToken && data.usage) {
+        const aiEl = $i('board-ai-response');
+        if (aiEl) {
+          const badge = document.createElement('div');
+          badge.style.cssText = 'font-size:10px;color:var(--text3);margin-top:4px;text-align:right';
+          badge.textContent = `⚡ ${data.usage.total_tokens || 0} tokens`;
+          aiEl.appendChild(badge);
+        }
+      }
+    }
+    return txt;
+  } catch (e) { return null; }
+}
+
+// ── Bankruptcy ──
+async function boardCheckBankruptcy(playerIdx) {
+  const p = BOARD.players[playerIdx];
+  if (p.coins < 0) {
+    p.active = false;
+    boardLog(`💔 ${p.name} 破产出局！（${p.coins}金币）`);
+    toast(`💔 ${p.name} 破产淘汰！`);
+    // Remove their properties
+    Object.keys(BOARD.ownership).forEach(propId => {
+      if (BOARD.ownership[propId] === playerIdx) delete BOARD.ownership[propId];
+    });
+    renderBoardPlayerBar();
+    renderBoardMap();
+    const activePlayers = BOARD.players.filter(pl => pl.active);
+    if (activePlayers.length <= 1) {
+      BOARD.over = true;
+      setTimeout(boardShowResult, 800);
+      return;
+    }
+  }
+  boardNextTurn();
+}
+
+// ── Turn Management ──
+function boardNextTurn() {
+  if (BOARD.over) return;
+
+  // Check if all 40 turns passed (1 round = all players move once)
+  let next = (BOARD.currentPlayer + 1) % BOARD.playerCount;
+  let loops = 0;
+  while (!BOARD.players[next]?.active && loops < BOARD.playerCount) {
+    next = (next + 1) % BOARD.playerCount;
+    loops++;
+  }
+
+  // If we've gone past all players, increment round
+  if (next <= BOARD.currentPlayer || BOARD.players.filter(p => p.active).length < 2) {
+    BOARD.round++;
+    if (BOARD.round > BOARD.maxRounds) {
+      BOARD.over = true;
+      setTimeout(boardShowResult, 500);
+      return;
+    }
+    boardLog(`━━ 第 ${BOARD.round} 回合开始 ━━`);
+  }
+
+  BOARD.currentPlayer = next;
+  const p = BOARD.players[next];
+
+  // Handle frozen/skipped
+  if (p && p.skipped) {
+    p.skipped = false;
+    boardLog(`💤 ${p.name} 跳过本回合`);
+    toast(`💤 ${p.name} 跳过本回合`);
+    setTimeout(boardNextTurn, 800);
+    return;
+  }
+
+  renderBoardPlayerBar();
+  boardUpdateTurnInfo();
+  boardEnableDice(true);
+}
+
+// ── Result ──
+function boardShowResult() {
+  BOARD.over = true;
+  boardEnableDice(false);
+
+  const rankEl = $i('board-result-rankings');
+  if (!rankEl) return;
+
+  // Calculate total wealth (coins + property values)
+  const ranked = BOARD.players.map((p, idx) => {
+    const propValue = Object.entries(BOARD.ownership)
+      .filter(([, ownerIdx]) => ownerIdx === idx)
+      .reduce((sum, [propId]) => {
+        const prop = BOARD_PROPERTIES.find(pr => pr.id === parseInt(propId));
+        return sum + (prop?.price || 0);
+      }, 0);
+    return { ...p, propValue, totalWealth: p.coins + propValue };
+  }).sort((a, b) => {
+    if (!a.active && b.active) return 1;
+    if (a.active && !b.active) return -1;
+    return b.totalWealth - a.totalWealth;
+  });
+
+  const medals = ['🥇', '🥈', '🥉', '4️⃣'];
+  rankEl.innerHTML = ranked.map((p, i) => `
+    <div style="display:flex;align-items:center;gap:10px;padding:8px;border-radius:10px;background:${i===0?'rgba(255,215,0,0.15)':'var(--hover)'};margin-bottom:6px">
+      <span style="font-size:20px">${medals[i]||''}</span>
+      <span style="font-size:18px">${p.emoji}</span>
+      <div style="flex:1">
+        <div style="font-weight:700">${esc(p.name)}</div>
+        <div style="font-size:12px;color:var(--text3)">💰${p.coins} + 🏡${p.propValue} = ${p.totalWealth}</div>
+      </div>
+      ${!p.active ? '<span style="font-size:11px;color:#e74c3c">破产</span>' : ''}
+    </div>`).join('');
+
+  const ov = $i('board-result-overlay');
+  if (ov) ov.style.display = 'flex';
+}
+
+function confirmBoardQuit() {
+  if (BOARD.over) { switchPage('game-hub-page'); return; }
+  if (confirm('确定要退出游戏吗？')) switchPage('game-hub-page');
+}
+
+// ══════════════════════════════════════════
+// 🎓 博学知识家 (Scholar Quiz Game)
+// ══════════════════════════════════════════
+
+const QUIZ_PRESET_CATEGORIES = [
+  { name:'水果', icon:'🍎', words:['苹果','香蕉','橙子','草莓','西瓜','葡萄','芒果','菠萝','桃子','梨','樱桃','柠檬','蓝莓','火龙果','荔枝','龙眼','榴莲','木瓜','枇杷','山楂','柿子','椰子','无花果','猕猴桃','番石榴'] },
+  { name:'动物', icon:'🐾', words:['狗','猫','狮子','老虎','大象','熊猫','猴子','兔子','马','牛','羊','猪','鸡','鸭','鱼','蛇','青蛙','乌龟','鳄鱼','老鹰','企鹅','海豚','鲸鱼','熊','狐狸','狼','鹿','长颈鹿','斑马','北极熊'] },
+  { name:'国家首都', icon:'🌍', words:['北京','东京','巴黎','伦敦','柏林','华盛顿','莫斯科','渥太华','堪培拉','首尔','曼谷','新德里','雅加达','马尼拉','河内','吉隆坡','新加坡','开罗','内罗毕','利马','布宜诺斯艾利斯','巴西利亚','墨西哥城','渥太华','惠灵顿'] },
+  { name:'歌手', icon:'🎵', words:['周杰伦','邓紫棋','林俊杰','薛之谦','华晨宇','王力宏','周笔畅','张杰','汪峰','鹿晗','蔡依林','张韶涵','孙燕姿','梁静茹','陈奕迅','刘若英','五月天','苏打绿','Beyond','周华健'] },
+  { name:'电影', icon:'🎬', words:['哪吒','流浪地球','战狼','你好李焕英','唐人街探案','长津湖','满江红','消失的她','封神','奥本海默','芭比','蜘蛛侠','复仇者联盟','阿凡达','狮子王','冰雪奇缘','疯狂原始人','美丽心灵','泰坦尼克号','肖申克的救赎'] },
+  { name:'食物', icon:'🍜', words:['米饭','面条','饺子','包子','馒头','炒饭','火锅','披萨','汉堡','寿司','拉面','烤鸭','红烧肉','麻婆豆腐','宫保鸡丁','鱼香肉丝','回锅肉','糖醋里脊','清蒸鱼','蛋炒饭','螺蛳粉','臭豆腐','章鱼小丸子','煎饼果子'] },
+  { name:'品牌', icon:'👟', words:['耐克','阿迪达斯','苹果','华为','小米','特斯拉','奔驰','宝马','奥迪','可口可乐','百事','麦当劳','肯德基','海底捞','联合利华','宝洁','路易威登','古驰','香奈儿','爱马仕','星巴克','优衣库','H&M','ZARA'] },
+  { name:'颜色', icon:'🎨', words:['红色','橙色','黄色','绿色','蓝色','紫色','粉色','白色','黑色','灰色','棕色','金色','银色','青色','靛色','玫红','天蓝','草绿','深红','米白','象牙白','橄榄绿','宝蓝','紫罗兰','珊瑚红'] },
+  { name:'职业', icon:'👩‍⚕️', words:['医生','护士','教师','律师','工程师','程序员','设计师','厨师','警察','消防员','记者','会计','建筑师','飞行员','翻译','心理咨询师','科学家','艺术家','运动员','企业家','销售员','快递员','外卖员','农民','渔民'] },
+  { name:'运动', icon:'⚽', words:['足球','篮球','排球','乒乓球','羽毛球','网球','游泳','跑步','跳绳','体操','瑜伽','拳击','自行车','滑雪','攀岩','射箭','马术','冲浪','滑板','击剑','摔跤','柔道','跆拳道','高尔夫','棒球'] },
+];
+
+const QUIZ_PUNISHMENT_LIST = [
+  '说出你最尴尬的一次经历',
+  '模仿一个动物叫声10秒',
+  '说出你对身边人最想说却不敢说的话',
+  '做5个深蹲',
+  '用唱歌的方式说出你的名字',
+  '分享一个你从未告诉别人的秘密',
+  '说出你最大的弱点',
+  '连续说10个以"爱"开头的句子',
+  '闭眼用手指指向你认为最帅/漂亮的人',
+  '表演一段舞蹈10秒',
+  '用颤抖的声音说一段心动告白',
+  '说出你觉得最难启齿的一件事',
+  '向旁边的人真诚地说一句赞美',
+  '做鬼脸坚持30秒不能笑',
+  '用婴儿语气说话1分钟',
+  '用最搞笑的声音背一首古诗',
+  '把你的手机壁纸展示给所有人看',
+  '说出你今天做的最蠢的一件事',
+  '用夸张的动作表演"我很帅/漂亮"',
+  '向最近的人行一个搞笑的特殊礼',
+];
+
+const QUIZ = {
+  playerCount: 1,
+  players: [],
+  contactId: 'none',
+  showToken: false,
+  category: '',
+  wordList: [],
+  usedAnswers: [],
+  currentPlayer: 0,
+  timer: null,
+  timerSeconds: 10,
+  over: false,
+  _history: [],
+  selectedPreset: null,
+  maxRounds: 20,
+  roundCount: 0,
+};
+
+// ── Setup ──
+function initQuizSetup() {
+  QUIZ.playerCount = 1;
+  QUIZ.contactId = 'none';
+  QUIZ.selectedPreset = null;
+  QUIZ.maxRounds = 20;
+  renderQuizPlayerInputs();
+  buildQuizAiSelector();
+  renderQuizPresets();
+  const tog = $i('quiz-show-token-toggle');
+  if (tog) tog.checked = !!S.settings.showGameToken;
+  const ci = $i('quiz-custom-category');
+  if (ci) ci.value = '';
+  document.querySelectorAll('#quiz-setup-page .fly-count-btn').forEach((btn, i) => {
+    btn.classList.toggle('active', i === 0);
+  });
+  const roundBtns = document.querySelectorAll('#quiz-rounds-row .fly-count-btn');
+  roundBtns.forEach((btn, i) => btn.classList.toggle('active', i === 0));
+}
+
+function setQuizMaxRounds(n, el) {
+  QUIZ.maxRounds = n;
+  document.querySelectorAll('#quiz-rounds-row .fly-count-btn').forEach(b => b.classList.remove('active'));
+  if (el) el.classList.add('active');
+}
+
+function setQuizPlayerCount(n, el) {
+  QUIZ.playerCount = n;
+  document.querySelectorAll('#quiz-setup-page .fly-count-btn').forEach(b => b.classList.remove('active'));
+  if (el) el.classList.add('active');
+  renderQuizPlayerInputs();
+}
+
+function renderQuizPlayerInputs() {
+  const container = $i('quiz-setup-players');
+  if (!container) return;
+  container.innerHTML = '';
+  for (let i = 0; i < QUIZ.playerCount; i++) {
+    const row = document.createElement('div');
+    row.className = 'fly-player-input-row';
+    row.innerHTML = `<span class="fly-player-emoji">${BOARD_PLAYER_EMOJIS[i]}</span>
+      <span class="fly-player-color-dot" style="background:${BOARD_PLAYER_COLORS[i]}"></span>
+      <input class="fly-player-input" id="quiz-player-name-${i}" type="text" placeholder="${i===0?'你的名字':'AI玩家'+(i)}" value="${i===0?'玩家1':'AI玩家'+i}" maxlength="8">`;
+    container.appendChild(row);
+  }
+}
+
+function buildQuizAiSelector() {
+  const el = $i('quiz-ai-selector');
+  if (!el) return;
+  el.innerHTML = '';
+  const contacts = Object.values(S._contacts || {});
+  const noBtn = document.createElement('button');
+  noBtn.className = 'gmk-ai-btn' + (QUIZ.contactId === 'none' ? ' active' : '');
+  noBtn.textContent = '🚫 无助手（系统出题）';
+  noBtn.onclick = () => { QUIZ.contactId = 'none'; buildQuizAiSelector(); };
+  el.appendChild(noBtn);
+  contacts.forEach(c => {
+    const btn = document.createElement('button');
+    btn.className = 'gmk-ai-btn' + (QUIZ.contactId === c.id ? ' active' : '');
+    btn.textContent = (c.avatar || '🤖') + ' ' + c.name;
+    btn.onclick = () => { QUIZ.contactId = c.id; buildQuizAiSelector(); };
+    el.appendChild(btn);
+  });
+}
+
+function renderQuizPresets() {
+  const container = $i('quiz-presets');
+  if (!container) return;
+  container.innerHTML = '';
+  QUIZ_PRESET_CATEGORIES.forEach((cat, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'quiz-preset-btn' + (QUIZ.selectedPreset === i ? ' active' : '');
+    btn.textContent = cat.icon + ' ' + cat.name;
+    btn.onclick = () => {
+      QUIZ.selectedPreset = i;
+      const ci = $i('quiz-custom-category');
+      if (ci) ci.value = '';
+      renderQuizPresets();
+    };
+    container.appendChild(btn);
+  });
+}
+
+function startQuizGame() {
+  // Determine category
+  const customCat = $i('quiz-custom-category')?.value.trim();
+  if (customCat) {
+    QUIZ.category = customCat;
+    QUIZ.wordList = [];
+    QUIZ.selectedPreset = null;
+  } else if (QUIZ.selectedPreset !== null) {
+    const preset = QUIZ_PRESET_CATEGORIES[QUIZ.selectedPreset];
+    QUIZ.category = preset.name;
+    QUIZ.wordList = [...preset.words];
+  } else {
+    toast('请选择或输入一个主题！');
+    return;
+  }
+
+  const players = [];
+  for (let i = 0; i < QUIZ.playerCount; i++) {
+    const nameEl = $i(`quiz-player-name-${i}`);
+    players.push({
+      name: nameEl?.value.trim() || (i === 0 ? '玩家1' : `AI玩家${i}`),
+      emoji: BOARD_PLAYER_EMOJIS[i],
+      color: BOARD_PLAYER_COLORS[i],
+      lives: 3,
+      isHuman: i === 0,
+      active: true,
+    });
+  }
+
+  const tog = $i('quiz-show-token-toggle');
+  QUIZ.showToken = tog ? tog.checked : false;
+  QUIZ.players = players;
+  QUIZ.currentPlayer = 0;
+  QUIZ.usedAnswers = [];
+  QUIZ.over = false;
+  QUIZ._history = [];
+  QUIZ.roundCount = 0;
+  if (QUIZ.timer) clearInterval(QUIZ.timer);
+
+  switchPage('quiz-game-page');
+  renderQuizPlayerBar();
+  quizUpdateCategoryDisplay();
+  quizStartTurn();
+
+  // Enter key support
+  const inp = $i('quiz-answer-input');
+  if (inp) {
+    inp.onkeydown = e => { if (e.key === 'Enter') quizSubmitAnswer(); };
+  }
+}
+
+function quizUpdateCategoryDisplay() {
+  const lbl = $i('quiz-category-label');
+  if (lbl) lbl.textContent = QUIZ.category;
+  const counter = $i('quiz-round-counter');
+  if (counter) counter.textContent = `${QUIZ.roundCount} / ${QUIZ.maxRounds} 轮`;
+}
+
+// ── Player Bar ──
+function renderQuizPlayerBar() {
+  const bar = $i('quiz-player-bar');
+  if (!bar) return;
+  bar.innerHTML = '';
+  QUIZ.players.forEach((p, idx) => {
+    const card = document.createElement('div');
+    card.className = 'quiz-player-card' + (idx === QUIZ.currentPlayer && !QUIZ.over ? ' active' : '') + (!p.active ? ' eliminated' : '');
+    const hearts = '💗'.repeat(p.lives) + '🖤'.repeat(Math.max(0, 3 - p.lives));
+    card.innerHTML = `<div class="quiz-player-emoji">${p.emoji}</div>
+      <div class="quiz-player-info">
+        <div class="quiz-player-name">${esc(p.name)}</div>
+        <div class="quiz-player-lives">${hearts}</div>
+      </div>`;
+    bar.appendChild(card);
+  });
+}
+
+function quizUpdateTurnInfo() {
+  const el = $i('quiz-turn-info');
+  if (!el) return;
+  if (QUIZ.over) { el.textContent = '游戏结束！'; return; }
+  const p = QUIZ.players[QUIZ.currentPlayer];
+  el.innerHTML = `${p.emoji} <strong>${esc(p.name)}</strong> 的回合`;
+}
+
+// ── Turn ──
+function quizStartTurn() {
+  if (QUIZ.over) return;
+
+  // Find next active player
+  let attempts = 0;
+  while (!QUIZ.players[QUIZ.currentPlayer]?.active && attempts < QUIZ.playerCount) {
+    QUIZ.currentPlayer = (QUIZ.currentPlayer + 1) % QUIZ.playerCount;
+    attempts++;
+  }
+  if (attempts >= QUIZ.playerCount) { quizEndGame(); return; }
+
+  const p = QUIZ.players[QUIZ.currentPlayer];
+  renderQuizPlayerBar();
+  quizUpdateTurnInfo();
+
+  if (p.isHuman) {
+    // Show input
+    const inputArea = $i('quiz-input-area');
+    if (inputArea) inputArea.style.display = 'flex';
+    const aiThink = $i('quiz-ai-thinking');
+    if (aiThink) aiThink.style.display = 'none';
+    const inp = $i('quiz-answer-input');
+    if (inp) { inp.value = ''; inp.focus(); }
+    quizStartTimer();
+  } else {
+    // AI player
+    const inputArea = $i('quiz-input-area');
+    if (inputArea) inputArea.style.display = 'none';
+    const aiThink = $i('quiz-ai-thinking');
+    if (aiThink) aiThink.style.display = 'block';
+    quizStartTimer();
+    const thinkTime = 1000 + Math.random() * 2000;
+    setTimeout(() => quizAiAnswer(), thinkTime);
+  }
+}
+
+function quizStartTimer() {
+  if (QUIZ.timer) clearInterval(QUIZ.timer);
+  QUIZ.timerSeconds = 10;
+  quizUpdateTimerDisplay();
+
+  QUIZ.timer = setInterval(() => {
+    QUIZ.timerSeconds--;
+    quizUpdateTimerDisplay();
+    if (QUIZ.timerSeconds <= 0) {
+      clearInterval(QUIZ.timer);
+      QUIZ.timer = null;
+      quizTimeout();
+    }
+  }, 1000);
+}
+
+function quizStopTimer() {
+  if (QUIZ.timer) { clearInterval(QUIZ.timer); QUIZ.timer = null; }
+  const bar = $i('quiz-timer-bar');
+  if (bar) bar.style.width = '100%';
+  const txt = $i('quiz-timer-text');
+  if (txt) txt.textContent = '10';
+}
+
+function quizUpdateTimerDisplay() {
+  const bar = $i('quiz-timer-bar');
+  const txt = $i('quiz-timer-text');
+  const pct = (QUIZ.timerSeconds / 10) * 100;
+  if (bar) {
+    bar.style.width = pct + '%';
+    bar.className = 'quiz-timer-bar' + (QUIZ.timerSeconds <= 3 ? ' danger' : QUIZ.timerSeconds <= 6 ? ' warning' : '');
+  }
+  if (txt) txt.textContent = QUIZ.timerSeconds;
+}
+
+function quizTimeout() {
+  const p = QUIZ.players[QUIZ.currentPlayer];
+  quizAddToLog(p.name, '(超时)', false);
+  quizLoseLife(QUIZ.currentPlayer, '超时');
+}
+
+function quizSubmitAnswer() {
+  const inp = $i('quiz-answer-input');
+  const answer = inp?.value.trim();
+  if (!answer) { toast('请输入答案！'); return; }
+  quizStopTimer();
+  const inputArea = $i('quiz-input-area');
+  if (inputArea) inputArea.style.display = 'none';
+  quizProcessAnswer(QUIZ.currentPlayer, answer, true);
+}
+
+async function quizAiAnswer() {
+  if (QUIZ.over) return;
+  const p = QUIZ.players[QUIZ.currentPlayer];
+
+  // Try to get AI answer if assistant configured
+  let answer = null;
+  if (QUIZ.contactId !== 'none') {
+    answer = await quizCallAI(p);
+  }
+
+  // Fallback to word list
+  if (!answer && QUIZ.wordList.length > 0) {
+    const available = QUIZ.wordList.filter(w => !QUIZ.usedAnswers.map(a => a.toLowerCase()).includes(w.toLowerCase()));
+    if (available.length > 0) {
+      answer = available[Math.floor(Math.random() * available.length)];
+    }
+  }
+
+  const aiThink = $i('quiz-ai-thinking');
+  if (aiThink) aiThink.style.display = 'none';
+
+  quizStopTimer();
+
+  if (!answer) {
+    quizAddToLog(p.name, '(想不出来了)', false);
+    quizLoseLife(QUIZ.currentPlayer, 'AI无法作答');
+  } else {
+    quizProcessAnswer(QUIZ.currentPlayer, answer, false);
+  }
+}
+
+async function quizCallAI(player) {
+  const contact = QUIZ.contactId !== 'none' ? S._contacts[QUIZ.contactId] : null;
+  const apiKey = contact?.apiKey || S.settings.apiKey;
+  if (!apiKey) return null;
+
+  // Pool exhaustion: as used answers accumulate, AI has increasing chance to fail
+  // After using ~70% of known words, AI starts "blanking" like a real person
+  const poolSize = QUIZ.wordList.length > 0 ? QUIZ.wordList.length : 40;
+  const exhaustion = QUIZ.usedAnswers.length / poolSize;
+  if (exhaustion > 0.5 && Math.random() < Math.min(0.85, (exhaustion - 0.5) * 2.2)) {
+    return null; // AI blanks out
+  }
+
+  const aiName = contact?.name || 'AI助手';
+  const personality = contact?.system || '聪明博学';
+  // AI only "remembers" the last 10 answers — simulates natural human memory limits
+  // Older answers may be forgotten, causing accidental repeats and fair gameplay
+  const recentAnswers = QUIZ.usedAnswers.slice(-10);
+  const usedStr = recentAnswers.join('、') + (QUIZ.usedAnswers.length > 10 ? '……（更早的已记不清了）' : '');
+  const systemPrompt = `你是${aiName}，正在和玩家玩"博学知识家"游戏。当前主题是"${QUIZ.category}"。你只能记住最近说过的答案，早些时候说过的可能已经忘了。你的答案必须简洁（1-3字为主）。${personality}`;
+  const userMsg = QUIZ.usedAnswers.length > 0
+    ? `主题：${QUIZ.category}。最近说过的答案：${usedStr}。请说出一个${QUIZ.category}，只需回答答案本身，不需要解释。`
+    : `主题：${QUIZ.category}。请说出一个${QUIZ.category}，只需回答答案本身，不需要解释。`;
+
+  try {
+    const history = QUIZ._history.slice(-18);
+    const res = await fetch(contact?.apiUrl || 'https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json', 'HTTP-Referer': 'https://raimos.app', 'X-Title': 'Raimos' },
+      body: JSON.stringify({ model: contact?.model || S.settings.model || 'openai/gpt-4o-mini', max_tokens: 30, stream: false, messages: [{ role: 'system', content: systemPrompt }, ...history, { role: 'user', content: userMsg }] })
+    });
+    const data = await res.json();
+    let txt = data.choices?.[0]?.message?.content?.trim() || '';
+    // Extract just the answer (first 1-5 chars if longer)
+    txt = txt.replace(/[。，！？,.!?]/g, '').split(/[\s\n]/)[0].substring(0, 10);
+
+    if (txt) {
+      QUIZ._history.push({ role: 'user', content: userMsg });
+      QUIZ._history.push({ role: 'assistant', content: txt });
+      if (QUIZ._history.length > 20) QUIZ._history = QUIZ._history.slice(-20);
+
+      if (QUIZ.showToken && data.usage) {
+        const log = $i('quiz-answer-log');
+        if (log) {
+          const badge = document.createElement('div');
+          badge.style.cssText = 'font-size:10px;color:var(--text3);text-align:right;padding:2px 4px';
+          badge.textContent = `⚡ ${data.usage.total_tokens || 0} tokens`;
+          log.prepend(badge);
+        }
+      }
+    }
+    return txt || null;
+  } catch (e) { return null; }
+}
+
+function quizProcessAnswer(playerIdx, answer, isHuman) {
+  const p = QUIZ.players[playerIdx];
+  // Check duplicate
+  const isDuplicate = QUIZ.usedAnswers.some(a => a.toLowerCase() === answer.toLowerCase());
+  if (isDuplicate) {
+    quizAddToLog(p.name, answer, false, '重复！');
+    quizLoseLife(playerIdx, '重复答案');
+    return;
+  }
+
+  // Valid answer
+  QUIZ.usedAnswers.push(answer);
+  QUIZ.roundCount++;
+  quizUpdateCategoryDisplay();
+
+  // Add to AI history
+  if (isHuman) {
+    QUIZ._history.push({ role: 'user', content: answer });
+  }
+
+  quizAddToLog(p.name, answer, true);
+
+  // Check if max rounds reached
+  if (QUIZ.roundCount >= QUIZ.maxRounds) {
+    setTimeout(quizEndByRounds, 600);
+    return;
+  }
+
+  setTimeout(() => quizNextTurn(), 600);
+}
+
+function quizEndByRounds() {
+  QUIZ.over = true;
+  quizStopTimer();
+  const inputArea = $i('quiz-input-area');
+  if (inputArea) inputArea.style.display = 'none';
+  const aiThink = $i('quiz-ai-thinking');
+  if (aiThink) aiThink.style.display = 'none';
+
+  // Sort by lives descending
+  const ranked = [...QUIZ.players].sort((a, b) => b.lives - a.lives);
+  const winner = ranked[0];
+  const loser = ranked[ranked.length - 1];
+
+  const resultEl = $i('quiz-result-content');
+  if (resultEl) {
+    let html = `<div style="font-size:14px;margin-bottom:8px">🏁 已完成 ${QUIZ.maxRounds} 轮！</div>`;
+    ranked.forEach((p, i) => {
+      const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i+1}.`;
+      html += `<div style="margin:4px 0">${medal} ${p.emoji} ${esc(p.name)} — ${'💗'.repeat(p.lives)}${'🖤'.repeat(Math.max(0,3-p.lives))}</div>`;
+    });
+    resultEl.innerHTML = html;
+  }
+
+  // Show punishment for loser (if more than 1 player)
+  if (QUIZ.players.length > 1) {
+    const punishArea = $i('quiz-punishment-area');
+    const punishText = $i('quiz-punishment-text');
+    if (punishArea && punishText) {
+      const punishment = QUIZ_PUNISHMENT_LIST[Math.floor(Math.random() * QUIZ_PUNISHMENT_LIST.length)];
+      punishText.textContent = `${loser.emoji} ${loser.name}：${punishment}`;
+      punishArea.style.display = 'block';
+    }
+  }
+
+  const overlay = $i('quiz-result-overlay');
+  if (overlay) overlay.style.display = 'flex';
+}
+
+function quizAddToLog(playerName, answer, correct, note = '') {
+  const logEl = $i('quiz-answer-log');
+  if (!logEl) return;
+  const p = QUIZ.players.find(pl => pl.name === playerName);
+  const entry = document.createElement('div');
+  entry.className = 'quiz-answer-entry' + (correct ? '' : ' wrong');
+  entry.innerHTML = `<span class="quiz-answer-player">${p?.emoji || ''} ${esc(playerName)}</span>
+    <span class="quiz-answer-word${correct ? '' : ' wrong'}">${esc(answer)}</span>
+    ${note ? `<span class="quiz-answer-note">${esc(note)}</span>` : ''}`;
+  logEl.prepend(entry);
+}
+
+function quizLoseLife(playerIdx, reason) {
+  const p = QUIZ.players[playerIdx];
+  p.lives--;
+  toast(`💔 ${p.name} 失去一条命！（${reason}）`);
+  renderQuizPlayerBar();
+
+  if (p.lives <= 0) {
+    p.active = false;
+    toast(`☠️ ${p.name} 被淘汰！`);
+    const activePlayers = QUIZ.players.filter(pl => pl.active);
+    if (activePlayers.length <= 1) {
+      setTimeout(quizEndGame, 800);
+      return;
+    }
+  }
+  setTimeout(quizNextTurn, 800);
+}
+
+function quizNextTurn() {
+  if (QUIZ.over) return;
+  let next = (QUIZ.currentPlayer + 1) % QUIZ.playerCount;
+  let attempts = 0;
+  while (!QUIZ.players[next]?.active && attempts < QUIZ.playerCount) {
+    next = (next + 1) % QUIZ.playerCount;
+    attempts++;
+  }
+  if (attempts >= QUIZ.playerCount) { quizEndGame(); return; }
+  QUIZ.currentPlayer = next;
+  quizStartTurn();
+}
+
+function quizEndGame() {
+  QUIZ.over = true;
+  quizStopTimer();
+  const inputArea = $i('quiz-input-area');
+  if (inputArea) inputArea.style.display = 'none';
+  const aiThink = $i('quiz-ai-thinking');
+  if (aiThink) aiThink.style.display = 'none';
+
+  const resultEl = $i('quiz-result-content');
+  const punishArea = $i('quiz-punishment-area');
+  const punishText = $i('quiz-punishment-text');
+
+  const activePlayers = QUIZ.players.filter(pl => pl.active);
+  const winner = activePlayers[0];
+  const losers = QUIZ.players.filter(pl => !pl.active);
+
+  if (resultEl) {
+    let html = winner
+      ? `<div style="font-size:24px;text-align:center;margin-bottom:8px">${winner.emoji}</div>
+         <div style="text-align:center;font-weight:700;font-size:16px">🏆 ${esc(winner.name)} 获胜！</div>
+         <div style="text-align:center;color:var(--text3);font-size:13px;margin-top:4px">共答出 ${QUIZ.usedAnswers.length} 个${QUIZ.category}</div>`
+      : '<div style="text-align:center">平局！</div>';
+    html += `<div style="margin-top:12px;font-size:13px;color:var(--text2)">所有答案：${QUIZ.usedAnswers.join('、') || '无'}</div>`;
+    resultEl.innerHTML = html;
+  }
+
+  // Show punishment for losers
+  if (losers.length > 0 && punishArea && punishText) {
+    const loser = losers[losers.length - 1];
+    const punishment = QUIZ_PUNISHMENT_LIST[Math.floor(Math.random() * QUIZ_PUNISHMENT_LIST.length)];
+    punishText.textContent = `${loser.emoji} ${loser.name}：${punishment}`;
+    punishArea.style.display = 'block';
+
+    // AI generates punishment if assistant configured
+    if (QUIZ.contactId !== 'none') {
+      quizAiPunishment(loser, punishment);
+    }
+  } else if (punishArea) {
+    punishArea.style.display = 'none';
+  }
+
+  const ov = $i('quiz-result-overlay');
+  if (ov) ov.style.display = 'flex';
+}
+
+async function quizAiPunishment(loser, punishment) {
+  const contact = QUIZ.contactId !== 'none' ? S._contacts[QUIZ.contactId] : null;
+  const apiKey = contact?.apiKey || S.settings.apiKey;
+  if (!apiKey) return;
+
+  const aiEl = $i('quiz-punishment-ai');
+  if (!aiEl) return;
+
+  const systemPrompt = contact?.system
+    ? `${contact.system}\n你在帮助主持"博学知识家"游戏，一个玩家输了，需要接受惩罚。请用有趣活泼的语气给予鼓励和调侃，不超过50字。`
+    : `你是游戏主持人，请用幽默语气评论失败玩家的惩罚，不超过50字。`;
+  const userMsg = `${loser.name}在"${QUIZ.category}"主题中落败，惩罚是："${punishment}"。请评论。`;
+
+  try {
+    const res = await fetch(contact?.apiUrl || 'https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json', 'HTTP-Referer': 'https://raimos.app', 'X-Title': 'Raimos' },
+      body: JSON.stringify({ model: contact?.model || S.settings.model || 'openai/gpt-4o-mini', max_tokens: 80, stream: false, messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userMsg }] })
+    });
+    const data = await res.json();
+    const txt = data.choices?.[0]?.message?.content?.trim() || '';
+    if (txt) {
+      aiEl.innerHTML = `<div class="fly-ai-response-label">🤖 AI点评：</div><div>${esc(txt)}</div>`;
+      aiEl.style.display = 'block';
+      if (QUIZ.showToken && data.usage) {
+        const badge = document.createElement('div');
+        badge.style.cssText = 'font-size:10px;color:var(--text3);margin-top:4px;text-align:right';
+        badge.textContent = `⚡ ${data.usage.total_tokens || 0} tokens`;
+        aiEl.appendChild(badge);
+      }
+    }
+  } catch (e) {}
+}
+
+function confirmQuizQuit() {
+  if (QUIZ.over) { switchPage('game-hub-page'); return; }
+  quizStopTimer();
+  if (confirm('确定要退出游戏吗？')) switchPage('game-hub-page');
+}
+
+// ══════════════════════════════════════════════════════════════
+//  MATCH GAME (消消快乐) — 羊了个羊风格 tile-matching
+// ══════════════════════════════════════════════════════════════
+
+const MATCH_EMOJIS = ['🍎','🍊','🍋','🍇','🍓','🍑','🥝','🍉','🍌','🍍','🥭','🍒','🫐','🍈','🍏','🥥','🍅','🥑'];
+
+const MATCH = {
+  tiles: [],
+  aiTiles: [],
+  tray: [],
+  aiTray: [],
+  over: false,
+  playerResult: null,
+  startTime: 0,
+  timerInterval: null,
+  aiInterval: null,
+  difficulty: 'normal',
+  contactId: 'none',
+  showToken: false,
+  seed: 0,
+};
+
+// ── Setup ──
+function initMatchSetup() {
+  MATCH.difficulty = 'normal';
+  MATCH.contactId = 'none';
+  MATCH.showToken = false;
+  // Reset difficulty buttons
+  document.querySelectorAll('#match-diff-row .fly-count-btn').forEach((btn, i) => {
+    btn.classList.toggle('active', i === 1); // default: normal (index 1)
+  });
+  updateMatchDiffDesc();
+  buildMatchAiSelector();
+  const tog = $i('match-show-token-toggle');
+  if (tog) tog.checked = false;
+}
+
+function setMatchDiff(diff, el) {
+  MATCH.difficulty = diff;
+  document.querySelectorAll('#match-diff-row .fly-count-btn').forEach(b => b.classList.remove('active'));
+  if (el) el.classList.add('active');
+  updateMatchDiffDesc();
+}
+
+function updateMatchDiffDesc() {
+  const el = $i('match-diff-desc');
+  if (!el) return;
+  const descs = {
+    easy:   'AI速度：较慢，经常犯错',
+    normal: 'AI速度：适中，偶尔犯错',
+    hard:   'AI速度：极快，始终最优',
+  };
+  el.textContent = descs[MATCH.difficulty] || '';
+}
+
+function buildMatchAiSelector() {
+  const el = $i('match-ai-selector');
+  if (!el) return;
+  el.innerHTML = '';
+  const contacts = Object.values(S._contacts || {});
+  const noBtn = document.createElement('button');
+  noBtn.className = 'gmk-ai-btn' + (MATCH.contactId === 'none' ? ' active' : '');
+  noBtn.textContent = '🚫 系统AI';
+  noBtn.onclick = () => { MATCH.contactId = 'none'; buildMatchAiSelector(); };
+  el.appendChild(noBtn);
+  contacts.forEach(c => {
+    const btn = document.createElement('button');
+    btn.className = 'gmk-ai-btn' + (MATCH.contactId === c.id ? ' active' : '');
+    btn.textContent = (c.avatar && !c.avatar.startsWith('data:') ? c.avatar : '🤖') + ' ' + c.name;
+    btn.onclick = () => { MATCH.contactId = c.id; buildMatchAiSelector(); };
+    el.appendChild(btn);
+  });
+}
+
+// ── Tile Generation ──
+function generateMatchTiles(seed) {
+  let pool = [];
+  MATCH_EMOJIS.forEach(e => { pool.push(e, e, e); });
+
+  // Seeded LCG shuffle
+  let s = seed;
+  for (let i = pool.length - 1; i > 0; i--) {
+    s = (s * 1664525 + 1013904223) & 0xffffffff;
+    const j = Math.abs(s) % (i + 1);
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+
+  const tiles = [];
+  let idx = 0;
+
+  // Layer 0: 6 cols × 4 rows = 24
+  for (let r = 0; r < 4; r++) {
+    for (let c = 0; c < 6; c++) {
+      tiles.push({ id: idx, emoji: pool[idx], layer: 0, row: r, col: c, removed: false });
+      idx++;
+    }
+  }
+  // Layer 1: 5 cols × 3 rows, offset 0.5
+  for (let r = 0; r < 3; r++) {
+    for (let c = 0; c < 5; c++) {
+      tiles.push({ id: idx, emoji: pool[idx], layer: 1, row: r + 0.5, col: c + 0.5, removed: false });
+      idx++;
+    }
+  }
+  // Layer 2: 5 cols × 3 rows, offset 1.0
+  for (let r = 0; r < 3; r++) {
+    for (let c = 0; c < 5; c++) {
+      tiles.push({ id: idx, emoji: pool[idx], layer: 2, row: r + 1, col: c + 1, removed: false });
+      idx++;
+    }
+  }
+
+  return tiles;
+}
+
+function matchTileAccessible(tile, tiles) {
+  if (tile.removed) return false;
+  return !tiles.some(other =>
+    !other.removed &&
+    other.layer > tile.layer &&
+    Math.abs(other.row - tile.row) < 1 &&
+    Math.abs(other.col - tile.col) < 1
+  );
+}
+
+// ── Tray Logic ──
+function matchAddToTray(tray, tile) {
+  tile.removed = true;
+  tray.push({ emoji: tile.emoji, id: tile.id });
+  if (tray.length > 7) return 'overflow';
+
+  const counts = {};
+  tray.forEach(t => { counts[t.emoji] = (counts[t.emoji] || 0) + 1; });
+  const matched = Object.keys(counts).find(e => counts[e] >= 3);
+  if (matched) {
+    let removed = 0;
+    for (let i = tray.length - 1; i >= 0 && removed < 3; i--) {
+      if (tray[i].emoji === matched) { tray.splice(i, 1); removed++; }
+    }
+    return 'matched';
+  }
+  return 'ok';
+}
+
+// ── Start Game ──
+function startMatchGame() {
+  const tog = $i('match-show-token-toggle');
+  MATCH.showToken = tog ? tog.checked : false;
+  MATCH.seed = Date.now() & 0xfffffff;
+  MATCH.tiles = generateMatchTiles(MATCH.seed);
+  MATCH.aiTiles = generateMatchTiles(MATCH.seed); // same layout
+  MATCH.tray = [];
+  MATCH.aiTray = [];
+  MATCH.over = false;
+  MATCH.playerResult = null;
+  MATCH.startTime = Date.now();
+
+  // AI identity
+  const contact = MATCH.contactId !== 'none' ? S._contacts[MATCH.contactId] : null;
+  const aiName = contact ? contact.name : '系统AI';
+  const aiAvatar = (contact && contact.avatar && !contact.avatar.startsWith('data:')) ? contact.avatar : '🤖';
+
+  const aiNameEl = $i('match-ai-name-label');
+  const aiAvatarEl = $i('match-ai-avatar');
+  if (aiNameEl) aiNameEl.textContent = aiName;
+  if (aiAvatarEl) aiAvatarEl.textContent = aiAvatar;
+
+  switchPage('match-game-page');
+  renderMatchBoard();
+  renderMatchTray();
+  matchUpdateRemainLabel();
+  matchUpdateAiPanel();
+
+  // Start timer
+  if (MATCH.timerInterval) clearInterval(MATCH.timerInterval);
+  MATCH.timerInterval = setInterval(matchTickTimer, 1000);
+
+  // Start AI
+  if (MATCH.aiInterval) clearInterval(MATCH.aiInterval);
+  const intervals = { easy: 1800, normal: 1100, hard: 650 };
+  const delay = intervals[MATCH.difficulty] || 1100;
+  MATCH.aiInterval = setInterval(matchAiStep, delay);
+}
+
+// ── Timer ──
+function matchTickTimer() {
+  if (MATCH.over) return;
+  const elapsed = Math.floor((Date.now() - MATCH.startTime) / 1000);
+  const mm = String(Math.floor(elapsed / 60)).padStart(2, '0');
+  const ss = String(elapsed % 60).padStart(2, '0');
+  const el = $i('match-timer');
+  if (el) el.textContent = `${mm}:${ss}`;
+}
+
+// ── Board Rendering ──
+function renderMatchBoard() {
+  const board = $i('match-board');
+  if (!board) return;
+  board.innerHTML = '';
+  const TILE_SIZE = 52;
+  MATCH.tiles.forEach(tile => {
+    const div = document.createElement('div');
+    div.className = 'match-tile';
+    div.dataset.id = tile.id;
+    if (tile.removed) {
+      div.classList.add('removed');
+    } else {
+      const accessible = matchTileAccessible(tile, MATCH.tiles);
+      div.classList.add(accessible ? 'accessible' : 'blocked');
+      if (accessible) {
+        div.onclick = () => matchClickTile(tile.id);
+      }
+    }
+    div.style.left = (tile.col * TILE_SIZE + tile.layer * 4) + 'px';
+    div.style.top = (tile.row * TILE_SIZE - tile.layer * 4 + 8) + 'px'; // +8 for padding-top
+    div.style.zIndex = tile.layer * 1000 + Math.round(tile.row) * 10 + Math.round(tile.col);
+    div.textContent = tile.emoji;
+    // Extra shadow for higher layers
+    if (tile.layer === 1) div.style.boxShadow = '0 3px 8px rgba(0,0,0,0.15)';
+    if (tile.layer === 2) div.style.boxShadow = '0 5px 14px rgba(0,0,0,0.22)';
+    board.appendChild(div);
+  });
+}
+
+function matchRefreshBoardAccessibility() {
+  MATCH.tiles.forEach(tile => {
+    const el = document.querySelector(`[data-id="${tile.id}"]`);
+    if (!el) return;
+    if (tile.removed) {
+      el.className = 'match-tile removed';
+      el.onclick = null;
+      return;
+    }
+    const accessible = matchTileAccessible(tile, MATCH.tiles);
+    el.className = 'match-tile ' + (accessible ? 'accessible' : 'blocked');
+    el.onclick = accessible ? () => matchClickTile(tile.id) : null;
+  });
+}
+
+// ── Tray Rendering ──
+function renderMatchTray() {
+  const tray = $i('match-tray');
+  if (!tray) return;
+  tray.innerHTML = '';
+  for (let i = 0; i < 7; i++) {
+    const slot = document.createElement('div');
+    slot.className = 'match-tray-slot' + (MATCH.tray[i] ? ' filled' : '');
+    slot.id = `match-tray-slot-${i}`;
+    if (MATCH.tray[i]) slot.textContent = MATCH.tray[i].emoji;
+    tray.appendChild(slot);
+  }
+}
+
+function matchUpdateRemainLabel() {
+  const remaining = MATCH.tiles.filter(t => !t.removed).length;
+  const el = $i('match-remain-label');
+  if (el) el.textContent = `剩余: ${remaining}/54`;
+}
+
+// ── Player Click ──
+function matchClickTile(tileId) {
+  if (MATCH.over) return;
+  const tile = MATCH.tiles.find(t => t.id === tileId);
+  if (!tile || tile.removed) return;
+  if (!matchTileAccessible(tile, MATCH.tiles)) return;
+  if (MATCH.tray.length >= 7) return;
+
+  const result = matchAddToTray(MATCH.tray, tile);
+
+  // Immediately hide the tile in DOM
+  const tileEl = document.querySelector(`[data-id="${tileId}"]`);
+  if (tileEl) tileEl.className = 'match-tile removed';
+
+  if (result === 'matched') {
+    matchRefreshBoardAccessibility();
+    renderMatchTray();
+    matchUpdateRemainLabel();
+    matchCheckPlayerWin();
+    return;
+  }
+
+  if (result === 'overflow') {
+    matchEndGame('lose');
+    return;
+  }
+
+  // Overflow check: if tray is full (7) and no match possible
+  if (MATCH.tray.length >= 7) {
+    const counts = {};
+    MATCH.tray.forEach(t => { counts[t.emoji] = (counts[t.emoji] || 0) + 1; });
+    const hasMatch = Object.values(counts).some(n => n >= 3);
+    if (!hasMatch) {
+      matchEndGame('lose');
+      return;
+    }
+  }
+
+  matchRefreshBoardAccessibility();
+  renderMatchTray();
+  matchUpdateRemainLabel();
+  matchCheckPlayerWin();
+}
+
+function matchCheckPlayerWin() {
+  if (MATCH.over) return;
+  if (MATCH.tiles.every(t => t.removed) && MATCH.tray.length === 0) {
+    matchEndGame('win');
+  }
+}
+
+// ── AI Step ──
+function matchAiStep() {
+  if (MATCH.over) return;
+
+  const accessible = MATCH.aiTiles.filter(t => matchTileAccessible(t, MATCH.aiTiles));
+  if (accessible.length === 0) {
+    if (MATCH.aiTiles.every(t => t.removed) && MATCH.aiTray.length === 0) {
+      matchEndGame('ai_win');
+    }
+    return;
+  }
+
+  const diffConfig = { easy: 0.25, normal: 0.10, hard: 0 };
+  const randomChance = diffConfig[MATCH.difficulty] !== undefined ? diffConfig[MATCH.difficulty] : 0.10;
+
+  let chosen = null;
+  if (Math.random() >= randomChance) {
+    const trayCounts = {};
+    MATCH.aiTray.forEach(t => { trayCounts[t.emoji] = (trayCounts[t.emoji] || 0) + 1; });
+    // Priority 1: complete a triplet
+    chosen = accessible.find(t => trayCounts[t.emoji] >= 2);
+    // Priority 2: build toward match
+    if (!chosen) chosen = accessible.find(t => trayCounts[t.emoji] >= 1);
+  }
+  if (!chosen) chosen = accessible[Math.floor(Math.random() * accessible.length)];
+
+  chosen.removed = true;
+  MATCH.aiTray.push({ emoji: chosen.emoji, id: chosen.id });
+
+  if (MATCH.aiTray.length > 7) {
+    // AI tray overflow — AI loses, player wins
+    matchEndGame('win');
+    return;
+  }
+
+  // Check for triplet in AI tray
+  const counts = {};
+  MATCH.aiTray.forEach(t => { counts[t.emoji] = (counts[t.emoji] || 0) + 1; });
+  const matched = Object.keys(counts).find(e => counts[e] >= 3);
+  if (matched) {
+    let removed = 0;
+    for (let i = MATCH.aiTray.length - 1; i >= 0 && removed < 3; i--) {
+      if (MATCH.aiTray[i].emoji === matched) { MATCH.aiTray.splice(i, 1); removed++; }
+    }
+  }
+
+  // Check if AI cleared all tiles
+  if (MATCH.aiTiles.every(t => t.removed) && MATCH.aiTray.length === 0) {
+    matchEndGame('ai_win');
+    return;
+  }
+
+  matchUpdateAiPanel();
+}
+
+function matchUpdateAiPanel() {
+  const remaining = MATCH.aiTiles.filter(t => !t.removed).length;
+  const cleared = 54 - remaining;
+  const pct = Math.round(cleared / 54 * 100);
+
+  const progressEl = $i('match-ai-progress');
+  if (progressEl) progressEl.style.width = pct + '%';
+
+  const pctEl = $i('match-ai-pct');
+  if (pctEl) pctEl.textContent = `${pct}% 已清除`;
+
+  const remainEl = $i('match-ai-remain');
+  if (remainEl) remainEl.textContent = `剩余${remaining}`;
+
+  const previewEl = $i('match-ai-tray-preview');
+  if (previewEl) {
+    previewEl.innerHTML = MATCH.aiTray.map(t => `<span>${t.emoji}</span>`).join('');
+  }
+}
+
+// ── End Game ──
+function matchEndGame(result) {
+  if (MATCH.over) return;
+  MATCH.over = true;
+  MATCH.playerResult = result;
+
+  if (MATCH.aiInterval) { clearInterval(MATCH.aiInterval); MATCH.aiInterval = null; }
+  if (MATCH.timerInterval) { clearInterval(MATCH.timerInterval); MATCH.timerInterval = null; }
+
+  const elapsed = Math.floor((Date.now() - MATCH.startTime) / 1000);
+  const mm = String(Math.floor(elapsed / 60)).padStart(2, '0');
+  const ss = String(elapsed % 60).padStart(2, '0');
+  const timeStr = `${mm}:${ss}`;
+
+  const emojiEl = $i('match-result-emoji');
+  const titleEl = $i('match-result-title');
+  const statsEl = $i('match-result-stats');
+
+  const playerName = S.settings.userName || '玩家';
+  const aiNameEl = $i('match-ai-name-label');
+  const aiName = aiNameEl ? aiNameEl.textContent : '系统AI';
+
+  let emoji, title, statsHtml;
+  const playerCleared = MATCH.tiles.filter(t => t.removed).length;
+  const aiCleared = MATCH.aiTiles.filter(t => t.removed).length;
+
+  if (result === 'win') {
+    emoji = '🏆'; title = '你赢了！';
+    statsHtml = `⏱️ 用时：${timeStr}<br>✨ 你清除了所有方块！<br>🤖 ${esc(aiName)} 已清除 ${aiCleared}/54`;
+  } else if (result === 'ai_win') {
+    emoji = '😢'; title = `${esc(aiName)} 获胜！`;
+    statsHtml = `⏱️ 用时：${timeStr}<br>🤖 ${esc(aiName)} 抢先清空了！<br>📦 你还剩 ${54 - playerCleared} 块未清除`;
+  } else {
+    emoji = '😵'; title = '手气不好！';
+    statsHtml = `⏱️ 用时：${timeStr}<br>💔 托盘已满，无法消除<br>📦 你还剩 ${54 - playerCleared} 块未清除`;
+  }
+
+  if (emojiEl) emojiEl.textContent = emoji;
+  if (titleEl) titleEl.textContent = title;
+  if (statsEl) statsEl.innerHTML = statsHtml;
+
+  const ov = $i('match-result-overlay');
+  if (ov) ov.style.display = 'flex';
+}
+
+function matchResultBack() {
+  const ov = $i('match-result-overlay');
+  if (ov) ov.style.display = 'none';
+  switchPage('game-hub-page');
+}
+
+function matchResultReplay() {
+  const ov = $i('match-result-overlay');
+  if (ov) ov.style.display = 'none';
+  startMatchGame();
+}
+
+function confirmMatchQuit() {
+  if (MATCH.over) { switchPage('game-hub-page'); return; }
+  if (MATCH.aiInterval) { clearInterval(MATCH.aiInterval); MATCH.aiInterval = null; }
+  if (MATCH.timerInterval) { clearInterval(MATCH.timerInterval); MATCH.timerInterval = null; }
+  if (confirm('确定要退出游戏吗？')) {
+    switchPage('game-hub-page');
+  } else {
+    // Resume
+    if (!MATCH.over) {
+      const intervals = { easy: 1800, normal: 1100, hard: 650 };
+      const delay = intervals[MATCH.difficulty] || 1100;
+      MATCH.aiInterval = setInterval(matchAiStep, delay);
+      MATCH.timerInterval = setInterval(matchTickTimer, 1000);
+    }
   }
 }

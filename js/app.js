@@ -34,6 +34,7 @@ let S = {
     voiceReplyMode:'text', autoTts:false,
     stream:true, showToken:false, showGameToken:false, showThink:true,
     temp:0.85, ctx:20, imgSize:800, sumThresh:40,
+    summaryKeepHistory:true, summaryWindowEnabled:true, summaryWindowSize:30,
     proactive:false, proMax:3, proStart:8, proEnd:22,
     momentsEnabled:false, autoPost:false, momentFreqMode:'perWeek', momentFreqCount:3,
     autoComment:false, commentFreqMins:360,
@@ -1187,6 +1188,10 @@ async function buildMsgs(chat, contact, mems) {
   sys += `\n\n[背景参考] ${buildDatetimeCtx()}，请自然融入此背景，不要主动播报时间或日期。`;
   msgs.push({ role:'system', content:sys });
   if (chat.summary) msgs.push({ role:'system', content:`[历史摘要] ${chat.summary}` });
+  if (S.settings.summaryWindowEnabled !== false && Array.isArray(chat.windowSummaries) && chat.windowSummaries.length) {
+    const recentWindows = chat.windowSummaries.slice(-3).map((w, idx) => `窗口${idx + 1}: ${w.summary}`).join('\n');
+    if (recentWindows) msgs.push({ role:'system', content:`[窗口摘要]\n${recentWindows}` });
+  }
   const allMsgs = await dbGetAll('messages', 'chatId', chat.id);
   allMsgs.sort((a,b) => a.ts - b.ts);
   const recent = allMsgs.slice(-parseInt(cs(contact?.xCtx, S.settings.ctx))||20);
@@ -1344,12 +1349,28 @@ async function doSummary(chatId, force) {
   if (toSum.length < 5) return;
   const hist = toSum.map(m=>`${m.role==='user'?'用户':'AI'}: ${m.content||'[媒体]'}`).join('\n');
   try {
-    const res = await fetch('https://openrouter.ai/api/v1/chat/completions',{method:'POST',headers:{'Authorization':`Bearer ${sumKey}`,'Content-Type':'application/json'},body:JSON.stringify({model:'openai/gpt-4o-mini',max_tokens:400,stream:false,messages:[{role:'system',content:'将对话压缩为简洁摘要（200字内），保留关键信息。'},{role:'user',content:hist}]})});
+    const res = await fetch('https://openrouter.ai/api/v1/chat/completions',{method:'POST',headers:{'Authorization':`Bearer ${sumKey}`,'Content-Type':'application/json'},body:JSON.stringify({model:'openai/gpt-4o-mini',max_tokens:400,stream:false,messages:[{role:'system',content:'将对话压缩为具体摘要（200字内），优先保留称呼偏好、情绪状态、共同经历、未完成话题与互动偏好。'},{role:'user',content:hist}]})});
     const d = await res.json(); const sumText = d.choices?.[0]?.message?.content||'';
     if (sumText) {
       chat.summary = (chat.summary?chat.summary+'\n':'')+sumText;
-      if (force) { for (const m of msgs) await dbDel('messages',m.id); }
-      else { const keep=msgs.slice(-Math.floor(cSumThresh/3)); const toDelete=msgs.slice(0,-keep.length); for(const m of toDelete) await dbDel('messages',m.id); }
+      if (S.settings.summaryWindowEnabled !== false) {
+        const wSize = Math.max(10, parseInt(S.settings.summaryWindowSize || 30));
+        const winMsgs = toSum.slice(-wSize);
+        const windowSummary = {
+          id: uid(),
+          fromTs: winMsgs[0]?.ts || Date.now(),
+          toTs: winMsgs[winMsgs.length - 1]?.ts || Date.now(),
+          count: winMsgs.length,
+          summary: sumText
+        };
+        if (!Array.isArray(chat.windowSummaries)) chat.windowSummaries = [];
+        chat.windowSummaries.push(windowSummary);
+        if (chat.windowSummaries.length > 30) chat.windowSummaries = chat.windowSummaries.slice(-30);
+      }
+      if (S.settings.summaryKeepHistory === false) {
+        if (force) { for (const m of msgs) await dbDel('messages',m.id); }
+        else { const keep=msgs.slice(-Math.floor(cSumThresh/3)); const toDelete=msgs.slice(0,-keep.length); for(const m of toDelete) await dbDel('messages',m.id); }
+      }
       chat._lastSumLen = (await dbGetAll('messages','chatId',chatId)).length;
       await dbPut('chats',chat); await renderMsgs();
     }
@@ -3190,6 +3211,9 @@ function buildSettingsUI() {
       <div class="s-row"><label>上下文消息数</label><input type="number" id="s-ctx" value="${s.ctx||20}" min="2" max="1000" style="max-width:80px"/><span style="font-size:11px;color:var(--text3)">条 (最高1000)</span></div>
       <div class="s-row"><label>图片压缩尺寸</label><input type="range" id="s-imgsize" min="256" max="2048" step="128" value="${s.imgSize||800}" oninput="$i('s-imgsize-v').textContent=this.value+'px'"><span class="rval" id="s-imgsize-v">${s.imgSize||800}px</span></div>
       <div class="s-row"><label>摘要阈值</label><input type="number" id="s-sumthresh" value="${s.sumThresh||40}" min="10" max="200" style="max-width:80px"/><span style="font-size:11px;color:var(--text3)">条后自动摘要</span></div>
+      <div class="s-row"><label>保留完整聊天历史</label><label class="toggle"><input type="checkbox" id="s-summary-keep-history" ${s.summaryKeepHistory!==false?'checked':''}><span class="tslider"></span></label><span style="font-size:11px;color:var(--text3)">开启后仅生成摘要，不删除历史消息</span></div>
+      <div class="s-row"><label>窗口摘要（跨窗口记忆）</label><label class="toggle"><input type="checkbox" id="s-summary-window-enabled" ${s.summaryWindowEnabled!==false?'checked':''}><span class="tslider"></span></label><span style="font-size:11px;color:var(--text3)">为每段历史生成摘要并注入后续对话</span></div>
+      <div class="s-row"><label>窗口摘要长度</label><input type="number" id="s-summary-window-size" value="${s.summaryWindowSize||30}" min="10" max="200" style="max-width:80px"/><span style="font-size:11px;color:var(--text3)">每个窗口约N条消息</span></div>
       <div class="s-row"><label>AI回复触感反馈（打字感）</label><label class="toggle"><input type="checkbox" id="s-haptic-ai-reply" ${s.hapticOnAiReply?'checked':''}><span class="tslider"></span></label><span style="font-size:11px;color:var(--text3)">流式输出时微弱震动</span></div>
       <div class="s-row"><label>正在输入动画形状</label>
         <select id="s-typing-shape">
@@ -3403,6 +3427,9 @@ async function saveAllSettings(){
   s.typingAnimShape=get('s-typing-shape','heart');
   s.temp=parseFloat(get('s-temp','0.85'));s.ctx=parseInt(get('s-ctx','20'));
   s.imgSize=parseInt(get('s-imgsize','800'));s.sumThresh=parseInt(get('s-sumthresh','40'));
+  s.summaryKeepHistory=getB('s-summary-keep-history');
+  s.summaryWindowEnabled=getB('s-summary-window-enabled');
+  s.summaryWindowSize=parseInt(get('s-summary-window-size','30'));
   s.proactive=getB('s-proactive');s.proMax=parseInt(get('s-pro-max','3'));
   s.proStart=parseInt(get('s-pro-start','8'));s.proEnd=parseInt(get('s-pro-end','22'));
   s.proContactId=get('s-pro-contact','');

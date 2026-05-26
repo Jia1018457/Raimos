@@ -1349,7 +1349,7 @@ async function doSummary(chatId, force) {
   if (toSum.length < 5) return;
   const hist = toSum.map(m=>`${m.role==='user'?'用户':'AI'}: ${m.content||'[媒体]'}`).join('\n');
   try {
-    const res = await fetch('https://openrouter.ai/api/v1/chat/completions',{method:'POST',headers:{'Authorization':`Bearer ${sumKey}`,'Content-Type':'application/json'},body:JSON.stringify({model:'openai/gpt-4o-mini',max_tokens:400,stream:false,messages:[{role:'system',content:'将对话压缩为具体摘要（200字内），优先保留称呼偏好、情绪状态、共同经历、未完成话题与互动偏好。'},{role:'user',content:hist}]})});
+    const res = await fetch('https://openrouter.ai/api/v1/chat/completions',{method:'POST',headers:{'Authorization':`Bearer ${sumKey}`,'Content-Type':'application/json'},body:JSON.stringify({model:'openai/gpt-4o-mini',max_tokens:400,stream:false,messages:[{role:'system',content:'你是对话摘要器。只聚焦动态事实与短期上下文状态，不写抒情和长期性格分析。严格按以下格式输出：\n【当前剧情断点（Current Progress）】：用一句话描述双方当前聊到的进度。\n【最新事实与约定备忘（New Facts & Plans）】：仅列出后续可能被回调的核心事实/约定/设定事件/聊天主题；用列表；若没有写“无”。\n要求：简洁、可追溯、避免重复旧信息。'},{role:'user',content:hist}]})});
     const d = await res.json(); const sumText = d.choices?.[0]?.message?.content||'';
     if (sumText) {
       chat.summary = (chat.summary?chat.summary+'\n':'')+sumText;
@@ -2805,11 +2805,11 @@ function initScrollObs(){
     if (atBot) S._lockScroll = false;
   });
 }
-function scrollTo_(top,instant){
+function scrollTo_(top,instant,forceBottom){
   const ca=$i('chat-area');if(!ca)return;
   if(top){ca.scrollTo({top:0,behavior:'smooth'});return;}
-  // instant=true means force-scroll (initial chat open only)
-  if(instant){ca.scrollTop=ca.scrollHeight;return;}
+  // Force bottom for explicit actions (e.g. FAB) or initial chat open.
+  if(instant || forceBottom){ca.scrollTop=ca.scrollHeight;return;}
   // Smart scroll: only follow to bottom if user is already near bottom
   const atBot=ca.scrollTop+ca.clientHeight>ca.scrollHeight-150;
   if(atBot)ca.scrollTop=ca.scrollHeight;

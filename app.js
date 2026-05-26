@@ -1454,8 +1454,40 @@ function applyMobileUI() {
   if (closeBtn) closeBtn.style.display = mobile ? 'flex' : 'none';
 }
 window.addEventListener('resize', applyMobileUI);
+
+function bindChatInputKeyboardUX() {
+  const input = $i('msg-input');
+  if (!input) return;
+
+  const showKeyboardState = () => {
+    if (!isMobile()) return;
+    document.body.classList.add('keyboard-open');
+  };
+
+  const hideKeyboardState = () => {
+    document.body.classList.remove('keyboard-open');
+  };
+
+  input.addEventListener('focus', showKeyboardState);
+  input.addEventListener('blur', hideKeyboardState);
+
+  if (window.visualViewport) {
+    const handleViewportChange = () => {
+      if (!isMobile()) return;
+      const keyboardLikelyOpen = window.visualViewport.height < window.innerHeight * 0.82;
+      if (keyboardLikelyOpen && document.activeElement === input) {
+        document.body.classList.add('keyboard-open');
+      } else if (!keyboardLikelyOpen) {
+        document.body.classList.remove('keyboard-open');
+      }
+    };
+    window.visualViewport.addEventListener('resize', handleViewportChange);
+    window.visualViewport.addEventListener('scroll', handleViewportChange);
+  }
+}
+
 document.addEventListener('DOMContentLoaded', applyMobileUI);
-window.addEventListener('load', () => { applyMobileUI(); });
+window.addEventListener('load', () => { applyMobileUI(); bindChatInputKeyboardUX(); });
 
 document.addEventListener('click', e => {
   if (isMobile() && e.target.closest('.chat-item')) {
